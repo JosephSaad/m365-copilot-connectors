@@ -60,17 +60,6 @@ jobs:
       - name: Restore
         run: dotnet restore SqlTicketsConnector.sln
 
-      # build/Get-OfflinePackages.ps1 lists every package an air-gapped build
-      # machine has to be given. Nothing in this repository consumes that list,
-      # so a dependency bump would leave it stale in silence and the first
-      # person to notice would be standing at a machine with no NuGet access.
-      # This is a repository hygiene check rather than a fifth package gate:
-      # Build.ps1 does not run it, because the OTLP and self-contained
-      # configurations need their own restores to check against.
-      - name: Verify the offline package list (base)
-        shell: pwsh
-        run: ./build/Test-OfflinePackageList.ps1 -Configuration Base
-
       # Fails the build when an appsettings.json gains a key matching
       # password|secret|pwd|apikey|connectionstring with a non-empty value.
       # Same task the projects run during a normal build; this runs it across the
@@ -100,6 +89,24 @@ jobs:
           name: test-results
           path: artifacts/test-results
           retention-days: 30
+
+      # build/Get-OfflinePackages.ps1 lists every package an air-gapped build
+      # machine has to be given. Nothing in this repository consumes that list,
+      # so a dependency bump would leave it stale in silence and the first
+      # person to notice would be standing at a machine with no NuGet access.
+      #
+      # It runs after the build and the tests, not before: every bump is drift
+      # by definition, so a bump pull request fails here every time, and a check
+      # that fails first would hide whether the bump itself compiles and passes.
+      # Read the failure as "and also regenerate the list", never as the verdict
+      # on the change. The command to do that is in the failure message.
+      #
+      # This is a repository hygiene check rather than a fifth package gate:
+      # Build.ps1 does not run it, because the OTLP and self-contained
+      # configurations need their own restores to check against.
+      - name: Verify the offline package list (base)
+        shell: pwsh
+        run: ./build/Test-OfflinePackageList.ps1 -Configuration Base
 
       # dotnet list exits 0 whether or not it finds anything, so the output has
       # to be inspected. This is the check that would have caught the Kiota

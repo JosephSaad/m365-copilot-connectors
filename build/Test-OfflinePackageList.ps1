@@ -36,14 +36,33 @@
     requested only from certain build hosts — the list covers all of them, so it
     is checked as a superset there and strictly everywhere else.
 
+.PARAMETER Update
+    Rewrites the base list in Get-OfflinePackages.ps1 from the restore graph
+    instead of comparing against it, and reports what changed.
+
+    Every dependency bump is drift by definition, so without this the check
+    turns each one into a chore of hand-editing sixty-odd lines — which is the
+    kind of chore that ends with the check being deleted. Run it in the same
+    pull request as the bump. Base only: the OTLP entries and the runtime packs
+    are decisions rather than a transcript of the graph, and both are small
+    enough to edit by hand when they genuinely change.
+
 .EXAMPLE
     pwsh build/Test-OfflinePackageList.ps1 -Configuration Base
+
+.EXAMPLE
+    dotnet restore SqlTicketsConnector.sln
+    pwsh build/Test-OfflinePackageList.ps1 -Configuration Base -Update
+    Regenerates the list after a dependency bump. Restore first: this reads what
+    NuGet resolved, so an out-of-date assets file writes an out-of-date list.
 #>
 
 [CmdletBinding()]
 param(
     [ValidateSet('Base', 'Otlp', 'RuntimePacks')]
     [string]$Configuration = 'Base',
+
+    [switch]$Update,
 
     [string]$RepositoryRoot = (Split-Path $PSScriptRoot -Parent)
 )
@@ -136,8 +155,42 @@ function Write-Difference {
     $Items | Sort-Object | ForEach-Object { Write-Host "    $_" }
 }
 
+# Rewrites the entries between the BEGIN/END markers in Get-OfflinePackages.ps1.
+# Markers rather than "find the array literal": the file is meant to stay
+# readable and hand-editable everywhere else, and a rewriter that guesses at
+# where a block ends is one refactor away from eating the rest of the script.
+function Set-BaseList {
+    param([string[]]$Packages)
+
+    $lines = Get-Content $listScript
+    $begin = ($lines | Select-String -SimpleMatch '# BEGIN BASE LIST').LineNumber
+    $end = ($lines | Select-String -SimpleMatch '# END BASE LIST').LineNumber
+
+    if (-not $begin -or -not $end -or $end -le $begin) {
+        throw "Could not find the BEGIN BASE LIST / END BASE LIST markers in $listScript. Restore them, or update the list by hand."
+    }
+
+    $entries = $Packages | ForEach-Object {
+        $parts = $_ -split ' ', 2
+        "    @{{ Id = '{0}'; Version = '{1}' }}" -f $parts[0], $parts[1]
+    }
+
+    # LineNumber is 1-based; the slices keep everything up to and including the
+    # BEGIN marker and from the END marker onwards.
+    $rewritten = @($lines[0..($begin - 1)]) + $entries + @($lines[($end - 1)..($lines.Count - 1)])
+
+    # The repository is built on Windows and read on both, so the file keeps the
+    # line endings it already had rather than gaining whatever this host prefers.
+    $newline = if ((Get-Content $listScript -Raw) -match "`r`n") { "`r`n" } else { "`n" }
+    [System.IO.File]::WriteAllText($listScript, ($rewritten -join $newline) + $newline)
+}
+
 $assetsFiles = Get-AssetsFile -Root $RepositoryRoot
 Write-Host "Read $($assetsFiles.Count) project.assets.json file(s)."
+
+if ($Update -and $Configuration -ne 'Base') {
+    throw "-Update applies to the base list only. The OTLP entries and the runtime packs are decisions rather than a transcript of the graph; edit build/Get-OfflinePackages.ps1 by hand and let this check confirm the result."
+}
 
 if ($Configuration -eq 'RuntimePacks') {
     $expectedList = @(& $listScript -ListOnly -SkipOtlp) |
@@ -216,11 +269,25 @@ if ($Configuration -eq 'Base') {
     $missing = @($actual | Where-Object { $expectedBase -notcontains $_ })
     $extra = @($expectedBase | Where-Object { -not $actual.Contains($_) })
 
+    if ($Update) {
+        if (-not $missing -and -not $extra) {
+            Write-Host "Nothing to update: the list already matches the restore graph ($($actual.Count) packages)." -ForegroundColor Green
+            return
+        }
+
+        if ($missing) { Write-Difference "Adding:" $missing }
+        if ($extra) { Write-Difference "Removing:" $extra }
+
+        Set-BaseList -Packages (@($actual) | Sort-Object)
+        Write-Host "Rewrote the base list in build/Get-OfflinePackages.ps1: $($actual.Count) packages. Commit it with the change that moved them." -ForegroundColor Green
+        return
+    }
+
     if ($missing) { Write-Difference "Resolved by the build but missing from the list:" $missing }
     if ($extra) { Write-Difference "In the list but not resolved by the build:" $extra }
 
     if ($missing -or $extra) {
-        throw "build/Get-OfflinePackages.ps1 no longer matches the base restore graph ($($actual.Count) packages resolved, $($expectedBase.Count) listed). An offline restore would fail. Update the list."
+        throw "build/Get-OfflinePackages.ps1 no longer matches the base restore graph ($($actual.Count) packages resolved, $($expectedBase.Count) listed). Regenerate it in this same change: pwsh build/Test-OfflinePackageList.ps1 -Configuration Base -Update"
     }
 
     Write-Host "Base package list matches the restore graph: $($actual.Count) packages." -ForegroundColor Green

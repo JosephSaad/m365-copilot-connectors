@@ -70,7 +70,11 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # --- Base: required by any build of the solution ---------------------------
+# The entries between the two markers are generated from the restore graph. A
+# dependency bump makes them wrong, so regenerate rather than hand-edit:
+#     pwsh build/Test-OfflinePackageList.ps1 -Configuration Base -Update
 $packages = @(
+    # BEGIN BASE LIST
     @{ Id = 'Azure.Core'; Version = '1.54.0' }
     @{ Id = 'Azure.Identity'; Version = '1.21.0' }
     @{ Id = 'Azure.Security.KeyVault.Secrets'; Version = '4.11.0' }
@@ -139,6 +143,7 @@ $packages = @(
     @{ Id = 'xunit.extensibility.core'; Version = '2.9.3' }
     @{ Id = 'xunit.extensibility.execution'; Version = '2.9.3' }
     @{ Id = 'xunit.runner.visualstudio'; Version = '2.8.2' }
+    # END BASE LIST
 )
 
 # --- Runtime packs: only for a self-contained publish ----------------------

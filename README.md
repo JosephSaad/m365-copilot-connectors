@@ -205,6 +205,14 @@ A checked-in package list goes stale the moment a dependency moves, so CI
 compares it against the resolved graph in all three configurations and fails the
 build on any drift. That check found a missing entry the first time it ran.
 
+Every dependency bump is drift, so it fails on those too, by design and after
+the build and tests have had their say. Regenerate the list in the same change:
+
+```powershell
+dotnet restore .\SqlTicketsConnector.sln
+.\build\Test-OfflinePackageList.ps1 -Configuration Base -Update
+```
+
 All three restores above were verified against a staged folder with an empty
 package cache, so nothing was quietly served from `~/.nuget/packages`:
 

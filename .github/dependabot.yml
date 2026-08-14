@@ -12,6 +12,16 @@
 # judge. That distinction is what makes it safe to ignore the three pinned gRPC
 # and protobuf packages outright: an advisory there needs the migration project
 # described in docs/SECURITY.md section 3, not an automated bump.
+#
+# Every pull request from here fails the offline package list check, because a
+# bump is drift by definition and Dependabot cannot regenerate the list. That is
+# expected, and it is the last check in the job so the build and tests still
+# report first. Before merging one of these, run:
+#
+#     dotnet restore SqlTicketsConnector.sln
+#     pwsh build/Test-OfflinePackageList.ps1 -Configuration Base -Update
+#
+# and commit the result onto the branch.
 # ===========================================================================
 
 version: 2
