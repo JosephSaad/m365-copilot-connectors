@@ -1,0 +1,17 @@
+{
+  "_comment": [
+    "Reference copy of what the search admin enters in the connection wizard.",
+    "No credential appears here. The connector authenticates to SQL using",
+    "DataSource:SqlAuthMode from appsettings.json on the agent host, which is",
+    "WindowsIntegrated: the service account identity is the credential.",
+    "Anything typed into the wizard's credential fields is logged as ignored and",
+    "discarded. TrustServerCertificate is deliberately absent; it is rejected",
+    "when Environment is Production."
+  ],
+  "ConnectorId": "9e5e2b95-e7ab-4266-98c7-4f7868d377bf",
+  "DatasourceUrl": "Server=sql01.contoso.local;Database=Ops",
+  "AuthenticationKind": "Windows",
+  "CustomConfiguration": {
+    "ProviderParameters": null
+  }
+}

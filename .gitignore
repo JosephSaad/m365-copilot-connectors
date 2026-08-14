@@ -1,0 +1,24 @@
+bin/
+obj/
+artifacts/
+*.user
+*.suo
+.vs/
+*.zip
+
+# Certificate and key material must never be committed. The connector loads
+# certificates from the Windows certificate store; there is no PFX loader.
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+*.crt
+
+# Local developer overrides of the shipped configuration.
+appsettings.Development.json
+appsettings.local.json
+
+# Log output, when someone points Logging:Directory at the source tree.
+Logs/
+*.log

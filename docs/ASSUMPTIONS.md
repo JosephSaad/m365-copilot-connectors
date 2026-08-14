@@ -1,0 +1,124 @@
+# Assumptions and decisions
+
+Everything here was either answered by the customer or assumed by me. Assumptions
+are stated so a reviewer can correct one without reading the code to find it.
+
+Date: 2026-08-13.
+
+---
+
+## 1. Answered by the customer
+
+| Question | Answer | Consequence |
+|---|---|---|
+| Where does this run? | **On-premises Windows Server**, alongside the Graph connector agent | Managed identity is not available. `Auth:Mode` is `Certificate`, and startup rejects `ManagedIdentity` in Production with an explanatory message rather than silently failing to acquire a token. |
+| Which SQL authentication mode? | **Windows integrated**, using the service account identity | `DataSource:SqlAuthMode` ships as `WindowsIntegrated`, and no credential appears in the connection string. The Entra ID and SQL login paths are implemented and tested, but are not the shipped configuration. This is why the sample in the brief (`"SqlAuthMode": "EntraId"`) differs from what is shipped. |
+| Does a soft-delete column exist? | **Not yet — add one** | `sql/02-soft-delete.sql` adds `IsDeleted BIT NOT NULL DEFAULT 0` and the composite index, and documents the required `UPDATE` pattern. `DataSource:SoftDeleteEnabled` defaults to `true`; until the migration runs, either apply it or set the flag to `false` and accept that deletes are only caught by the next full crawl. |
+| How do Entra groups map to ticket visibility? | **One group for all tickets** | `Acl:GrantGroupObjectIds` is a list, so more groups can be added without a code change, and every item is granted to all of them. Per-status or per-assignee mapping would need a new configuration shape and a change to `AclBuilder`; nothing in the current design blocks it. |
+
+## 2. Assumptions I made
+
+1. **The connector's own identity is required even though Windows integrated
+   SQL auth needs no vault secret.** `Auth:Mode` is `Certificate`, the
+   certificate is resolved at startup, and startup fails if it is missing or
+   unusable. Rationale: `KeyVault:Uri` is configured, the certificate is the
+   connector's identity for it and for TLS, and a deployment missing that
+   certificate is misconfigured. If you would rather the service start without a
+   certificate when nothing needs one, that is a small change in
+   `ConnectorServer.BuildCredential`.
+2. **The connector ID stays `9e5e2b95-e7ab-4266-98c7-4f7868d377bf`.** Changing it
+   breaks every existing connection, so `Connector:Id` is validated and a
+   mismatch against the build's default is logged at `Warning`.
+3. **`dbo.Tickets` keeps its current shape** — `TicketId INT` primary key,
+   `LastModified DATETIME2` maintained by the application. The composite
+   watermark assumes `TicketId` is a stable, ascending `INT`.
+4. **`LastModified` is UTC.** The reader stamps `DateTimeKind.Utc` without
+   converting. If the column is local time, watermarks drift by the offset at
+   each DST change.
+5. **The item URL pattern is `https://tickets.contoso.com/ticket/{0}`**, now
+   configurable as `DataSource:ItemUrlTemplate` rather than compiled in.
+6. **The service account is a domain identity** that the SQL grant names.
+   `Install-Connector.ps1` still defaults to `NT AUTHORITY\NETWORK SERVICE`
+   (which authenticates to SQL as the machine account); a group managed service
+   account is the better choice and is what the examples use, because it has no
+   password for anyone to store.
+7. **`Environment` is one of `Production`, `Staging`, `Development`.** Validation
+   rejects anything else, since several controls key off `Production` and a typo
+   there would quietly relax them.
+8. **The event log source is created by the installer**, so the service account
+   needs no administrative rights. If your image pre-creates event sources, the
+   installer detects that and skips it.
+
+## 3. Deliberate deviations from the brief
+
+Each of these is also recorded in `docs/SECURITY.md` §4.
+
+1. **`Authentication=ActiveDirectoryDefault` is not set alongside
+   `SqlConnection.AccessToken`.** SqlClient throws when both are supplied. The
+   access token path is implemented; `ActiveDirectoryDefault` would reintroduce
+   the non-deterministic credential chain the brief rules out elsewhere.
+2. **The `Security` project is broader than "secrets, certificates, credential
+   factory".** It also holds SQL connection construction, log scrubbing, shared
+   option binding and content truncation, because both consuming projects need
+   them and the brief forbids duplicating shared code. It references neither the
+   Graph SDK nor the gRPC contracts.
+3. **Serilog raised from 3.1.1 to 4.3.1**, with the console and file sinks moved
+   to 6.0.0. `Serilog.Sinks.EventLog` 4.0.0 requires Serilog 4.x, and the event
+   log sink is a required control.
+4. **The OpenTelemetry exporter is behind a build switch as well as the runtime
+   flag.** Referencing it unconditionally would add `Grpc.Net.Client` and a newer
+   `Google.Protobuf` to every dependency scan for a feature that ships disabled.
+   `dotnet build -p:EnableOtlpExporter=true` or `Build.ps1 -EnableOtlpExporter`.
+5. **Configuration keys added beyond the brief's schema**, all optional with
+   defaults: `Auth:CertificateSubject` (required for locate-by-subject rotation),
+   `Connector:TlsCertificateThumbprint`, `DataSource:ItemUrlTemplate`,
+   `DataSource:SoftDeleteEnabled`, `DataSource:SqlUserId`,
+   `DataSource:ExtraConnectionOptions`, `DataSource:ConnectRetry*`,
+   `Logging:EventLogSource`, `Logging:FileSizeLimitBytes`,
+   `Logging:RetainedFileCountLimit`, `Logging:Otlp`.
+6. **`appsettings.json` ships with `REPLACE-WITH-…` placeholders** rather than
+   plausible-looking GUIDs. Startup validation rejects them and names each one,
+   so a half-finished deployment cannot start and quietly index against the wrong
+   tenant or grant to the wrong group.
+7. **The gRPC contracts were not modified**, and no contract or Graph API surface
+   was invented. One correction worth noting: the generated C# name for the
+   `OAuth2ClientCredential` value of `AuthenticationData.AuthenticationType` is
+   `Oauth2ClientCredential` (protoc's casing), which is what the code uses.
+
+## 4. Defects found and fixed in the existing code
+
+Found by the new tests, not by inspection:
+
+1. **`ResolveWatermark` threw on every checkpoint.**
+   `DateTimeStyles.RoundtripKind | DateTimeStyles.AdjustToUniversal` is an
+   invalid combination and `DateTime.TryParse` throws `ArgumentException` for it.
+   Any incremental crawl that received a checkpoint would have failed. Fixed in
+   `Watermark.TryParse`, with normalisation to UTC done explicitly.
+2. **`SqlConnectionStringBuilder.ContainsKey` answers `true` for every keyword
+   SqlClient knows**, not just the ones supplied, so the first version of the
+   connection string inspection reported a password in strings that had none.
+   Now uses `ShouldSerialize`.
+3. **Serilog stringifies an object at capture time for a plain `{Value}` hole**,
+   before any destructuring policy runs, so a protobuf message logged that way
+   would have written full JSON — including ticket content — to the log. Closed
+   by registering the risky types as scalars and re-applying the redaction policy
+   in the enricher (`LoggingSetup.ApplyRedaction`). The canary test now covers
+   both spellings.
+
+## 5. Open questions for the customer
+
+1. **Which Entra group object ID goes into `Acl:GrantGroupObjectIds`?** The
+   shipped file has a placeholder and the service will not start until it is
+   replaced.
+2. **Tenant ID, client ID and the certificate thumbprint** for the app
+   registration, same placeholders.
+3. **Does the ticketing application soft-delete?** `sql/02-soft-delete.sql` adds
+   the column, but something has to set it. Until then, deletes rely on the
+   periodic full crawl.
+4. **Is `Connector:UseTls` wanted on the loopback interface?** It is on by
+   default per the brief, which requires an exportable-key certificate the agent
+   trusts. If the agent is not configured to trust it, turn it off explicitly
+   rather than leaving the connection failing.
+5. **Which service account, and is it a gMSA?** The SQL grant in
+   `sql/01-least-privilege.sql` names `CONTOSO\svc_gca_reader`; replace it with
+   the real account before running.

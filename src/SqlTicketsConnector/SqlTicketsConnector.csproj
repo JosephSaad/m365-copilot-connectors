@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>SqlTicketsConnector</RootNamespace>
+    <AssemblyName>SqlTicketsConnector</AssemblyName>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- Grpc.Core ships RID-specific native assets; NETSDK1206 is expected. -->
+    <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
+    <!-- Protocol buffer generator declares all-lowercase identifiers. -->
+    <NoWarn>$(NoWarn);CS8981</NoWarn>
+
+    <!--
+      The OpenTelemetry sink pulls in a second gRPC stack (Grpc.Net.Client) and a
+      newer Google.Protobuf than the pinned contract codegen uses. It is therefore
+      not part of the default dependency graph that the dependency scan sees.
+      Build with -p:EnableOtlpExporter=true to include it; Logging:Otlp:Enabled
+      then controls it at runtime.
+    -->
+    <EnableOtlpExporter Condition="'$(EnableOtlpExporter)' == ''">false</EnableOtlpExporter>
+    <DefineConstants Condition="'$(EnableOtlpExporter)' == 'true'">$(DefineConstants);OTLP_EXPORTER</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Contracts\CommonModels.proto" />
+    <None Remove="Contracts\ConnectionManagementContracts.proto" />
+    <None Remove="Contracts\ConnectorCrawlContract.proto" />
+    <None Remove="Contracts\ConnectorInfoContracts.proto" />
+    <None Remove="Contracts\ConnectorOAuthContracts.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.18.0" />
+    <PackageReference Include="Grpc.Core" Version="2.40.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.40.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+    <PackageReference Include="Serilog" Version="4.3.1" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.EventLog" Version="4.0.0" />
+    <PackageReference Include="Serilog.Sinks.OpenTelemetry" Version="4.1.1"
+                      Condition="'$(EnableOtlpExporter)' == 'true'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SqlTicketsConnector.Security\SqlTicketsConnector.Security.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Contracts\CommonModels.proto" GrpcServices="Server" />
+    <Protobuf Include="Contracts\ConnectionManagementContracts.proto" GrpcServices="Server" />
+    <Protobuf Include="Contracts\ConnectorCrawlContract.proto" GrpcServices="Server" />
+    <Protobuf Include="Contracts\ConnectorInfoContracts.proto" GrpcServices="Server" />
+    <Protobuf Include="Contracts\ConnectorOAuthContracts.proto" GrpcServices="Server" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>

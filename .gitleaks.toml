@@ -1,0 +1,80 @@
+# ===========================================================================
+# .gitleaks.toml
+# Secret scanning configuration for this repository.
+#
+# Run locally:   gitleaks detect --config .gitleaks.toml --redact
+# Pre-commit:    installed by .pre-commit-config.yaml
+# CI:            same command; a non-zero exit fails the pipeline.
+#
+# The build carries a second, narrower control: build/SecretHygiene.targets
+# fails the build when appsettings.json gains a secret shaped key with a value.
+# ===========================================================================
+
+title = "SqlTicketsConnector"
+
+# Start from the maintained default rule set, then add the rules that matter for
+# this codebase rather than replacing everything with hand-written regexes.
+[extend]
+useDefault = true
+
+# --- Repository specific rules ---------------------------------------------
+
+[[rules]]
+id = "sql-connection-string-with-password"
+description = "SQL connection string carrying a password"
+regex = '''(?i)(server|data\s*source)\s*=[^;'"]{1,120};[^'"]{0,240}?(password|pwd)\s*=\s*[^;'"\s]{1,120}'''
+tags = ["sql", "connection-string", "password"]
+
+[[rules]]
+id = "trust-server-certificate"
+description = "TrustServerCertificate=true disables SQL transport validation"
+regex = '''(?i)trust\s*server\s*certificate\s*=\s*(true|yes)'''
+tags = ["sql", "tls", "policy"]
+
+[[rules]]
+id = "pfx-or-key-material"
+description = "Certificate or key material committed to the repository"
+regex = '''(?i)(-----BEGIN (RSA |EC |ENCRYPTED )?PRIVATE KEY-----|\.pfx\b|\.p12\b)'''
+tags = ["certificate", "private-key"]
+
+[[rules]]
+id = "appsettings-inline-secret"
+description = "Secret shaped configuration key with a value"
+regex = '''(?i)"[^"]*(password|secret|pwd|apikey|api_key|connectionstring)[^"]*"\s*:\s*"(?!\s*")[^"]{1,200}"'''
+path = '''(?i)appsettings.*\.json$'''
+tags = ["configuration"]
+
+[[rules]]
+id = "entra-client-secret"
+description = "Entra client secret value"
+regex = '''(?i)(client_secret|clientsecret|app_secret)\s*[:=]\s*["']?[A-Za-z0-9~._\-]{20,}'''
+tags = ["entra", "oauth"]
+
+# --- Allowlist --------------------------------------------------------------
+#
+# Every entry here is a deliberate decision, not a convenience. Keep the list
+# short and explain each one, because a reviewer reads this file to work out
+# what the scan is not looking at.
+
+[allowlist]
+description = "Documented references that are not secrets"
+
+paths = [
+  # Compiled output and restored packages.
+  '''(^|/)(bin|obj|artifacts)/''',
+]
+
+regexes = [
+  # KeyVault:Secrets maps a logical name to the NAME of a vault secret. The value
+  # is a lookup key, not a credential.
+  '''"SqlPassword"\s*:\s*"[a-z0-9\-]+"''',
+
+  # Placeholder tokens shipped in appsettings.json. Deployment replaces them and
+  # startup validation rejects them if it does not.
+  '''REPLACE-WITH-[A-Z\-]+''',
+
+  # Documentation and tests describe the shape of a bad connection string on
+  # purpose; the canary value below is not a real credential.
+  '''CANARY-9d41b2f7-customer-record''',
+  '''<paste from Key Vault, do not commit>''',
+]
