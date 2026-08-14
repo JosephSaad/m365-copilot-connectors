@@ -284,3 +284,14 @@ dotnet run
 Schema registration is a server-side long-running operation; the tool polls until
 the connection reports `ready`, typically 5 to 15 minutes, and gives up after
 `Graph:SchemaReadyTimeoutMinutes`.
+
+---
+
+## Licence
+
+MIT — see [`LICENSE`](LICENSE).
+
+The five contract files under `src/SqlTicketsConnector/Contracts/` are
+Microsoft's, reproduced byte for byte from `GraphConnectorsTemplate.vsix`. They
+carry their own copyright and MIT licence headers, which the MIT licence on this
+repository does not replace. Do not modify them.
