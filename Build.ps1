@@ -131,20 +131,24 @@ Write-Host '== Staging source ==' -ForegroundColor Cyan
 # in docs/SECURITY.md section 4; if your review disallows it, drop this block and
 # publish the source archive as a separate release asset instead.
 #
-# Excluded: build output, the git directory, editor state and any package zips.
+# Excluded: build output, the git directory, editor state, any package zips, and
+# nupkgs staged by build\Get-OfflinePackages.ps1 into the default
+# offline-packages\ folder — roughly 150 MB that would otherwise ride along.
 # bin\ and obj\ in particular must never travel, both for size and because they
 # hold artefacts from whichever machine last built.
 $sourceRoot = Join-Path $OutputRoot 'source'
-$excludedDirectories = @('bin', 'obj', 'artifacts', '.git', '.vs', 'packages')
+$excludedDirectories = @('bin', 'obj', 'artifacts', '.git', '.vs', 'packages', 'offline-packages')
 
 $sourceItems = Get-ChildItem -Path $PSScriptRoot -Recurse -File | Where-Object {
     $relative = $_.FullName.Substring($PSScriptRoot.Length).TrimStart('\')
     $segments = $relative -split '\\'
 
-    # Skip anything under an excluded directory, the output root itself, and zips.
+    # Skip anything under an excluded directory, the output root itself, and any
+    # archive or package file wherever it happens to sit.
     -not ($segments | Where-Object { $excludedDirectories -contains $_ }) -and
     -not $relative.StartsWith('artifacts') -and
-    $_.Extension -ne '.zip'
+    $_.Extension -ne '.zip' -and
+    $_.Extension -ne '.nupkg'
 }
 
 foreach ($item in $sourceItems) {

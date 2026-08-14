@@ -40,6 +40,8 @@ Build.ps1                              Scan + build + test + audit + publish + z
 build/
   SecretHygiene.targets                Build fails on a secret-shaped key with a value
   SecretHygiene.proj                   Repository-wide entry point for the same scan
+  Get-OfflinePackages.ps1              Downloads every NuGet package, for an air-gapped build
+  Test-OfflinePackageList.ps1          CI check: that list against the real restore graph
 deploy/
   Install-Connector.ps1                Server-side install, run elevated
   CustomConnectorPortMap.json          Reference copy of the agent port map entry
@@ -79,7 +81,8 @@ tests/
 
 **Build machine**
 - Visual Studio 2022 17.14 or later with the .NET desktop development workload, or the .NET 10 SDK alone
-- NuGet access to `api.nuget.org`
+- NuGet access to `api.nuget.org`, or a package folder staged from a connected
+  machine — see [Building without NuGet access](#building-without-nuget-access)
 
 **Target server** — if you deploy the release zip, this is the whole list
 - Windows Server 2019 or later
@@ -150,11 +153,65 @@ To rebuild from the package rather than from a clone:
 
 ```powershell
 cd source
-dotnet build .\SqlTicketsConnector.sln -c Release      # needs the .NET 10 SDK and NuGet access
+dotnet build .\SqlTicketsConnector.sln -c Release      # needs the .NET 10 SDK
 ```
+
+That still restores from NuGet. If the machine cannot reach it, see
+[Building without NuGet access](#building-without-nuget-access); the two scripts
+that make it possible travel inside `source\build\`.
 
 CI fails the build if any of the above is missing from the archive, and if
 `bin/`, `obj/` or `.git/` leak into `source/`.
+
+### Building without NuGet access
+
+A build machine on a segregated network cannot reach `api.nuget.org`, and a
+restore that cannot reach it fails with `NU1301` rather than anything that names
+the real problem. Stage the packages from a connected machine instead:
+
+```powershell
+.\build\Get-OfflinePackages.ps1                      # writes .\offline-packages
+Compress-Archive .\offline-packages\* offline-packages.zip
+```
+
+Then, on the build machine, from a clone or from the `source\` tree inside a
+release package:
+
+```powershell
+Expand-Archive .\offline-packages.zip -DestinationPath C:\offline-packages
+dotnet restore .\SqlTicketsConnector.sln --source C:\offline-packages
+dotnet build   .\SqlTicketsConnector.sln -c Release --no-restore
+dotnet test    .\SqlTicketsConnector.sln -c Release --no-build
+```
+
+76 packages, 177 MB, in three sets:
+
+| Set | Packages | Size | Needed for |
+|---|---:|---:|---|
+| Base | 68 | 119 MB | any build or test run |
+| Runtime packs | 3 | 55 MB | `Build.ps1 -SelfContained`. `-SkipRuntimePacks` |
+| OpenTelemetry | 5 | 3 MB | `Build.ps1 -EnableOtlpExporter`. `-SkipOtlp` |
+
+The runtime packs are the bundled .NET runtime, and their version is chosen by
+the SDK rather than by this repository, so the script asks MSBuild for
+`BundledNETCoreAppPackageVersion` instead of hard-coding one. It must match the
+SDK on the machine that will do the offline build — pass `-RuntimeVersion` if
+you are staging for a machine whose SDK differs from yours.
+
+A checked-in package list goes stale the moment a dependency moves, so CI
+compares it against the resolved graph in all three configurations and fails the
+build on any drift. That check found a missing entry the first time it ran.
+
+All three restores above were verified against a staged folder with an empty
+package cache, so nothing was quietly served from `~/.nuget/packages`:
+
+```powershell
+dotnet restore .\SqlTicketsConnector.sln --source C:\offline-packages --packages C:\nuget-scratch
+```
+
+The .NET SDK installer itself is the one thing that cannot be staged this way:
+it is not a NuGet package. Download it from Microsoft and transfer it like any
+other approved installer.
 
 ---
 

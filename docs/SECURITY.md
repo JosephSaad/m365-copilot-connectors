@@ -109,6 +109,7 @@ on `ISecretProvider` so it is visible at the point of use.
 | BLD-2 | Pre-commit secret scanning | `.pre-commit-config.yaml` (gitleaks, private key detection, a hook rejecting committed certificate files, and the appsettings scan) | `pre-commit run --all-files` |
 | BLD-3 | Repository secret scanning configuration | `.gitleaks.toml`, extending the default rule set with SQL connection string, `TrustServerCertificate`, key material and Entra secret rules | `gitleaks detect --config .gitleaks.toml --redact` |
 | BLD-4 | Release packages cannot be produced from a failing tree | `Build.ps1` runs the secret scan and the full test suite before publishing, and refuses to package `.pfx`, `.p12`, `.pem` or `.key` files | Run `Build.ps1` |
+| BLD-5 | The declared dependency set matches the one the build actually resolves | `build/Get-OfflinePackages.ps1` lists every package required, and `build/Test-OfflinePackageList.ps1` compares that list with `project.assets.json` in all three configurations — base, OTLP, and the self-contained publish's runtime packs. CI fails on drift | `pwsh build/Test-OfflinePackageList.ps1 -Configuration Base` after a restore |
 
 **Allowlisted configuration paths.** The build scan permits exactly two paths
 whose names match the credential pattern but whose values are not credentials:
@@ -131,6 +132,15 @@ exchange for removing a download from a locked-down server. The scan should
 therefore treat the release asset, not only the source tree, as the unit under
 review.
 
+A build machine with no route to `api.nuget.org` is served by
+`build/Get-OfflinePackages.ps1`, which stages the 76 packages a restore needs
+(68 for a plain build, 3 runtime packs for the self-contained publish, 5 for the
+optional OTLP configuration). Those packages come from the same flat container
+endpoint a NuGet client would use, so provenance is unchanged; what the folder
+removes is the network hop, not a control. The list is data that can rot, so
+`build/Test-OfflinePackageList.ps1` checks it against what NuGet actually
+resolved and CI fails on any difference (BLD-5).
+
 
 | Package | Version | Note |
 |---|---|---|
@@ -139,8 +149,8 @@ review.
 | `Grpc.Tools` | 2.40.0 | Build-time only (`PrivateAssets=all`); not shipped. |
 | `Microsoft.Data.SqlClient` | 5.2.2 | Current 5.x servicing line. |
 | `Azure.Identity` | 1.21.0 | Raised from 1.13.2, which NuGet reports as deprecated. |
-| `Azure.Security.KeyVault.Secrets` | 4.7.0 | |
-| `Serilog` | 4.3.1 | Raised from 3.1.1: `Serilog.Sinks.EventLog` 4.0.0 requires Serilog 4.x, and the event log sink is control LOG-2. |
+| `Azure.Security.KeyVault.Secrets` | 4.11.0 | |
+| `Serilog` | 4.4.0 | Raised from 3.1.1: `Serilog.Sinks.EventLog` 4.0.0 requires Serilog 4.x, and the event log sink is control LOG-2. Dependabot has since moved it within 4.x. |
 | `Serilog.Sinks.OpenTelemetry` | 4.1.1, **not referenced by default** | The OTLP exporter pulls in `Grpc.Net.Client` and requires `Google.Protobuf` 3.26.1 or later, doubling the gRPC surface in the dependency scan for a feature that ships disabled. It is behind an MSBuild switch: `dotnet build -p:EnableOtlpExporter=true`, or `Build.ps1 -EnableOtlpExporter`. Enabling it also raises `Google.Protobuf` to 3.35.1, because the pinned 3.18.0 cannot satisfy the sink; the code generator is unchanged, so the contract types are identical either way. CI builds the solution in **both** configurations, so the optional path cannot rot into an unbuildable state. `Logging:Otlp:Enabled` controls it at runtime; if the flag is set but the build excluded the package, startup says so on stderr. |
 | `Microsoft.Graph` | 5.105.0 | **`SqlGraphPush` only.** Not referenced by the connector or the Security project. |
 | `Microsoft.Kiota.Abstractions` | 1.22.2, **pinned deliberately** | `SqlGraphPush` does not use it directly. The reference exists only to raise a transitive dependency past GHSA-7j59-v9qr-6fq9 / CVE-2026-44503 (High): the Kiota `RedirectHandler` leaks `Cookie` and `Proxy-Authorization` headers on a cross-host redirect, fixed in 1.22.0. `Microsoft.Graph` 5.105.0 still asks for 1.21.1. Remove the pin once the Graph SDK's own dependency reaches 1.22.0. |

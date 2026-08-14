@@ -1,0 +1,212 @@
+<#
+.SYNOPSIS
+    Checks Get-OfflinePackages.ps1 against the restore graph on disk.
+
+.DESCRIPTION
+    A checked-in package list rots the moment a dependency moves, and it rots
+    silently: nothing here needs it, so the first person to find out is whoever
+    is standing at an air-gapped build machine with a folder of nupkgs that no
+    longer restores. This turns that into a build failure instead.
+
+    It reads project.assets.json for every project, which is what NuGet actually
+    resolved, and compares it with what Get-OfflinePackages.ps1 says to download.
+    Run it after the matching restore:
+
+      Base           after 'dotnet restore SqlTicketsConnector.sln'
+      Otlp           after 'dotnet restore ... -p:EnableOtlpExporter=true'
+      RuntimePacks   after a self-contained publish, i.e. after Build.ps1
+                     -SelfContained. Runtime packs are download dependencies
+                     rather than libraries, which is precisely why an early
+                     version of the list omitted them.
+
+    Base is compared for equality in both directions: a package the list misses
+    breaks an offline restore, and one it invents wastes a download and implies
+    a dependency that is no longer there.
+
+    Otlp is compared one way only. That configuration raises Google.Protobuf and
+    Grpc.Core.Api rather than adding to them, so the pinned versions are absent
+    from this graph while remaining correct entries in the base set. What is
+    checked is that nothing the OTLP graph needs is missing, and that every
+    package the list calls OTLP-only genuinely appears here.
+
+    RuntimePacks compares ids and the version, the version being the interesting
+    half: the list asks the SDK for BundledNETCoreAppPackageVersion rather than
+    hard-coding one, and this is what proves that question is still answered
+    correctly on a machine with a current SDK.
+
+.EXAMPLE
+    pwsh build/Test-OfflinePackageList.ps1 -Configuration Base
+#>
+
+[CmdletBinding()]
+param(
+    [ValidateSet('Base', 'Otlp', 'RuntimePacks')]
+    [string]$Configuration = 'Base',
+
+    [string]$RepositoryRoot = (Split-Path $PSScriptRoot -Parent)
+)
+
+$ErrorActionPreference = 'Stop'
+$listScript = Join-Path $PSScriptRoot 'Get-OfflinePackages.ps1'
+
+function Get-AssetsFile {
+    param([string]$Root)
+
+    $searchRoots = @('src', 'tests') |
+        ForEach-Object { Join-Path $Root $_ } |
+        Where-Object { Test-Path $_ }
+
+    $files = @(Get-ChildItem -Path $searchRoots -Recurse -File -Filter 'project.assets.json' -ErrorAction SilentlyContinue)
+
+    if (-not $files) {
+        throw "No project.assets.json found under $Root. Restore first: this script inspects what NuGet resolved, so it has nothing to read until it has."
+    }
+
+    return $files
+}
+
+# Every package NuGet resolved, as "id version" strings.
+function Get-ResolvedPackage {
+    param([object[]]$AssetsFiles)
+
+    $resolved = New-Object 'System.Collections.Generic.HashSet[string]'
+
+    foreach ($file in $AssetsFiles) {
+        $json = Get-Content $file.FullName -Raw | ConvertFrom-Json
+
+        if (-not $json.libraries) { continue }
+
+        foreach ($library in $json.libraries.PSObject.Properties) {
+            # Project references appear here too, with type 'project'.
+            if ($library.Value.type -ne 'package') { continue }
+
+            # The key is "<id>/<version>".
+            $parts = $library.Name -split '/', 2
+            if ($parts.Count -eq 2) { [void]$resolved.Add("$($parts[0]) $($parts[1])") }
+        }
+    }
+
+    return $resolved
+}
+
+# Runtime packs are download dependencies, not libraries: they are unpacked into
+# the publish output rather than referenced, so they never appear in the
+# libraries section and never appear in 'dotnet list package' either.
+function Get-DownloadDependency {
+    param([object[]]$AssetsFiles)
+
+    $found = @{}
+
+    foreach ($file in $AssetsFiles) {
+        $json = Get-Content $file.FullName -Raw | ConvertFrom-Json
+
+        if (-not $json.project.frameworks) { continue }
+
+        foreach ($framework in $json.project.frameworks.PSObject.Properties) {
+            foreach ($dependency in @($framework.Value.downloadDependencies)) {
+                if (-not $dependency) { continue }
+
+                # The version is a range, "[10.0.9, 10.0.9]".
+                $version = if ($dependency.version -match '\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?') { $Matches[0] } else { $dependency.version }
+                $found[$dependency.name] = $version
+            }
+        }
+    }
+
+    return $found
+}
+
+function Write-Difference {
+    param([string]$Heading, [string[]]$Items)
+
+    Write-Host $Heading -ForegroundColor Yellow
+    $Items | Sort-Object | ForEach-Object { Write-Host "    $_" }
+}
+
+$assetsFiles = Get-AssetsFile -Root $RepositoryRoot
+Write-Host "Read $($assetsFiles.Count) project.assets.json file(s)."
+
+if ($Configuration -eq 'RuntimePacks') {
+    $expectedList = @(& $listScript -ListOnly -SkipOtlp) |
+        Where-Object { $_ -match '^Microsoft\.(NETCore|AspNetCore)\.App\.(Runtime|Host)\.' }
+
+    if (-not $expectedList) {
+        throw 'Get-OfflinePackages.ps1 listed no runtime packs. It should list three unless -SkipRuntimePacks was passed.'
+    }
+
+    $expected = @{}
+    foreach ($line in $expectedList) {
+        $parts = $line -split ' ', 2
+        $expected[$parts[0]] = $parts[1]
+    }
+
+    # Filter to the publish RID. On a Windows build machine these are the only
+    # ones present; elsewhere the host RID's packs also appear, and they are not
+    # what the release package is built from.
+    $actual = @{}
+    foreach ($entry in (Get-DownloadDependency -AssetsFiles $assetsFiles).GetEnumerator()) {
+        if ($entry.Key -like '*.win-x64') { $actual[$entry.Key] = $entry.Value }
+    }
+
+    if (-not $actual.Count) {
+        throw 'No win-x64 runtime packs in the restore graph. Run this after a self-contained publish; a framework-dependent build downloads none.'
+    }
+
+    $problems = @()
+
+    foreach ($id in $actual.Keys) {
+        if (-not $expected.ContainsKey($id)) {
+            $problems += "$id $($actual[$id]) is downloaded by the build but missing from the list."
+        }
+        elseif ($expected[$id] -ne $actual[$id]) {
+            $problems += "$id : the list says $($expected[$id]), the build resolved $($actual[$id])."
+        }
+    }
+
+    foreach ($id in $expected.Keys) {
+        if (-not $actual.ContainsKey($id)) {
+            $problems += "$id is in the list but the build does not download it."
+        }
+    }
+
+    if ($problems) {
+        $problems | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
+        throw 'The runtime pack list does not match the restore graph. A self-contained offline build would fail. Fix build/Get-OfflinePackages.ps1.'
+    }
+
+    Write-Host "Runtime packs match: $($actual.Count) pack(s) at $($actual.Values | Select-Object -First 1)." -ForegroundColor Green
+    return
+}
+
+$actual = Get-ResolvedPackage -AssetsFiles $assetsFiles
+$expectedBase = @(& $listScript -ListOnly -SkipRuntimePacks -SkipOtlp)
+$expectedOtlp = @(& $listScript -ListOnly -SkipRuntimePacks)
+
+if ($Configuration -eq 'Base') {
+    $missing = @($actual | Where-Object { $expectedBase -notcontains $_ })
+    $extra = @($expectedBase | Where-Object { -not $actual.Contains($_) })
+
+    if ($missing) { Write-Difference "Resolved by the build but missing from the list:" $missing }
+    if ($extra) { Write-Difference "In the list but not resolved by the build:" $extra }
+
+    if ($missing -or $extra) {
+        throw "build/Get-OfflinePackages.ps1 no longer matches the base restore graph ($($actual.Count) packages resolved, $($expectedBase.Count) listed). An offline restore would fail. Update the list."
+    }
+
+    Write-Host "Base package list matches the restore graph: $($actual.Count) packages." -ForegroundColor Green
+    return
+}
+
+# Otlp.
+$missing = @($actual | Where-Object { $expectedOtlp -notcontains $_ })
+$otlpOnly = @($expectedOtlp | Where-Object { $expectedBase -notcontains $_ })
+$notSeen = @($otlpOnly | Where-Object { -not $actual.Contains($_) })
+
+if ($missing) { Write-Difference "Resolved with the OTLP exporter enabled but missing from the list:" $missing }
+if ($notSeen) { Write-Difference "Listed as OTLP-only but absent from the OTLP restore graph:" $notSeen }
+
+if ($missing -or $notSeen) {
+    throw 'build/Get-OfflinePackages.ps1 no longer matches the OTLP restore graph. An offline build with -EnableOtlpExporter would fail. Update the list.'
+}
+
+Write-Host "OTLP package list matches the restore graph: $($actual.Count) packages resolved, $($otlpOnly.Count) of them OTLP-only." -ForegroundColor Green

@@ -60,6 +60,17 @@ jobs:
       - name: Restore
         run: dotnet restore SqlTicketsConnector.sln
 
+      # build/Get-OfflinePackages.ps1 lists every package an air-gapped build
+      # machine has to be given. Nothing in this repository consumes that list,
+      # so a dependency bump would leave it stale in silence and the first
+      # person to notice would be standing at a machine with no NuGet access.
+      # This is a repository hygiene check rather than a fifth package gate:
+      # Build.ps1 does not run it, because the OTLP and self-contained
+      # configurations need their own restores to check against.
+      - name: Verify the offline package list (base)
+        shell: pwsh
+        run: ./build/Test-OfflinePackageList.ps1 -Configuration Base
+
       # Fails the build when an appsettings.json gains a key matching
       # password|secret|pwd|apikey|connectionstring with a non-empty value.
       # Same task the projects run during a normal build; this runs it across the
@@ -115,6 +126,14 @@ jobs:
           dotnet restore SqlTicketsConnector.sln -p:EnableOtlpExporter=true
           dotnet build SqlTicketsConnector.sln -c Release --no-restore -warnaserror -p:EnableOtlpExporter=true
 
+      # Has to follow that restore: the exporter's packages are only in the
+      # graph once it has run. This is also the configuration where the list is
+      # easiest to get wrong, because enabling the exporter raises
+      # Google.Protobuf and Grpc.Core.Api rather than simply adding packages.
+      - name: Verify the offline package list (OTLP)
+        shell: pwsh
+        run: ./build/Test-OfflinePackageList.ps1 -Configuration Otlp
+
   # =========================================================================
   # Produces the deployment package by running Build.ps1 exactly as an engineer
   # would, rather than reimplementing it here. The script re-runs the secret
@@ -147,6 +166,17 @@ jobs:
       - name: Build the deployment package
         shell: pwsh
         run: ./Build.ps1 -Configuration Release -SelfContained
+
+      # The runtime packs a self-contained publish downloads are the largest
+      # part of an offline package set and the easiest to miss: NuGet records
+      # them as download dependencies, so they appear in neither the libraries
+      # section of the assets file nor 'dotnet list package'. Checking here,
+      # after Build.ps1 has published self-contained, is the only place the
+      # graph contains them. It also proves the list still gets the right
+      # version out of the SDK, rather than a pinned one that has gone stale.
+      - name: Verify the offline package list (runtime packs)
+        shell: pwsh
+        run: ./build/Test-OfflinePackageList.ps1 -Configuration RuntimePacks
 
       # "Everything is in the zip" is a claim, so it gets checked rather than
       # assumed. The runtime files are what prove self-contained actually took.

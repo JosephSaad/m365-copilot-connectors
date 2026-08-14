@@ -1,6 +1,9 @@
 bin/
 obj/
 artifacts/
+# Staged nupkgs from build/Get-OfflinePackages.ps1: ~150 MB of downloads.
+offline-packages/
+*.nupkg
 *.user
 *.suo
 .vs/
