@@ -1,5 +1,8 @@
 # SQL Tickets Copilot Connector
 
+[![build](https://github.com/JosephSaad/m365-copilot-sql-connector/actions/workflows/build.yml/badge.svg)](https://github.com/JosephSaad/m365-copilot-sql-connector/actions/workflows/build.yml)
+[![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+
 A Visual Studio solution containing two working paths from a SQL Server table to
 Microsoft 365 Copilot grounding data, hardened for deployment into a regulated
 environment.

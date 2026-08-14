@@ -1,0 +1,95 @@
+# ===========================================================================
+# Build and test.
+#
+# Runs on windows-latest, not ubuntu, for two reasons:
+#   1. It is the deployment target. The event log sink, the certificate store
+#      resolver and the win-x64 publish path only mean anything on Windows.
+#   2. Grpc.Tools 2.40.0 ships a per-RID protoc. The Windows runner exercises the
+#      same code generation an engineer gets locally, so a contract change that
+#      breaks the generated stubs fails here rather than at install time.
+#
+# The four steps mirror what Build.ps1 enforces before it will produce a
+# deployment package: secret hygiene, a warning-free build, the tests, and the
+# dependency audit. CI and the release script agreeing on what "valid" means is
+# the point; if you add a gate to one, add it to the other.
+#
+# Third-party actions are pinned to commit SHAs rather than tags. A tag can be
+# moved; a SHA cannot. The version each SHA corresponds to is in the comment
+# beside it, so a reviewer can check the claim.
+# ===========================================================================
+
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test (windows-latest)
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore SqlTicketsConnector.sln
+
+      # Fails the build when an appsettings.json gains a key matching
+      # password|secret|pwd|apikey|connectionstring with a non-empty value.
+      # Same task the projects run during a normal build; this runs it across the
+      # whole repository without compiling anything.
+      - name: Secret hygiene scan
+        run: dotnet build build/SecretHygiene.proj -t:ScanAppSettingsForSecrets -nologo -v:m
+
+      # The solution promises to build clean apart from NETSDK1206 and CS8981,
+      # both suppressed in the project files with a comment saying why. Treating
+      # everything else as an error is what keeps that promise true.
+      - name: Build (warnings are errors)
+        run: dotnet build SqlTicketsConnector.sln -c Release --no-restore -warnaserror
+
+      - name: Test
+        run: >
+          dotnet test SqlTicketsConnector.sln
+          -c Release --no-build --nologo
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory artifacts/test-results
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results
+          path: artifacts/test-results
+          retention-days: 30
+
+      # dotnet list exits 0 whether or not it finds anything, so the output has
+      # to be inspected. This is the check that would have caught the Kiota
+      # header-leak advisory before it reached a release.
+      - name: Dependency audit
+        shell: pwsh
+        run: |
+          $vulnerable = dotnet list SqlTicketsConnector.sln package --vulnerable --include-transitive 2>&1 | Out-String
+          Write-Host $vulnerable
+          if ($vulnerable -match 'has the following vulnerable packages') {
+              Write-Error 'Vulnerable packages found. Raise the version, or pin the transitive dependency with a comment naming the advisory.'
+              exit 1
+          }
+          Write-Host 'No vulnerable packages.' -ForegroundColor Green
