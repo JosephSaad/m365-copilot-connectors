@@ -69,6 +69,10 @@ Each of these is also recorded in `docs/SECURITY.md` §4.
    flag.** Referencing it unconditionally would add `Grpc.Net.Client` and a newer
    `Google.Protobuf` to every dependency scan for a feature that ships disabled.
    `dotnet build -p:EnableOtlpExporter=true` or `Build.ps1 -EnableOtlpExporter`.
+   Enabling the switch also raises `Google.Protobuf` from the pinned 3.18.0 to
+   3.35.1, because the sink requires 3.26.1 or later and the two constraints
+   cannot both hold. The generator is unchanged, so the contract types are
+   identical; CI builds both configurations.
 5. **Configuration keys added beyond the brief's schema**, all optional with
    defaults: `Auth:CertificateSubject` (required for locate-by-subject rotation),
    `Connector:TlsCertificateThumbprint`, `DataSource:ItemUrlTemplate`,
@@ -113,7 +117,14 @@ Found by the new tests, not by inspection:
   needs the .NET 10 runtime, or a `-SelfContained` package.
 - **CI added** in `.github/workflows/build.yml`: build, test, package, and
   attach the package to a draft release for a `v*` tag. It runs the same four
-  gates as `Build.ps1`.
+  gates as `Build.ps1`, plus a build of the optional OTLP configuration.
+- **The release package is self-contained** as of 2026-08-14, at the customer's
+  request: whoever downloads the zip must not need to fetch anything else. The
+  .NET runtime therefore ships inside it, and a CI step fails the build if the
+  service executable, the bundled runtime, the install script, the SQL scripts
+  or the docs are missing from the archive. The Graph connector agent and the
+  client certificate remain outside it: the first is Microsoft's tenant-tied
+  installer, the second must come from the customer's PKI.
 
 ## 6. Open questions for the customer
 

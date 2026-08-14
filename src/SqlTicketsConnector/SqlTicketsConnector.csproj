@@ -21,6 +21,21 @@
     -->
     <EnableOtlpExporter Condition="'$(EnableOtlpExporter)' == ''">false</EnableOtlpExporter>
     <DefineConstants Condition="'$(EnableOtlpExporter)' == 'true'">$(DefineConstants);OTLP_EXPORTER</DefineConstants>
+
+    <!--
+      Google.Protobuf is pinned to 3.18.0 to match the Grpc.Tools 2.40.0 code
+      generator. Serilog.Sinks.OpenTelemetry requires 3.26.1 or later, so with
+      the exporter enabled the two constraints cannot both hold at 3.18.0 and
+      restore fails with NU1605.
+
+      Enabling the exporter therefore also raises the protobuf runtime to the
+      current 3.x. That is safe in this direction: the C# runtime is backward
+      compatible with older generated code, and the generator itself is
+      unchanged, so the contract types are byte-identical either way. CI builds
+      the solution in both configurations so neither can rot.
+    -->
+    <GoogleProtobufVersion Condition="'$(EnableOtlpExporter)' == 'true'">3.35.1</GoogleProtobufVersion>
+    <GoogleProtobufVersion Condition="'$(GoogleProtobufVersion)' == ''">3.18.0</GoogleProtobufVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -32,7 +47,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Google.Protobuf" Version="3.18.0" />
+    <PackageReference Include="Google.Protobuf" Version="$(GoogleProtobufVersion)" />
     <PackageReference Include="Grpc.Core" Version="2.40.0" />
     <PackageReference Include="Grpc.Tools" Version="2.40.0">
       <PrivateAssets>all</PrivateAssets>

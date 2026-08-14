@@ -124,6 +124,13 @@ All four projects target **net10.0**, the current LTS. `Grpc.Core` 2.40.0 and it
 generated contract code are `netstandard2.0`, so the retarget does not disturb
 them; the CI build on windows-latest is the evidence.
 
+The release package is published `--self-contained`, so the .NET runtime ships
+inside the zip and the target server needs no runtime install. That widens the
+artefact's surface — the runtime is now part of what you are accepting — in
+exchange for removing a download from a locked-down server. The scan should
+therefore treat the release asset, not only the source tree, as the unit under
+review.
+
 
 | Package | Version | Note |
 |---|---|---|
@@ -134,7 +141,7 @@ them; the CI build on windows-latest is the evidence.
 | `Azure.Identity` | 1.21.0 | Raised from 1.13.2, which NuGet reports as deprecated. |
 | `Azure.Security.KeyVault.Secrets` | 4.7.0 | |
 | `Serilog` | 4.3.1 | Raised from 3.1.1: `Serilog.Sinks.EventLog` 4.0.0 requires Serilog 4.x, and the event log sink is control LOG-2. |
-| `Serilog.Sinks.OpenTelemetry` | 4.1.1, **not referenced by default** | The OTLP exporter pulls in `Grpc.Net.Client` and a newer `Google.Protobuf`, doubling the gRPC surface in the dependency scan for a feature that ships disabled. It is behind an MSBuild switch: `dotnet build -p:EnableOtlpExporter=true`, or `Build.ps1 -EnableOtlpExporter`. `Logging:Otlp:Enabled` then controls it at runtime; if the flag is set but the build excluded the package, startup says so on stderr. |
+| `Serilog.Sinks.OpenTelemetry` | 4.1.1, **not referenced by default** | The OTLP exporter pulls in `Grpc.Net.Client` and requires `Google.Protobuf` 3.26.1 or later, doubling the gRPC surface in the dependency scan for a feature that ships disabled. It is behind an MSBuild switch: `dotnet build -p:EnableOtlpExporter=true`, or `Build.ps1 -EnableOtlpExporter`. Enabling it also raises `Google.Protobuf` to 3.35.1, because the pinned 3.18.0 cannot satisfy the sink; the code generator is unchanged, so the contract types are identical either way. CI builds the solution in **both** configurations, so the optional path cannot rot into an unbuildable state. `Logging:Otlp:Enabled` controls it at runtime; if the flag is set but the build excluded the package, startup says so on stderr. |
 | `Microsoft.Graph` | 5.105.0 | **`SqlGraphPush` only.** Not referenced by the connector or the Security project. |
 | `Microsoft.Kiota.Abstractions` | 1.22.2, **pinned deliberately** | `SqlGraphPush` does not use it directly. The reference exists only to raise a transitive dependency past GHSA-7j59-v9qr-6fq9 / CVE-2026-44503 (High): the Kiota `RedirectHandler` leaks `Cookie` and `Proxy-Authorization` headers on a cross-host redirect, fixed in 1.22.0. `Microsoft.Graph` 5.105.0 still asks for 1.21.1. Remove the pin once the Graph SDK's own dependency reaches 1.22.0. |
 

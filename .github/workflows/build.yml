@@ -104,6 +104,17 @@ jobs:
           }
           Write-Host 'No vulnerable packages.' -ForegroundColor Green
 
+      # The OTLP exporter is optional and off by default, which is exactly how a
+      # configuration rots: it shipped documented and unbuildable, because
+      # Serilog.Sinks.OpenTelemetry needs Google.Protobuf 3.26.1 or later while
+      # the contract codegen pins 3.18.0. Enabling it now raises the protobuf
+      # runtime, and this step is what keeps that true. Last, because it
+      # re-restores the solution with a different graph.
+      - name: Build with the optional OTLP exporter
+        run: |
+          dotnet restore SqlTicketsConnector.sln -p:EnableOtlpExporter=true
+          dotnet build SqlTicketsConnector.sln -c Release --no-restore -warnaserror -p:EnableOtlpExporter=true
+
   # =========================================================================
   # Produces the deployment package by running Build.ps1 exactly as an engineer
   # would, rather than reimplementing it here. The script re-runs the secret
@@ -130,9 +141,60 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      # Self-contained: the .NET runtime is bundled, so the target server needs
+      # nothing but Windows. Whoever downloads this zip should never have to go
+      # and fetch something else to make it run.
       - name: Build the deployment package
         shell: pwsh
-        run: ./Build.ps1 -Configuration Release
+        run: ./Build.ps1 -Configuration Release -SelfContained
+
+      # "Everything is in the zip" is a claim, so it gets checked rather than
+      # assumed. The runtime files are what prove self-contained actually took.
+      - name: Verify the package is complete and self-contained
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path . -Filter 'SqlTicketsConnector-*.zip' | Sort-Object LastWriteTime | Select-Object -Last 1
+          $extract = Join-Path $env:RUNNER_TEMP 'package-check'
+          Expand-Archive -Path $zip.FullName -DestinationPath $extract -Force
+
+          $required = @(
+              'publish/SqlTicketsConnector.exe',          # the service
+              'publish/appsettings.json',                 # configuration template
+              'publish/System.Private.CoreLib.dll',       # bundled runtime
+              'publish/hostpolicy.dll',                   # bundled host
+              'publish/grpc_csharp_ext.x64.dll',          # Grpc.Core native asset
+              'SqlGraphPush/SqlGraphPush.exe',            # direct push tool
+              'Install-Connector.ps1',
+              'Manifest.json',
+              'ConnectionInfo.json',
+              'CustomConnectorPortMap.json',
+              'README.md',
+              'sql/01-least-privilege.sql',
+              'sql/02-soft-delete.sql',
+              'docs/SECURITY.md',
+              'docs/RUNBOOK.md',
+              'docs/ASSUMPTIONS.md'
+          )
+
+          $missing = @()
+          foreach ($item in $required) {
+              if (-not (Test-Path (Join-Path $extract $item))) { $missing += $item }
+          }
+
+          if ($missing) {
+              $missing | ForEach-Object { Write-Error "Missing from the package: $_" }
+              throw 'The deployment package is incomplete.'
+          }
+
+          # A framework-dependent build is roughly 20 MB; a self-contained one is
+          # far larger. A size floor catches a silently reverted -SelfContained.
+          $sizeMb = [math]::Round($zip.Length / 1MB, 1)
+          if ($sizeMb -lt 60) {
+              throw "Package is only $sizeMb MB. That is too small to contain the .NET runtime; was -SelfContained dropped?"
+          }
+
+          $count = (Get-ChildItem $extract -Recurse -File).Count
+          Write-Host "Package OK: $($zip.Name), $sizeMb MB, $count files, runtime bundled." -ForegroundColor Green
 
       # README's "Transfer via SharePoint" section moves this zip through a
       # document library by hand. A checksum is what lets the operator on the

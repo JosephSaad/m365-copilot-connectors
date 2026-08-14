@@ -81,13 +81,16 @@ tests/
 - Visual Studio 2022 17.14 or later with the .NET desktop development workload, or the .NET 10 SDK alone
 - NuGet access to `api.nuget.org`
 
-**Target server**
+**Target server** — if you deploy the release zip, this is the whole list
 - Windows Server 2019 or later
-- .NET 10 Runtime, unless you build with `-SelfContained`
 - Microsoft Graph connector agent from https://aka.ms/gca, already registered against the tenant
-- Network path to SQL Server
 - The connector's client certificate in `LocalMachine\My`, with its private key readable by the service account
+- Network path to SQL Server
 
+**No .NET runtime is required.** The release package is self-contained: the
+runtime ships inside it. The agent and the certificate are the only two things
+that cannot be in the zip — the agent is Microsoft's installer, tied to your
+tenant, and the certificate has to come from your own PKI.
 You do not need the VSIX installed to build this solution.
 
 ---
@@ -123,9 +126,13 @@ four the CI workflow runs. Output:
 `SqlTicketsConnector-deploy-<timestamp>.zip` in the solution root.
 
 CI produces the same package on every push to `main`, downloadable from the
-workflow run. Pushing a `v*` tag additionally creates a **draft** release with
-the zip and its `.sha256` attached, named after the tag; publishing it stays a
-human decision.
+workflow run, and it builds `-SelfContained` so the zip carries its own runtime.
+A step then extracts the package and fails the build if the service executable,
+the bundled runtime, the install script, the SQL scripts or the docs are
+missing — "everything is in the zip" is checked, not assumed.
+
+Pushing a `v*` tag additionally creates a **draft** release with the zip and its
+`.sha256` attached, named after the tag; publishing it stays a human decision.
 
 ---
 
