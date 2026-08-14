@@ -42,6 +42,7 @@ build/
   SecretHygiene.proj                   Repository-wide entry point for the same scan
   Get-OfflinePackages.ps1              Downloads every NuGet package, for an air-gapped build
   Test-OfflinePackageList.ps1          CI check: that list against the real restore graph
+  NuGet.offline.config                 Copy to the root as NuGet.config to stop restore using the network
 deploy/
   Install-Connector.ps1                Server-side install, run elevated
   CustomConnectorPortMap.json          Reference copy of the agent port map entry
@@ -269,6 +270,36 @@ package cache, so nothing was quietly served from `~/.nuget/packages`:
 ```powershell
 dotnet restore .\SqlTicketsConnector.sln --source C:\offline-packages --packages C:\nuget-scratch
 ```
+
+#### Stopping it reaching for nuget.org at all
+
+A source given on the command line applies to that one command. Every other
+restore — Visual Studio's, an IDE background restore, a colleague running
+`dotnet build` out of habit — still inherits the sources in
+`%APPDATA%\NuGet\NuGet.Config` and the machine-wide configuration, `nuget.org`
+among them, and fails with `NU1301` on a network that blocks it. That is why the
+command line can succeed and Visual Studio's Error List still fills with
+`api.nuget.org` seconds later.
+
+Fix it for the whole tree by copying the template into the solution root:
+
+```powershell
+copy build\NuGet.offline.config NuGet.config
+```
+
+Then edit the one path in it to point at your staged folder. The
+`<clear />` element is what does the work: without it the file *adds* a source to
+the inherited ones instead of replacing them. Afterwards the tree sees exactly
+one source, which you can confirm with:
+
+```powershell
+dotnet nuget list source
+```
+
+`NuGet.config` is not committed, deliberately: a repository that clears its
+package sources cannot restore from nuget.org at all, which would break every
+online build including CI. It is also in `.gitignore`, so a copy made on a build
+machine cannot be committed by accident.
 
 The .NET SDK installer itself is the one thing that cannot be staged this way:
 it is not a NuGet package. Download it from Microsoft and transfer it like any
