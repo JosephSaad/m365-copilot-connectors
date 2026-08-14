@@ -42,7 +42,7 @@ appearing there in a future change is a review failure, not a refactor:
 | SEC-6 | Authentication failure invalidates the cached secret and retries **exactly once** | `Security/Secrets/SecretRefreshRetryPolicy.cs`, applied in `Security/Sql/SqlConnectionFactory.OpenAsync` | `SecretCacheTests.Authentication_failure_invalidates_the_secret_and_retries_exactly_once`, `.A_second_authentication_failure_is_surfaced_rather_than_retried_again` |
 | SEC-7 | No file-based or DPAPI secret provider exists | Only two implementations exist in `Security/Secrets/` | Directory listing |
 
-**On `SecureString`:** not used, deliberately. On .NET 8 `SecureString` is not
+**On `SecureString`:** not used, deliberately. On .NET 10 `SecureString` is not
 encrypted at rest in memory on any platform the runtime supports for this
 workload, and the value must be marshalled back to a managed `string` to build a
 connection string or an HTTP header. Using it would imply a protection that does
@@ -119,6 +119,11 @@ whose names match the credential pattern but whose values are not credentials:
 ---
 
 ## 3. Dependency notes for the scan
+
+All four projects target **net10.0**, the current LTS. `Grpc.Core` 2.40.0 and its
+generated contract code are `netstandard2.0`, so the retarget does not disturb
+them; the CI build on windows-latest is the evidence.
+
 
 | Package | Version | Note |
 |---|---|---|

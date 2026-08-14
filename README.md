@@ -31,7 +31,10 @@ modes) and [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).**
 
 ```
 SqlTicketsConnector.sln
-Build.ps1                              Scan + build + test + publish + zip
+Build.ps1                              Scan + build + test + audit + publish + zip
+.github/
+  workflows/build.yml                  CI: build, test, package, attach to a release
+  dependabot.yml                       Weekly NuGet updates; pinned packages ignored
 .gitleaks.toml                         Secret scanning rules
 .pre-commit-config.yaml                Pre-commit hooks (gitleaks, key material, appsettings scan)
 build/
@@ -75,12 +78,12 @@ tests/
 ## Prerequisites
 
 **Build machine**
-- Visual Studio 2022 17.8 or later with the .NET desktop development workload, or the .NET 8 SDK alone
+- Visual Studio 2022 17.14 or later with the .NET desktop development workload, or the .NET 10 SDK alone
 - NuGet access to `api.nuget.org`
 
 **Target server**
 - Windows Server 2019 or later
-- .NET 8 Runtime, unless you build with `-SelfContained`
+- .NET 10 Runtime, unless you build with `-SelfContained`
 - Microsoft Graph connector agent from https://aka.ms/gca, already registered against the tenant
 - Network path to SQL Server
 - The connector's client certificate in `LocalMachine\My`, with its private key readable by the service account
@@ -109,13 +112,20 @@ To produce the transfer package:
 
 ```powershell
 .\Build.ps1
-.\Build.ps1 -SelfContained          # server has no .NET 8 runtime
+.\Build.ps1 -SelfContained          # server has no .NET 10 runtime
 .\Build.ps1 -EnableOtlpExporter     # include the optional OpenTelemetry sink
 ```
 
-`Build.ps1` runs the secret hygiene scan and the full test suite first, and
-refuses to package certificate or key material. Output:
+`Build.ps1` runs four gates before it publishes anything — the secret hygiene
+scan, a build with warnings treated as errors, the tests, and the dependency
+audit — and refuses to package certificate or key material. They are the same
+four the CI workflow runs. Output:
 `SqlTicketsConnector-deploy-<timestamp>.zip` in the solution root.
+
+CI produces the same package on every push to `main`, downloadable from the
+workflow run. Pushing a `v*` tag additionally creates a **draft** release with
+the zip and its `.sha256` attached, named after the tag; publishing it stays a
+human decision.
 
 ---
 
@@ -130,6 +140,16 @@ refuses to package certificate or key material. Output:
 ```powershell
 Unblock-File .\SqlTicketsConnector-deploy-20260813-1400.zip
 Expand-Archive .\SqlTicketsConnector-deploy-20260813-1400.zip -DestinationPath C:\Staging\SqlTickets
+```
+
+If the package came from a CI run or a release, verify the checksum on the
+target server before extracting. A document library round trip is exactly the
+sort of hop that truncates a file quietly:
+
+```powershell
+$expected = (Get-Content .\SqlTicketsConnector-v1.0.1.zip.sha256).Split(' ')[0]
+$actual = (Get-FileHash .\SqlTicketsConnector-v1.0.1.zip -Algorithm SHA256).Hash.ToLower()
+if ($actual -ne $expected) { throw "Checksum mismatch. Do not deploy this package." }
 ```
 
 If the tenant blocks `.ps1` in libraries, rename to `.ps1.txt` before upload and

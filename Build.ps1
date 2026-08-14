@@ -3,15 +3,21 @@
     Builds the solution, runs the tests, and produces a deployment zip.
 
 .DESCRIPTION
-    Run this on a workstation with the .NET 8 SDK and internet access for NuGet
+    Run this on a workstation with the .NET 10 SDK and internet access for NuGet
     restore. The output zip contains compiled binaries plus the deployment
     scripts, SQL scripts and documentation, so the target server needs neither
     the SDK nor NuGet connectivity.
 
-    The build fails if the secret hygiene scan finds a credential shaped value in
-    any appsettings.json, and if any test fails. Both are deliberate: the zip is
-    the artefact a change advisory board approves, so it should not be possible
-    to produce one from a tree that would not pass review.
+    Four gates run before anything is published, and each of them can stop the
+    build: the secret hygiene scan, a build with warnings treated as errors, the
+    tests, and the dependency audit. They are the same four the CI workflow
+    runs, deliberately: the zip is the artefact a change advisory board
+    approves, so it should not be possible to produce one from a tree that would
+    not pass review. If you add a gate here, add it to .github/workflows/build.yml.
+
+    -SkipTests names its output SqlTicketsConnector-diagnostic-*.zip rather than
+    -deploy-*, so a package built without the tests cannot be mistaken for a
+    release candidate.
 
 .EXAMPLE
     .\Build.ps1
@@ -44,7 +50,7 @@ $connectorProject = Join-Path $PSScriptRoot 'src\SqlTicketsConnector\SqlTicketsC
 $pushProject = Join-Path $PSScriptRoot 'src\SqlGraphPush\SqlGraphPush.csproj'
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    throw 'dotnet SDK not found. Install the .NET 8 SDK from https://dotnet.microsoft.com/download'
+    throw 'dotnet SDK not found. Install the .NET 10 SDK from https://dotnet.microsoft.com/download'
 }
 
 $otlp = if ($EnableOtlpExporter) { 'true' } else { 'false' }
@@ -54,12 +60,25 @@ dotnet build (Join-Path $PSScriptRoot 'build\SecretHygiene.proj') -t:ScanAppSett
 if ($LASTEXITCODE -ne 0) { throw 'Secret hygiene scan failed. Move the value into Key Vault and keep only the secret name in configuration.' }
 
 Write-Host '== Restoring ==' -ForegroundColor Cyan
-dotnet restore $solution
+# The OTLP switch adds packages through a conditional PackageReference, so the
+# restore has to carry it: otherwise the dependency audit below inspects a graph
+# the published package does not have.
+dotnet restore $solution -p:EnableOtlpExporter=$otlp
 if ($LASTEXITCODE -ne 0) { throw 'Restore failed.' }
 
 Write-Host '== Building ==' -ForegroundColor Cyan
-dotnet build $solution -c $Configuration --no-restore -p:EnableOtlpExporter=$otlp
+dotnet build $solution -c $Configuration --no-restore -warnaserror -p:EnableOtlpExporter=$otlp
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
+
+Write-Host '== Dependency audit ==' -ForegroundColor Cyan
+# dotnet list exits 0 whether or not it finds anything, so the output is what
+# has to be inspected. This is the gate that would have kept the Kiota
+# header-leak advisory out of a release package.
+$vulnerable = dotnet list $solution package --vulnerable --include-transitive 2>&1 | Out-String
+Write-Host $vulnerable
+if ($vulnerable -match 'has the following vulnerable packages') {
+    throw 'Vulnerable packages found. Raise the version, or pin the transitive dependency with a comment naming the advisory.'
+}
 
 if (-not $SkipTests) {
     Write-Host '== Testing ==' -ForegroundColor Cyan
@@ -69,6 +88,10 @@ if (-not $SkipTests) {
 else {
     Write-Warning 'Tests skipped. This build must not be released.'
 }
+
+# A package built without the tests is named so that it cannot be mistaken for a
+# release candidate on a change advisory board's desk.
+$packagePrefix = if ($SkipTests) { 'SqlTicketsConnector-diagnostic' } else { 'SqlTicketsConnector-deploy' }
 
 if (Test-Path $OutputRoot) {
     Remove-Item $OutputRoot -Recurse -Force
@@ -110,7 +133,7 @@ if ($forbidden) {
 }
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmm'
-$zipPath = Join-Path $PSScriptRoot "SqlTicketsConnector-deploy-$stamp.zip"
+$zipPath = Join-Path $PSScriptRoot "$packagePrefix-$stamp.zip"
 
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Compress-Archive -Path (Join-Path $OutputRoot '*') -DestinationPath $zipPath

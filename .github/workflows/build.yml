@@ -1,5 +1,5 @@
 # ===========================================================================
-# Build and test.
+# Build, test, and package.
 #
 # Runs on windows-latest, not ubuntu, for two reasons:
 #   1. It is the deployment target. The event log sink, the certificate store
@@ -8,10 +8,11 @@
 #      same code generation an engineer gets locally, so a contract change that
 #      breaks the generated stubs fails here rather than at install time.
 #
-# The four steps mirror what Build.ps1 enforces before it will produce a
-# deployment package: secret hygiene, a warning-free build, the tests, and the
-# dependency audit. CI and the release script agreeing on what "valid" means is
-# the point; if you add a gate to one, add it to the other.
+# The build job's four gates are the same four Build.ps1 enforces before it will
+# produce a deployment package: secret hygiene, a warning-free build, the tests,
+# and the dependency audit. That parity is the point, and it is load-bearing now
+# that the package job runs Build.ps1 to produce a release artefact: if you add a
+# gate to one, add it to the other.
 #
 # Third-party actions are pinned to commit SHAs rather than tags. A tag can be
 # moved; a SHA cannot. The version each SHA corresponds to is in the comment
@@ -26,6 +27,10 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  # Publishing a release against a tag that already exists fires no push event.
+  # Without this trigger such a release would never receive its package.
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -33,7 +38,10 @@ permissions:
 
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded branch builds, never a tag or release build: those produce
+  # an artefact somebody is waiting on, and a half-cancelled publish is worse
+  # than a slow one.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
@@ -44,10 +52,10 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up .NET 8
+      - name: Set up .NET 10
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "10.0.x"
 
       - name: Restore
         run: dotnet restore SqlTicketsConnector.sln
@@ -61,7 +69,9 @@ jobs:
 
       # The solution promises to build clean apart from NETSDK1206 and CS8981,
       # both suppressed in the project files with a comment saying why. Treating
-      # everything else as an error is what keeps that promise true.
+      # everything else as an error is what keeps that promise true. It has
+      # already earned its place: it caught an obsolete Azure.Identity
+      # constructor, and NuGet downgrade conflicts across the three projects.
       - name: Build (warnings are errors)
         run: dotnet build SqlTicketsConnector.sln -c Release --no-restore -warnaserror
 
@@ -93,3 +103,126 @@ jobs:
               exit 1
           }
           Write-Host 'No vulnerable packages.' -ForegroundColor Green
+
+  # =========================================================================
+  # Produces the deployment package by running Build.ps1 exactly as an engineer
+  # would, rather than reimplementing it here. The script re-runs the secret
+  # scan, the warning-free build, the tests and the dependency audit before it
+  # will publish, so the zip cannot come from a tree that would not pass review.
+  #
+  # A separate job, not extra steps on the build job: Build.ps1 clears the
+  # artifacts directory, which is where the build job leaves its test results.
+  # =========================================================================
+  package:
+    name: Deployment package (windows-latest)
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build the deployment package
+        shell: pwsh
+        run: ./Build.ps1 -Configuration Release
+
+      # README's "Transfer via SharePoint" section moves this zip through a
+      # document library by hand. A checksum is what lets the operator on the
+      # far end prove the file survived that round trip.
+      #
+      # The digest is written with LF and two spaces: GNU sha256sum -c treats a
+      # trailing CR as part of the filename and reports "no properly formatted
+      # checksum lines found", so Set-Content's CRLF would make the file useless
+      # on exactly the machines most likely to check it.
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path . -Filter 'SqlTicketsConnector-*.zip' | Sort-Object LastWriteTime | Select-Object -Last 1
+          if (-not $zip) { Write-Error 'Build.ps1 produced no deployment zip.'; exit 1 }
+          $hash = (Get-FileHash -Path $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          [System.IO.File]::WriteAllText("$($zip.FullName).sha256", "$hash  $($zip.Name)`n")
+          Write-Host "SHA256 $hash  $($zip.Name)"
+
+      - name: Upload deployment package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deployment-package
+          path: |
+            SqlTicketsConnector-*.zip
+            SqlTicketsConnector-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 90
+
+  # =========================================================================
+  # Attaches the package to the release for a v* tag. Split into its own job so
+  # that contents: write, the only privilege in this workflow that can change
+  # the repository, exists on a job that runs for tags and releases and nowhere
+  # else.
+  #
+  # Both orderings work: pushing a v* tag creates a DRAFT release and populates
+  # it, leaving a human to press publish; publishing a release that already
+  # exists uploads into it. CI never publishes a release on its own, because the
+  # zip is the artefact a change advisory board approves.
+  # =========================================================================
+  release:
+    name: Attach package to the release
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download deployment package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: deployment-package
+          path: package
+
+      # Verifies the digest the Windows job computed, which proves the zip
+      # survived the hop between runners and, incidentally, proves the checksum
+      # file is in a format the operator's sha256sum will accept.
+      - name: Verify checksum
+        run: |
+          set -euo pipefail
+          cd package
+          sha256sum -c ./*.sha256
+
+      # Build.ps1 names the zip from the wall clock, which is right for a local
+      # build and wrong for a release asset: --clobber only replaces an asset of
+      # the same name, so re-running a tag would attach a second, differently
+      # named zip and leave two candidate packages on one release. Renaming to
+      # the tag makes the asset name stable and the replacement real.
+      - name: Name the asset after the tag
+        run: |
+          set -euo pipefail
+          cd package
+          zip=$(ls SqlTicketsConnector-*.zip | head -1)
+          mv "$zip" "SqlTicketsConnector-${GITHUB_REF_NAME}.zip"
+          rm -f ./*.zip.sha256
+          sha256sum "SqlTicketsConnector-${GITHUB_REF_NAME}.zip" > "SqlTicketsConnector-${GITHUB_REF_NAME}.zip.sha256"
+          ls -la
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # gh release upload requires the release to exist; pushing a tag does
+          # not create one. Create it as a draft so a person still decides what
+          # ships, and so the run is not the thing that publishes.
+          gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 \
+            || gh release create "${GITHUB_REF_NAME}" \
+                 --repo "${GITHUB_REPOSITORY}" \
+                 --verify-tag --draft --generate-notes \
+                 --title "${GITHUB_REF_NAME}"
+          gh release upload "${GITHUB_REF_NAME}" package/* --clobber --repo "${GITHUB_REPOSITORY}"
+          echo "Attached the deployment package to ${GITHUB_REF_NAME}."

@@ -105,7 +105,17 @@ Found by the new tests, not by inspection:
    in the enricher (`LoggingSetup.ApplyRedaction`). The canary test now covers
    both spellings.
 
-## 5. Open questions for the customer
+## 5. Later changes
+
+- **Retargeted from net8.0 to net10.0** (current LTS) on 2026-08-14, at the
+  customer's request. No source change was needed; the CI build on
+  windows-latest and all 40 tests pass on net10.0. The target server therefore
+  needs the .NET 10 runtime, or a `-SelfContained` package.
+- **CI added** in `.github/workflows/build.yml`: build, test, package, and
+  attach the package to a draft release for a `v*` tag. It runs the same four
+  gates as `Build.ps1`.
+
+## 6. Open questions for the customer
 
 1. **Which Entra group object ID goes into `Acl:GrantGroupObjectIds`?** The
    shipped file has a placeholder and the service will not start until it is
