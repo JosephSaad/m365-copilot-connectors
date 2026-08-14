@@ -173,7 +173,16 @@ jobs:
               'sql/02-soft-delete.sql',
               'docs/SECURITY.md',
               'docs/RUNBOOK.md',
-              'docs/ASSUMPTIONS.md'
+              'docs/ASSUMPTIONS.md',
+
+              # A buildable source tree, so one download serves deployment and
+              # rebuild. SecretHygiene.targets is imported by every project file:
+              # without it the tree does not even restore.
+              'source/SqlTicketsConnector.sln',
+              'source/build/SecretHygiene.targets',
+              'source/src/SqlTicketsConnector/SqlTicketsConnector.csproj',
+              'source/src/SqlTicketsConnector/Contracts/CommonModels.proto',
+              'source/tests/SqlTicketsConnector.Tests/SqlTicketsConnector.Tests.csproj'
           )
 
           $missing = @()
@@ -184,6 +193,16 @@ jobs:
           if ($missing) {
               $missing | ForEach-Object { Write-Error "Missing from the package: $_" }
               throw 'The deployment package is incomplete.'
+          }
+
+          # Build output must never travel inside the source copy: it bloats the
+          # package and carries artefacts from whichever machine built it.
+          $leaked = Get-ChildItem (Join-Path $extract 'source') -Recurse -Directory -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -in @('bin', 'obj', '.git', '.vs') }
+
+          if ($leaked) {
+              $leaked | ForEach-Object { Write-Error "Build output or repository state leaked into source/: $($_.FullName)" }
+              throw 'The staged source tree is not clean.'
           }
 
           # A framework-dependent build is roughly 20 MB; a self-contained one is

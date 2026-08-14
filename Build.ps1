@@ -124,6 +124,53 @@ Copy-Item (Join-Path $PSScriptRoot 'sql\*.sql') (Join-Path $OutputRoot 'sql') -F
 New-Item -ItemType Directory -Path (Join-Path $OutputRoot 'docs') -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'docs\*.md') (Join-Path $OutputRoot 'docs') -Force
 
+Write-Host '== Staging source ==' -ForegroundColor Cyan
+# The package carries a buildable copy of the tree under source\, so one
+# download serves both deployment and rebuild. Note what this means: source code
+# lands on the connector host. That was a deliberate customer decision, recorded
+# in docs/SECURITY.md section 4; if your review disallows it, drop this block and
+# publish the source archive as a separate release asset instead.
+#
+# Excluded: build output, the git directory, editor state and any package zips.
+# bin\ and obj\ in particular must never travel, both for size and because they
+# hold artefacts from whichever machine last built.
+$sourceRoot = Join-Path $OutputRoot 'source'
+$excludedDirectories = @('bin', 'obj', 'artifacts', '.git', '.vs', 'packages')
+
+$sourceItems = Get-ChildItem -Path $PSScriptRoot -Recurse -File | Where-Object {
+    $relative = $_.FullName.Substring($PSScriptRoot.Length).TrimStart('\')
+    $segments = $relative -split '\\'
+
+    # Skip anything under an excluded directory, the output root itself, and zips.
+    -not ($segments | Where-Object { $excludedDirectories -contains $_ }) -and
+    -not $relative.StartsWith('artifacts') -and
+    $_.Extension -ne '.zip'
+}
+
+foreach ($item in $sourceItems) {
+    $relative = $item.FullName.Substring($PSScriptRoot.Length).TrimStart('\')
+    $destination = Join-Path $sourceRoot $relative
+    $parent = Split-Path $destination -Parent
+
+    if (-not (Test-Path $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+
+    Copy-Item $item.FullName $destination -Force
+}
+
+# build\SecretHygiene.targets is imported by every project file, so a source tree
+# without it does not even restore. Fail here rather than shipping a copy that
+# cannot be built.
+foreach ($required in @('SqlTicketsConnector.sln', 'build\SecretHygiene.targets', 'src\SqlTicketsConnector\SqlTicketsConnector.csproj')) {
+    if (-not (Test-Path (Join-Path $sourceRoot $required))) {
+        throw "The staged source tree is missing $required, so it would not build."
+    }
+}
+
+$sourceCount = (Get-ChildItem $sourceRoot -Recurse -File).Count
+Write-Host "Staged $sourceCount source file(s) under source\."
+
 # A deployment package must never contain a filled-in configuration file from a
 # developer machine, or certificate material of any kind.
 $forbidden = Get-ChildItem -Path $OutputRoot -Recurse -File -Include *.pfx, *.p12, *.pem, *.key

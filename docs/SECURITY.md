@@ -176,6 +176,15 @@ The agent-hosted connector holds **no** Graph permission.
    connection wizard is reported at `Warning` (type only, never a value) and
    discarded; `deploy/Manifest.json` therefore advertises `Windows` only.
 5. **`Grpc.Core` 2.40.0 is out of support** — see the dependency table.
+6. **The deployment package contains a copy of the source tree** under
+   `source/`, at the customer's explicit direction, so that one download serves
+   both deployment and rebuild. The consequence is that application source code
+   is present on the connector host, which is a wider footprint than a binary
+   deployment and is worth a decision from you rather than a silent acceptance.
+   It contains no build output, no repository history and no credentials; CI
+   fails if `bin/`, `obj/` or `.git/` appear inside it. To reverse this, remove
+   the source staging block in `Build.ps1` and publish the source archive as a
+   separate release asset instead — GitHub already attaches one to every tag.
 
 ---
 

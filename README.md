@@ -134,6 +134,28 @@ missing — "everything is in the zip" is checked, not assumed.
 Pushing a `v*` tag additionally creates a **draft** release with the zip and its
 `.sha256` attached, named after the tag; publishing it stays a human decision.
 
+### What the package contains
+
+```
+publish/            the connector service, with the .NET runtime bundled
+SqlGraphPush/       the direct push tool, also self-contained
+source/             a buildable copy of this repository, no bin/ or obj/
+sql/                least-privilege grant, soft-delete migration, sample table
+docs/               SECURITY.md, RUNBOOK.md, ASSUMPTIONS.md
+Install-Connector.ps1, Manifest.json, ConnectionInfo.json,
+CustomConnectorPortMap.json, README.md
+```
+
+To rebuild from the package rather than from a clone:
+
+```powershell
+cd source
+dotnet build .\SqlTicketsConnector.sln -c Release      # needs the .NET 10 SDK and NuGet access
+```
+
+CI fails the build if any of the above is missing from the archive, and if
+`bin/`, `obj/` or `.git/` leak into `source/`.
+
 ---
 
 ## Transfer via SharePoint
