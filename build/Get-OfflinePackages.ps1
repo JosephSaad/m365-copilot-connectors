@@ -125,7 +125,7 @@ $packages = @(
     @{ Id = 'Serilog'; Version = '4.4.0' }
     @{ Id = 'Serilog.Sinks.Console'; Version = '6.1.1' }
     @{ Id = 'Serilog.Sinks.EventLog'; Version = '4.0.0' }
-    @{ Id = 'Serilog.Sinks.File'; Version = '6.0.0' }
+    @{ Id = 'Serilog.Sinks.File'; Version = '7.0.0' }
     @{ Id = 'Std.UriTemplate'; Version = '2.0.8' }
     @{ Id = 'System.ClientModel'; Version = '1.10.0' }
     @{ Id = 'System.Configuration.ConfigurationManager'; Version = '8.0.0' }
