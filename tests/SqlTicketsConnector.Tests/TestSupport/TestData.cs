@@ -128,9 +128,11 @@ namespace SqlTicketsConnector.Tests.TestSupport
                 }
 
                 // Public part only: this is what an import without the key looks like.
+                // X509CertificateLoader rather than the byte[] constructor, which is
+                // obsolete from .NET 9 (SYSLIB0057).
                 using (certificate)
                 {
-                    return new X509Certificate2(certificate.Export(X509ContentType.Cert));
+                    return X509CertificateLoader.LoadCertificate(certificate.Export(X509ContentType.Cert));
                 }
             }
         }
