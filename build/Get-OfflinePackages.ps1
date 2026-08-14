@@ -8,11 +8,14 @@
     isolated build machine, and restore from it with --source. The list is
     grouped into three sets, because you probably do not need all three:
 
-      Base (68 packages, about 119 MB)
+      Base (80 packages, about 132 MB)
           Everything 'dotnet build' and 'dotnet test' of the solution need,
-          across all four projects. Always downloaded.
+          across all four projects. Always downloaded. Twelve more than main's
+          list: net9.0 needs System.Text.Json, System.IO.Pipelines and their
+          neighbours as packages, where net10.0 has them in the shared
+          framework.
 
-      Runtime packs (4 packages, about 93 MB)
+      Runtime packs (4 packages, about 92 MB)
           Only for 'Build.ps1 -SelfContained', which is how the release package
           is produced: they are the .NET runtime that gets bundled into it.
           Skip with -SkipRuntimePacks.
@@ -84,6 +87,7 @@ $packages = @(
     @{ Id = 'Grpc.Tools'; Version = '2.40.0' }
     @{ Id = 'Microsoft.Bcl.AsyncInterfaces'; Version = '10.0.3' }
     @{ Id = 'Microsoft.CodeCoverage'; Version = '18.9.0' }
+    @{ Id = 'Microsoft.CSharp'; Version = '4.5.0' }
     @{ Id = 'Microsoft.Data.SqlClient'; Version = '5.2.2' }
     @{ Id = 'Microsoft.Data.SqlClient.SNI.runtime'; Version = '5.2.0' }
     @{ Id = 'Microsoft.Extensions.Configuration.Abstractions'; Version = '10.0.3' }
@@ -119,6 +123,8 @@ $packages = @(
     @{ Id = 'Microsoft.Kiota.Serialization.Multipart'; Version = '1.21.1' }
     @{ Id = 'Microsoft.Kiota.Serialization.Text'; Version = '1.21.1' }
     @{ Id = 'Microsoft.NET.Test.Sdk'; Version = '18.9.0' }
+    @{ Id = 'Microsoft.NETCore.Platforms'; Version = '1.1.0' }
+    @{ Id = 'Microsoft.NETCore.Targets'; Version = '1.1.0' }
     @{ Id = 'Microsoft.SqlServer.Server'; Version = '1.0.0' }
     @{ Id = 'Microsoft.TestPlatform.ObjectModel'; Version = '18.9.0' }
     @{ Id = 'Microsoft.TestPlatform.TestHost'; Version = '18.9.0' }
@@ -129,12 +135,21 @@ $packages = @(
     @{ Id = 'Std.UriTemplate'; Version = '2.0.8' }
     @{ Id = 'System.ClientModel'; Version = '1.10.0' }
     @{ Id = 'System.Configuration.ConfigurationManager'; Version = '8.0.0' }
+    @{ Id = 'System.Diagnostics.DiagnosticSource'; Version = '10.0.3' }
     @{ Id = 'System.Diagnostics.EventLog'; Version = '8.0.0' }
     @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '6.35.0' }
     @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '8.15.0' }
+    @{ Id = 'System.IO.Pipelines'; Version = '10.0.3' }
+    @{ Id = 'System.Memory'; Version = '4.5.3' }
     @{ Id = 'System.Memory.Data'; Version = '10.0.3' }
+    @{ Id = 'System.Runtime'; Version = '4.3.0' }
     @{ Id = 'System.Runtime.Caching'; Version = '8.0.0' }
+    @{ Id = 'System.Security.Cryptography.Cng'; Version = '4.5.0' }
     @{ Id = 'System.Security.Cryptography.ProtectedData'; Version = '8.0.0' }
+    @{ Id = 'System.Text.Encoding'; Version = '4.3.0' }
+    @{ Id = 'System.Text.Encodings.Web'; Version = '10.0.3' }
+    @{ Id = 'System.Text.Json'; Version = '10.0.3' }
+    @{ Id = 'System.ValueTuple'; Version = '4.5.0' }
     @{ Id = 'xunit'; Version = '2.9.3' }
     @{ Id = 'xunit.abstractions'; Version = '2.0.3' }
     @{ Id = 'xunit.analyzers'; Version = '1.18.0' }

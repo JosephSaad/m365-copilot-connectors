@@ -21,6 +21,12 @@ byte and unmodified.
 Connector ID: `9e5e2b95-e7ab-4266-98c7-4f7868d377bf`
 Default port: `30303`
 
+> **This is the `release/net9` branch — the .NET 9 line, for Visual Studio 2022.**
+> `main` targets `net10.0`, which Visual Studio 2022 cannot open. The only
+> differences here are the target framework in `Directory.Build.props`, the SDK
+> pinned in `global.json`, and the package list that follows from them. Fixes
+> come from `main`; releases from this branch are tagged `-net9`.
+
 **Before reviewing or deploying this, read [`docs/SECURITY.md`](docs/SECURITY.md)
 (control mapping), [`docs/RUNBOOK.md`](docs/RUNBOOK.md) (rotation and failure
 modes) and [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).**
@@ -80,10 +86,10 @@ tests/
 ## Prerequisites
 
 **Build machine**
-- The .NET 10 SDK, alone or through Visual Studio 2026
-- **Visual Studio 2022 cannot open this configuration.** It has no .NET 10
-  support, so a `net10.0` project will not load there whatever SDK is installed.
-  Build for .NET 9 instead — see [Visual Studio 2022 and .NET 9](#visual-studio-2022-and-net-9)
+- Visual Studio 2022 17.12 or later with the .NET desktop development workload,
+  or the .NET 9 SDK alone. `global.json` pins the SDK to 9.0.x, so a machine with
+  newer SDKs installed still builds this branch with .NET 9
+- Nothing here needs Visual Studio 2026 or the .NET 10 SDK — that is `main`
 - NuGet access to `api.nuget.org`, or a package folder staged from a connected
   machine — see [Building without NuGet access](#building-without-nuget-access)
 
@@ -121,7 +127,7 @@ To produce the transfer package:
 
 ```powershell
 .\Build.ps1
-.\Build.ps1 -SelfContained          # server has no .NET 10 runtime
+.\Build.ps1 -SelfContained          # server has no .NET 9 runtime
 .\Build.ps1 -EnableOtlpExporter     # include the optional OpenTelemetry sink
 ```
 
@@ -166,33 +172,35 @@ that make it possible travel inside `source\build\`.
 CI fails the build if any of the above is missing from the archive, and if
 `bin/`, `obj/` or `.git/` leak into `source/`.
 
-### Visual Studio 2022 and .NET 9
+### Relationship to main
 
-Visual Studio 2022 has no .NET 10 support, so the default configuration will not
-load there. The target framework lives in one place, `Directory.Build.props`, so
-the whole solution moves with a single property:
+`main` targets `net10.0`; this branch targets `net9.0`, because Visual Studio
+2022 has no .NET 10 support and will not load a `net10.0` project whatever SDK is
+installed. The difference is two files:
+
+| File | Here | On `main` |
+|---|---|---|
+| `Directory.Build.props` | `ConnectorTargetFramework` is `net9.0` | `net10.0` |
+| `global.json` | pins the SDK to 9.0.x | absent |
+
+Everything else — the connector, the security library, the tests, the gates, the
+docs — is the same code. Take fixes from `main` and keep it that way; CI on
+`main` builds and tests `net9.0` on every push, with the .NET 9 SDK alone, so
+that branch cannot quietly break this one between releases.
+
+The package list under `build\` is larger here (80 packages rather than 68):
+`net9.0` needs `System.Text.Json`, `System.IO.Pipelines` and their neighbours as
+NuGet packages, where `net10.0` has them in the shared framework.
+
+To build this tree the way `main` does, without switching branches:
 
 ```powershell
-dotnet build .\SqlTicketsConnector.sln -c Release -p:ConnectorTargetFramework=net9.0
-.\Build.ps1 -SelfContained -TargetFramework net9.0
+dotnet build .\SqlTicketsConnector.sln -c Release -p:ConnectorTargetFramework=net10.0
 ```
 
-The framework appears in the package name — `SqlTicketsConnector-deploy-net9.0-*.zip` —
-because two zips that differ only in their bundled runtime are otherwise
-indistinguishable on a server.
-
-For a shop that lives in VS 2022, the **`release/net9`** branch flips that
-default so the solution opens and builds with no arguments at all, and pins the
-SDK in `global.json`. It is the same code: one property differs. Releases are
-tagged `-net9` and carry a package built against .NET 9.
-
-CI builds and tests `net9.0` from `main` on every push, using the .NET 9 SDK
-alone — the toolchain a VS 2022 machine actually has — so `main` cannot drift
-away from a branch nobody looks at between releases.
-
 Nothing changes for the target server. The release packages are self-contained,
-so the bundled runtime is whichever one the package was built against, and the
-server needs neither installed.
+so the bundled runtime is whichever one the package was built against — .NET 9
+for releases tagged `-net9` — and the server needs neither installed.
 
 ### Building without NuGet access
 
@@ -215,12 +223,12 @@ dotnet build   .\SqlTicketsConnector.sln -c Release --no-restore
 dotnet test    .\SqlTicketsConnector.sln -c Release --no-build
 ```
 
-77 packages, 215 MB, in three sets:
+89 packages, 227 MB, in three sets:
 
 | Set | Packages | Size | Needed for |
 |---|---:|---:|---|
-| Base | 68 | 119 MB | any build or test run |
-| Runtime packs | 4 | 93 MB | `Build.ps1 -SelfContained`. `-SkipRuntimePacks` |
+| Base | 80 | 132 MB | any build or test run |
+| Runtime packs | 4 | 92 MB | `Build.ps1 -SelfContained`. `-SkipRuntimePacks` |
 | OpenTelemetry | 5 | 3 MB | `Build.ps1 -EnableOtlpExporter`. `-SkipOtlp` |
 
 The runtime packs are the bundled .NET runtime. Two of the four are requested

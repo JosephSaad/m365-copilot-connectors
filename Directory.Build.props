@@ -7,20 +7,18 @@
   with each other, and that a build for a different framework was not something
   you could ask for at all.
 
-  net10.0 is the default and what the release packages are built against. Pass
-  -p:ConnectorTargetFramework=net9.0 to build for .NET 9, which is what Visual
-  Studio 2022 can open: VS 2022 has no .NET 10 support, so a net10.0 project
-  will not load there whatever SDK is installed.
+  THIS IS THE release/net9 BRANCH. The default below is net9.0, where main has
+  net10.0, because Visual Studio 2022 has no .NET 10 support and a net10.0
+  project will not load there whatever SDK is installed. Everything else is
+  main: take fixes from there, and keep the difference to this property and the
+  SDK pin in global.json.
 
-  The net9.0 line has its own branch, release/net9, where the default below is
-  flipped and a global.json pins the SDK — one line of difference, so the two
-  lines cannot drift apart in anything but that one decision. CI builds and
-  tests net9.0 from main as well, so a change here cannot quietly break it.
+  Pass -p:ConnectorTargetFramework=net10.0 to build this tree the way main does.
 -->
 <Project>
 
   <PropertyGroup>
-    <ConnectorTargetFramework Condition="'$(ConnectorTargetFramework)' == ''">net10.0</ConnectorTargetFramework>
+    <ConnectorTargetFramework Condition="'$(ConnectorTargetFramework)' == ''">net9.0</ConnectorTargetFramework>
   </PropertyGroup>
 
 </Project>
