@@ -57,3 +57,13 @@ updates:
       # and patch updates through and leave the major bump to a Graph SDK move.
       - dependency-name: "Microsoft.Kiota.Abstractions"
         update-types: ["version-update:semver-major"]
+
+      # The other half of that pair. Graph 6.x requires Kiota 2.0.0, which the
+      # pin above rules out, so the major bump cannot be merged as a bump:
+      # Dependabot opened it as #6 on 2026-08-14 and it was closed unmerged for
+      # exactly that reason. Taking Graph 6.x means moving to Kiota 2.x and
+      # confirming GHSA-7j59-v9qr-6fq9 is still fixed there, which is a change
+      # with its own testing. Minor and patch updates on the 5.x line still come
+      # through, and an advisory against Microsoft.Graph still raises an alert.
+      - dependency-name: "Microsoft.Graph"
+        update-types: ["version-update:semver-major"]
