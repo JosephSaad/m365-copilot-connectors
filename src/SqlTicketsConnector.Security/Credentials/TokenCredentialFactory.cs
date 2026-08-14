@@ -43,9 +43,12 @@ namespace SqlTicketsConnector.Security.Credentials
                         "Auth:Mode is ManagedIdentity. Using the platform assigned identity for client {ClientId}.",
                         string.IsNullOrWhiteSpace(auth.ClientId) ? "(system assigned)" : auth.ClientId);
 
+                    // ManagedIdentityId rather than the string overload: the
+                    // latter is obsolete from Azure.Identity 1.21.0 because it
+                    // could not express which kind of identifier was meant.
                     return string.IsNullOrWhiteSpace(auth.ClientId)
-                        ? new ManagedIdentityCredential()
-                        : new ManagedIdentityCredential(auth.ClientId);
+                        ? new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned)
+                        : new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(auth.ClientId));
 
                 case AuthMode.Certificate:
                     if (resolver == null)
