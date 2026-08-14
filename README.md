@@ -80,7 +80,10 @@ tests/
 ## Prerequisites
 
 **Build machine**
-- Visual Studio 2022 17.14 or later with the .NET desktop development workload, or the .NET 10 SDK alone
+- The .NET 10 SDK, alone or through Visual Studio 2026
+- **Visual Studio 2022 cannot open this configuration.** It has no .NET 10
+  support, so a `net10.0` project will not load there whatever SDK is installed.
+  Build for .NET 9 instead — see [Visual Studio 2022 and .NET 9](#visual-studio-2022-and-net-9)
 - NuGet access to `api.nuget.org`, or a package folder staged from a connected
   machine — see [Building without NuGet access](#building-without-nuget-access)
 
@@ -162,6 +165,34 @@ that make it possible travel inside `source\build\`.
 
 CI fails the build if any of the above is missing from the archive, and if
 `bin/`, `obj/` or `.git/` leak into `source/`.
+
+### Visual Studio 2022 and .NET 9
+
+Visual Studio 2022 has no .NET 10 support, so the default configuration will not
+load there. The target framework lives in one place, `Directory.Build.props`, so
+the whole solution moves with a single property:
+
+```powershell
+dotnet build .\SqlTicketsConnector.sln -c Release -p:ConnectorTargetFramework=net9.0
+.\Build.ps1 -SelfContained -TargetFramework net9.0
+```
+
+The framework appears in the package name — `SqlTicketsConnector-deploy-net9.0-*.zip` —
+because two zips that differ only in their bundled runtime are otherwise
+indistinguishable on a server.
+
+For a shop that lives in VS 2022, the **`release/net9`** branch flips that
+default so the solution opens and builds with no arguments at all, and pins the
+SDK in `global.json`. It is the same code: one property differs. Releases are
+tagged `-net9` and carry a package built against .NET 9.
+
+CI builds and tests `net9.0` from `main` on every push, using the .NET 9 SDK
+alone — the toolchain a VS 2022 machine actually has — so `main` cannot drift
+away from a branch nobody looks at between releases.
+
+Nothing changes for the target server. The release packages are self-contained,
+so the bundled runtime is whichever one the package was built against, and the
+server needs neither installed.
 
 ### Building without NuGet access
 

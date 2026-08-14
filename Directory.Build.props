@@ -1,0 +1,26 @@
+<!--
+  Imported automatically by every project in this tree, before the project file
+  itself is read.
+
+  It exists for one property. The target framework used to be repeated in four
+  project files, which meant that moving it was four edits that could disagree
+  with each other, and that a build for a different framework was not something
+  you could ask for at all.
+
+  net10.0 is the default and what the release packages are built against. Pass
+  -p:ConnectorTargetFramework=net9.0 to build for .NET 9, which is what Visual
+  Studio 2022 can open: VS 2022 has no .NET 10 support, so a net10.0 project
+  will not load there whatever SDK is installed.
+
+  The net9.0 line has its own branch, release/net9, where the default below is
+  flipped and a global.json pins the SDK — one line of difference, so the two
+  lines cannot drift apart in anything but that one decision. CI builds and
+  tests net9.0 from main as well, so a change here cannot quietly break it.
+-->
+<Project>
+
+  <PropertyGroup>
+    <ConnectorTargetFramework Condition="'$(ConnectorTargetFramework)' == ''">net10.0</ConnectorTargetFramework>
+  </PropertyGroup>
+
+</Project>

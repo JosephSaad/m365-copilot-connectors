@@ -142,6 +142,42 @@ jobs:
         run: ./build/Test-OfflinePackageList.ps1 -Configuration Otlp
 
   # =========================================================================
+  # The .NET 9 line. Visual Studio 2022 has no .NET 10 support, so a shop on
+  # VS 2022 cannot open the default configuration at all; release/net9 exists
+  # for them, and its packages are built from the same commits as this branch.
+  #
+  # Only the .NET 9 SDK is installed here, deliberately. Building net9.0 with
+  # the .NET 10 SDK would prove something weaker than the claim: the claim is
+  # that the toolchain a VS 2022 machine actually has can build this, and that
+  # is the .NET 9 SDK. This job is what stops main from drifting away from a
+  # branch nobody looks at until a release is wanted.
+  # =========================================================================
+  net9:
+    name: Build and test for .NET 9 (windows-latest)
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore SqlTicketsConnector.sln -p:ConnectorTargetFramework=net9.0
+
+      - name: Build (warnings are errors)
+        run: dotnet build SqlTicketsConnector.sln -c Release --no-restore -warnaserror -p:ConnectorTargetFramework=net9.0
+
+      # The tests are the control evidence for redaction, watermarks and secret
+      # rotation. They have to pass on the framework a package is shipped for,
+      # not only on the default one.
+      - name: Test
+        run: dotnet test SqlTicketsConnector.sln -c Release --no-build --nologo -p:ConnectorTargetFramework=net9.0
+
+  # =========================================================================
   # Produces the deployment package by running Build.ps1 exactly as an engineer
   # would, rather than reimplementing it here. The script re-runs the secret
   # scan, the warning-free build, the tests and the dependency audit before it
@@ -216,6 +252,7 @@ jobs:
               # rebuild. SecretHygiene.targets is imported by every project file:
               # without it the tree does not even restore.
               'source/SqlTicketsConnector.sln',
+              'source/Directory.Build.props',              # holds the target framework
               'source/build/SecretHygiene.targets',
               'source/src/SqlTicketsConnector/SqlTicketsConnector.csproj',
               'source/src/SqlTicketsConnector/Contracts/CommonModels.proto',

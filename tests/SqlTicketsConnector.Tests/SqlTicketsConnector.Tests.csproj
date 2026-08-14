@@ -7,7 +7,7 @@
   -->
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
     <RootNamespace>SqlTicketsConnector.Tests</RootNamespace>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>

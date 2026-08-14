@@ -12,7 +12,7 @@
   -->
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
     <RootNamespace>SqlTicketsConnector.Security</RootNamespace>
     <AssemblyName>SqlTicketsConnector.Security</AssemblyName>
     <Nullable>disable</Nullable>

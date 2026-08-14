@@ -22,7 +22,8 @@
 .EXAMPLE
     .\Build.ps1
     .\Build.ps1 -SelfContained
-    .\Build.ps1 -SkipTests            # only for a diagnostic build, never for release
+    .\Build.ps1 -SkipTests                  # diagnostic build, never for release
+    .\Build.ps1 -TargetFramework net9.0     # for a Visual Studio 2022 shop
 #>
 
 [CmdletBinding()]
@@ -41,6 +42,14 @@ param(
     # second gRPC stack to the dependency graph. See docs/SECURITY.md.
     [switch]$EnableOtlpExporter,
 
+    # Overrides ConnectorTargetFramework from Directory.Build.props. Empty means
+    # the branch's own default: net10.0 on main, net9.0 on release/net9. Pass
+    # net9.0 here to produce a .NET 9 package from main — the framework Visual
+    # Studio 2022 can open. The framework then appears in the package name,
+    # because two zips that differ only in their runtime and not in their name
+    # is how the wrong one reaches a server.
+    [string]$TargetFramework = '',
+
     [string]$OutputRoot = "$PSScriptRoot\artifacts"
 )
 
@@ -55,6 +64,16 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 
 $otlp = if ($EnableOtlpExporter) { 'true' } else { 'false' }
 
+# Every dotnet invocation below has to carry these, restore included: a restore
+# for one target framework and a build for another produces NETSDK1005, and a
+# publish that quietly falls back to the default would put the wrong runtime in
+# a package named for the other one.
+$frameworkArgs = @("-p:EnableOtlpExporter=$otlp")
+if ($TargetFramework) {
+    $frameworkArgs += "-p:ConnectorTargetFramework=$TargetFramework"
+    Write-Host "Target framework: $TargetFramework (overriding the default)" -ForegroundColor Cyan
+}
+
 Write-Host '== Secret hygiene scan ==' -ForegroundColor Cyan
 dotnet build (Join-Path $PSScriptRoot 'build\SecretHygiene.proj') -t:ScanAppSettingsForSecrets -nologo -v:m
 if ($LASTEXITCODE -ne 0) { throw 'Secret hygiene scan failed. Move the value into Key Vault and keep only the secret name in configuration.' }
@@ -63,11 +82,11 @@ Write-Host '== Restoring ==' -ForegroundColor Cyan
 # The OTLP switch adds packages through a conditional PackageReference, so the
 # restore has to carry it: otherwise the dependency audit below inspects a graph
 # the published package does not have.
-dotnet restore $solution -p:EnableOtlpExporter=$otlp
+dotnet restore $solution @frameworkArgs
 if ($LASTEXITCODE -ne 0) { throw 'Restore failed.' }
 
 Write-Host '== Building ==' -ForegroundColor Cyan
-dotnet build $solution -c $Configuration --no-restore -warnaserror -p:EnableOtlpExporter=$otlp
+dotnet build $solution -c $Configuration --no-restore -warnaserror @frameworkArgs
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 
 Write-Host '== Dependency audit ==' -ForegroundColor Cyan
@@ -82,7 +101,7 @@ if ($vulnerable -match 'has the following vulnerable packages') {
 
 if (-not $SkipTests) {
     Write-Host '== Testing ==' -ForegroundColor Cyan
-    dotnet test $solution -c $Configuration --no-build --nologo
+    dotnet test $solution -c $Configuration --no-build --nologo @frameworkArgs
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed. The redaction, watermark and rotation tests are control evidence; do not package a build that fails them.' }
 }
 else {
@@ -92,6 +111,7 @@ else {
 # A package built without the tests is named so that it cannot be mistaken for a
 # release candidate on a change advisory board's desk.
 $packagePrefix = if ($SkipTests) { 'SqlTicketsConnector-diagnostic' } else { 'SqlTicketsConnector-deploy' }
+if ($TargetFramework) { $packagePrefix = "$packagePrefix-$TargetFramework" }
 
 if (Test-Path $OutputRoot) {
     Remove-Item $OutputRoot -Recurse -Force
@@ -103,12 +123,12 @@ Write-Host '== Publishing connector ==' -ForegroundColor Cyan
 $selfContainedFlag = if ($SelfContained) { 'true' } else { 'false' }
 
 dotnet publish $connectorProject -c $Configuration -r $Runtime --self-contained $selfContainedFlag `
-    -o $publishDir -p:EnableOtlpExporter=$otlp
+    -o $publishDir @frameworkArgs
 if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
 
 Write-Host '== Publishing the direct push tool ==' -ForegroundColor Cyan
 $pushDir = Join-Path $OutputRoot 'SqlGraphPush'
-dotnet publish $pushProject -c $Configuration -r $Runtime --self-contained $selfContainedFlag -o $pushDir
+dotnet publish $pushProject -c $Configuration -r $Runtime --self-contained $selfContainedFlag -o $pushDir @frameworkArgs
 if ($LASTEXITCODE -ne 0) { throw 'Publish of SqlGraphPush failed.' }
 
 Write-Host '== Staging deployment assets ==' -ForegroundColor Cyan
@@ -166,7 +186,10 @@ foreach ($item in $sourceItems) {
 # build\SecretHygiene.targets is imported by every project file, so a source tree
 # without it does not even restore. Fail here rather than shipping a copy that
 # cannot be built.
-foreach ($required in @('SqlTicketsConnector.sln', 'build\SecretHygiene.targets', 'src\SqlTicketsConnector\SqlTicketsConnector.csproj')) {
+# Directory.Build.props is where the target framework lives; a source tree
+# without it builds every project with an empty TargetFramework and fails in a
+# way that names nothing useful.
+foreach ($required in @('SqlTicketsConnector.sln', 'Directory.Build.props', 'build\SecretHygiene.targets', 'src\SqlTicketsConnector\SqlTicketsConnector.csproj')) {
     if (-not (Test-Path (Join-Path $sourceRoot $required))) {
         throw "The staged source tree is missing $required, so it would not build."
     }
