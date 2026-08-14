@@ -1,6 +1,12 @@
 bin/
 obj/
 artifacts/
+# A NuGet.config copied from build/NuGet.offline.config on an air-gapped build
+# machine. It clears the package sources, so committing it would break every
+# online build.
+NuGet.config
+NuGet.Config
+
 # Staged nupkgs from build/Get-OfflinePackages.ps1: ~215 MB of downloads.
 offline-packages/
 *.nupkg
