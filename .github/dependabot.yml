@@ -6,10 +6,12 @@
 # than only reacting to advisories, and so the policy is reviewable in the
 # repository instead of living in a settings page nobody reads.
 #
-# The ignore rules below are deliberately limited to MAJOR versions. Patch and
-# minor updates still flow, which matters because Dependabot security updates
-# honour these rules too: ignoring a package wholesale would suppress the fix
-# for its next advisory.
+# On the ignore rules below: they suppress version-update pull requests only.
+# Dependabot ALERTS are a separate mechanism and fire for every package whatever
+# this file says, so an ignored package still raises an advisory for a human to
+# judge. That distinction is what makes it safe to ignore the three pinned gRPC
+# and protobuf packages outright: an advisory there needs the migration project
+# described in docs/SECURITY.md section 3, not an automated bump.
 # ===========================================================================
 
 version: 2
@@ -31,19 +33,24 @@ updates:
       include: "scope"
 
     ignore:
+      # The three below move as a set or not at all, so they are ignored
+      # outright rather than by version range. Evidence: the Grpc.Tools 2.83.0
+      # pull request Dependabot opened on 2026-08-14 failed CI with
+      # "MapField<string, GenericType> does not contain a definition for
+      # MergeFrom" — newer generated code requires a newer Google.Protobuf
+      # runtime than the pinned 3.18.0. An automated single-package bump cannot
+      # succeed here; it only produces red pull requests nobody can merge.
+      #
       # Pinned to the legacy native gRPC stack the Microsoft connector contracts
       # were generated against. Moving to Grpc.AspNetCore means regenerating the
       # server stubs and rewriting the host: a project, not a dependency bump.
       # Recorded as an accepted risk in docs/SECURITY.md section 3.
       - dependency-name: "Grpc.Core"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "Grpc.Tools"
-        update-types: ["version-update:semver-major"]
 
       # Pinned to match the version of the protobuf code generator above.
       # A mismatch changes what the generated contract types compile against.
       - dependency-name: "Google.Protobuf"
-        update-types: ["version-update:semver-major"]
 
       # Kiota 2.x is a major rewrite; the Graph SDK on the 5.x line expects 1.x.
       # This package is referenced only to hold a security floor, so let minor
