@@ -126,11 +126,12 @@ whose names match the credential pattern but whose values are not credentials:
 | `Google.Protobuf` | 3.18.0 | Pinned to match the `Grpc.Tools` code generator. |
 | `Grpc.Tools` | 2.40.0 | Build-time only (`PrivateAssets=all`); not shipped. |
 | `Microsoft.Data.SqlClient` | 5.2.2 | Current 5.x servicing line. |
-| `Azure.Identity` | 1.13.2 | Post-CVE-2024-35255. |
+| `Azure.Identity` | 1.21.0 | Raised from 1.13.2, which NuGet reports as deprecated. |
 | `Azure.Security.KeyVault.Secrets` | 4.7.0 | |
 | `Serilog` | 4.3.1 | Raised from 3.1.1: `Serilog.Sinks.EventLog` 4.0.0 requires Serilog 4.x, and the event log sink is control LOG-2. |
 | `Serilog.Sinks.OpenTelemetry` | 4.1.1, **not referenced by default** | The OTLP exporter pulls in `Grpc.Net.Client` and a newer `Google.Protobuf`, doubling the gRPC surface in the dependency scan for a feature that ships disabled. It is behind an MSBuild switch: `dotnet build -p:EnableOtlpExporter=true`, or `Build.ps1 -EnableOtlpExporter`. `Logging:Otlp:Enabled` then controls it at runtime; if the flag is set but the build excluded the package, startup says so on stderr. |
-| `Microsoft.Graph` | 5.68.0 | **`SqlGraphPush` only.** Not referenced by the connector or the Security project. |
+| `Microsoft.Graph` | 5.105.0 | **`SqlGraphPush` only.** Not referenced by the connector or the Security project. |
+| `Microsoft.Kiota.Abstractions` | 1.22.2, **pinned deliberately** | `SqlGraphPush` does not use it directly. The reference exists only to raise a transitive dependency past GHSA-7j59-v9qr-6fq9 / CVE-2026-44503 (High): the Kiota `RedirectHandler` leaks `Cookie` and `Proxy-Authorization` headers on a cross-host redirect, fixed in 1.22.0. `Microsoft.Graph` 5.105.0 still asks for 1.21.1. Remove the pin once the Graph SDK's own dependency reaches 1.22.0. |
 
 Graph application permissions (`SqlGraphPush` only, admin consent, public
 certificate uploaded to the app registration):
@@ -173,6 +174,12 @@ dotnet test SqlTicketsConnector.sln                                  # 40 tests,
 dotnet build build\SecretHygiene.proj -t:ScanAppSettingsForSecrets    # configuration hygiene
 gitleaks detect --config .gitleaks.toml --redact                      # repository history
 pre-commit run --all-files                                            # the same checks a developer gets
+
+# Dependency audit. Both must come back clean before a release; the only
+# expected result is the xunit 2.9.3 "Legacy" deprecation in the test project,
+# which is a supersession by xunit.v3, not a vulnerability.
+dotnet list SqlTicketsConnector.sln package --vulnerable --include-transitive
+dotnet list SqlTicketsConnector.sln package --deprecated
 ```
 
 The test suite needs no tenant, no vault, no SQL instance and no network:

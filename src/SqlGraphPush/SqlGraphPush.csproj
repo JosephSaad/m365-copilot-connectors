@@ -9,12 +9,26 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.Identity" Version="1.13.2" />
-    <PackageReference Include="Microsoft.Graph" Version="5.68.0" />
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Microsoft.Graph" Version="5.105.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
     <PackageReference Include="Serilog" Version="4.3.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+
+    <!--
+      Direct reference to a package this project does not use directly, purely to
+      raise a transitive dependency past a security advisory.
+
+      GHSA-7j59-v9qr-6fq9 / CVE-2026-44503 (High): the Kiota RedirectHandler
+      leaks Cookie and Proxy-Authorization headers when a request is redirected
+      to a different host. Fixed in 1.22.0. Microsoft.Graph 5.105.0 still asks
+      for 1.21.1, so the floor is set here until the Graph SDK catches up.
+
+      Remove this line once Microsoft.Graph's own dependency is 1.22.0 or later,
+      and re-run the vulnerable package audit described in docs/SECURITY.md.
+    -->
+    <PackageReference Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
   </ItemGroup>
 
   <ItemGroup>
