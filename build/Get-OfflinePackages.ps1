@@ -12,7 +12,7 @@
           Everything 'dotnet build' and 'dotnet test' of the solution need,
           across all four projects. Always downloaded.
 
-      Runtime packs (3 packages, about 55 MB)
+      Runtime packs (4 packages, about 93 MB)
           Only for 'Build.ps1 -SelfContained', which is how the release package
           is produced: they are the .NET runtime that gets bundled into it.
           Skip with -SkipRuntimePacks.
@@ -20,7 +20,8 @@
           These are win-x64, the deployment target, and they also cover the
           build machine's own runtime pack request when that machine is Windows
           x64 — which the documented one is. A self-contained publish from a
-          different host asks for its own RID's packs as well.
+          different host asks for its own RID's packs as well. Two of the four
+          are requested only from some hosts; see the list itself below.
 
       OpenTelemetry (5 packages, about 3 MB)
           Only for 'Build.ps1 -EnableOtlpExporter'. That configuration raises
@@ -163,10 +164,21 @@ if (-not $SkipRuntimePacks) {
         Write-Warning "Could not ask the SDK for its runtime pack version; assuming $RuntimeVersion. On the build machine, run: dotnet msbuild src\SqlTicketsConnector\SqlTicketsConnector.csproj -getProperty:BundledNETCoreAppPackageVersion"
     }
 
+    # Which of these a given machine actually downloads depends on the host it
+    # builds from, so the list is the union rather than any one machine's view,
+    # and Test-OfflinePackageList.ps1 knows which two are host-dependent.
+    #
+    #   NETCore.App.Runtime      always
+    #   AspNetCore.App.Runtime   always
+    #   WindowsDesktop.App.Runtime   requested when building on Windows;
+    #                            absent when cross-publishing from macOS or Linux
+    #   NETCore.App.Host         the apphost. A Windows x64 SDK already has its
+    #                            own, so only a cross-build downloads it
     $packages += @(
         @{ Id = 'Microsoft.NETCore.App.Runtime.win-x64'; Version = $RuntimeVersion }
-        @{ Id = 'Microsoft.NETCore.App.Host.win-x64'; Version = $RuntimeVersion }
         @{ Id = 'Microsoft.AspNetCore.App.Runtime.win-x64'; Version = $RuntimeVersion }
+        @{ Id = 'Microsoft.WindowsDesktop.App.Runtime.win-x64'; Version = $RuntimeVersion }
+        @{ Id = 'Microsoft.NETCore.App.Host.win-x64'; Version = $RuntimeVersion }
     )
 }
 

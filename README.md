@@ -184,17 +184,20 @@ dotnet build   .\SqlTicketsConnector.sln -c Release --no-restore
 dotnet test    .\SqlTicketsConnector.sln -c Release --no-build
 ```
 
-76 packages, 177 MB, in three sets:
+77 packages, 215 MB, in three sets:
 
 | Set | Packages | Size | Needed for |
 |---|---:|---:|---|
 | Base | 68 | 119 MB | any build or test run |
-| Runtime packs | 3 | 55 MB | `Build.ps1 -SelfContained`. `-SkipRuntimePacks` |
+| Runtime packs | 4 | 93 MB | `Build.ps1 -SelfContained`. `-SkipRuntimePacks` |
 | OpenTelemetry | 5 | 3 MB | `Build.ps1 -EnableOtlpExporter`. `-SkipOtlp` |
 
-The runtime packs are the bundled .NET runtime, and their version is chosen by
-the SDK rather than by this repository, so the script asks MSBuild for
-`BundledNETCoreAppPackageVersion` instead of hard-coding one. It must match the
+The runtime packs are the bundled .NET runtime. Two of the four are requested
+only from some build hosts — a Windows SDK asks for the WindowsDesktop pack and
+already has its own apphost, a cross-build from macOS or Linux is the reverse —
+so the list is the union and the CI check treats those two as optional. Their
+version is chosen by the SDK rather than by this repository, so the script asks
+MSBuild for `BundledNETCoreAppPackageVersion` instead of hard-coding one. It must match the
 SDK on the machine that will do the offline build — pass `-RuntimeVersion` if
 you are staging for a machine whose SDK differs from yours.
 

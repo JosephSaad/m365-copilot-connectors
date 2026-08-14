@@ -133,7 +133,7 @@ Write-Host '== Staging source ==' -ForegroundColor Cyan
 #
 # Excluded: build output, the git directory, editor state, any package zips, and
 # nupkgs staged by build\Get-OfflinePackages.ps1 into the default
-# offline-packages\ folder — roughly 150 MB that would otherwise ride along.
+# offline-packages\ folder — roughly 215 MB that would otherwise ride along.
 # bin\ and obj\ in particular must never travel, both for size and because they
 # hold artefacts from whichever machine last built.
 $sourceRoot = Join-Path $OutputRoot 'source'

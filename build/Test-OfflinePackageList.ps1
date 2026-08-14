@@ -32,7 +32,9 @@
     RuntimePacks compares ids and the version, the version being the interesting
     half: the list asks the SDK for BundledNETCoreAppPackageVersion rather than
     hard-coding one, and this is what proves that question is still answered
-    correctly on a machine with a current SDK.
+    correctly on a machine with a current SDK. Two of the four packs are
+    requested only from certain build hosts — the list covers all of them, so it
+    is checked as a superset there and strictly everywhere else.
 
 .EXAMPLE
     pwsh build/Test-OfflinePackageList.ps1 -Configuration Base
@@ -102,13 +104,24 @@ function Get-DownloadDependency {
 
         if (-not $json.project.frameworks) { continue }
 
+        # The project that asked is worth keeping: which packs appear depends on
+        # the build host, and naming the requester is what turns a surprise entry
+        # into something a reader can act on.
+        $project = Split-Path (Split-Path $file.FullName -Parent) -Parent | Split-Path -Leaf
+
         foreach ($framework in $json.project.frameworks.PSObject.Properties) {
             foreach ($dependency in @($framework.Value.downloadDependencies)) {
                 if (-not $dependency) { continue }
 
                 # The version is a range, "[10.0.9, 10.0.9]".
                 $version = if ($dependency.version -match '\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?') { $Matches[0] } else { $dependency.version }
-                $found[$dependency.name] = $version
+
+                if (-not $found.ContainsKey($dependency.name)) {
+                    $found[$dependency.name] = [pscustomobject]@{ Version = $version; Projects = @() }
+                }
+
+                $found[$dependency.name].Version = $version
+                $found[$dependency.name].Projects = @($found[$dependency.name].Projects + $project | Sort-Object -Unique)
             }
         }
     }
@@ -128,10 +141,10 @@ Write-Host "Read $($assetsFiles.Count) project.assets.json file(s)."
 
 if ($Configuration -eq 'RuntimePacks') {
     $expectedList = @(& $listScript -ListOnly -SkipOtlp) |
-        Where-Object { $_ -match '^Microsoft\.(NETCore|AspNetCore)\.App\.(Runtime|Host)\.' }
+        Where-Object { $_ -match '^Microsoft\.(NETCore|AspNetCore|WindowsDesktop)\.App\.(Runtime|Host)\.' }
 
     if (-not $expectedList) {
-        throw 'Get-OfflinePackages.ps1 listed no runtime packs. It should list three unless -SkipRuntimePacks was passed.'
+        throw 'Get-OfflinePackages.ps1 listed no runtime packs. It should list four unless -SkipRuntimePacks was passed.'
     }
 
     $expected = @{}
@@ -140,9 +153,17 @@ if ($Configuration -eq 'RuntimePacks') {
         $expected[$parts[0]] = $parts[1]
     }
 
-    # Filter to the publish RID. On a Windows build machine these are the only
-    # ones present; elsewhere the host RID's packs also appear, and they are not
-    # what the release package is built from.
+    # Two of the four packs depend on which OS the build runs from, so a list
+    # that covers every supported build machine is necessarily a superset of any
+    # one machine's graph. Their absence here is expected and reported rather
+    # than treated as rot; anything else in the list that goes unused is rot.
+    $hostDependent = @{
+        'Microsoft.WindowsDesktop.App.Runtime.win-x64' = 'requested when building on Windows, not when cross-publishing'
+        'Microsoft.NETCore.App.Host.win-x64'           = 'the apphost, already present in a Windows x64 SDK'
+    }
+
+    # Filter to the publish RID: a build host with a different RID also downloads
+    # its own packs, and those are not what the release package is made of.
     $actual = @{}
     foreach ($entry in (Get-DownloadDependency -AssetsFiles $assetsFiles).GetEnumerator()) {
         if ($entry.Key -like '*.win-x64') { $actual[$entry.Key] = $entry.Value }
@@ -156,16 +177,21 @@ if ($Configuration -eq 'RuntimePacks') {
 
     foreach ($id in $actual.Keys) {
         if (-not $expected.ContainsKey($id)) {
-            $problems += "$id $($actual[$id]) is downloaded by the build but missing from the list."
+            $problems += "$id $($actual[$id].Version) is downloaded by $($actual[$id].Projects -join ', ') but missing from the list."
         }
-        elseif ($expected[$id] -ne $actual[$id]) {
-            $problems += "$id : the list says $($expected[$id]), the build resolved $($actual[$id])."
+        elseif ($expected[$id] -ne $actual[$id].Version) {
+            $problems += "$id : the list says $($expected[$id]), the build resolved $($actual[$id].Version)."
         }
     }
 
     foreach ($id in $expected.Keys) {
-        if (-not $actual.ContainsKey($id)) {
-            $problems += "$id is in the list but the build does not download it."
+        if ($actual.ContainsKey($id)) { continue }
+
+        if ($hostDependent.ContainsKey($id)) {
+            Write-Host "  $id is listed but unused on this host — $($hostDependent[$id])." -ForegroundColor DarkGray
+        }
+        else {
+            $problems += "$id is in the list but no project downloads it."
         }
     }
 
@@ -174,7 +200,11 @@ if ($Configuration -eq 'RuntimePacks') {
         throw 'The runtime pack list does not match the restore graph. A self-contained offline build would fail. Fix build/Get-OfflinePackages.ps1.'
     }
 
-    Write-Host "Runtime packs match: $($actual.Count) pack(s) at $($actual.Values | Select-Object -First 1)." -ForegroundColor Green
+    foreach ($entry in $actual.GetEnumerator() | Sort-Object Key) {
+        Write-Host "  $($entry.Key) $($entry.Value.Version)  <- $($entry.Value.Projects -join ', ')"
+    }
+
+    Write-Host "Runtime packs match: $($actual.Count) of $($expected.Count) listed pack(s) used on this host." -ForegroundColor Green
     return
 }
 
