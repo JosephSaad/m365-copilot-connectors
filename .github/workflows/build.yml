@@ -23,7 +23,10 @@ name: build
 
 on:
   push:
-    branches: [main]
+    # release/net9 is the .NET 9 line for Visual Studio 2022, identical to main
+    # apart from the target framework and the pinned SDK. It builds here for the
+    # same reason main does: nobody looks at it until a release is wanted.
+    branches: [main, release/net9]
     tags: ["v*"]
   pull_request:
     branches: [main]
