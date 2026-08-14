@@ -330,9 +330,83 @@ jobs:
   # exists uploads into it. CI never publishes a release on its own, because the
   # zip is the artefact a change advisory board approves.
   # =========================================================================
+  # =========================================================================
+  # The offline package set: every NuGet package a build machine with no route
+  # to api.nuget.org has to be given, zipped and attached to the release beside
+  # the deployment package.
+  #
+  # A separate asset rather than more weight in the deployment zip. That zip goes
+  # to a server which only runs the connector and never rebuilds it; this one is
+  # for the machine that does, and most people need exactly one of the two.
+  #
+  # Both SDKs are installed on purpose, and neither is selected here. The script
+  # asks MSBuild which runtime packs the build wants, and MSBuild answers
+  # according to global.json: absent on main, so .NET 10 and the net10.0 set;
+  # pinned to 9.0.x on release/net9, so .NET 9 and the net9.0 set. One job
+  # definition, correct on both branches, and nothing to keep in step by hand.
+  #
+  # Tags and manual runs only. It downloads a couple of hundred megabytes from
+  # nuget.org, which is not something to do on every push, but a job that only
+  # ever runs at tag time is a job that is broken at tag time, so
+  # workflow_dispatch is there to exercise it deliberately.
+  # =========================================================================
+  offline-packages:
+    name: Offline package set (windows-latest)
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+
+      - name: Stage every package a restore needs
+        shell: pwsh
+        run: ./build/Get-OfflinePackages.ps1 -OutputDirectory offline-packages
+
+      # The script throws if any single package fails to download, so this is
+      # about the shape of the result rather than its success: a set small enough
+      # to be missing the runtime packs would restore a build and then fail a
+      # self-contained publish, which is the expensive place to find out.
+      - name: Pack and checksum
+        shell: pwsh
+        run: |
+          $packages = Get-ChildItem offline-packages -Filter *.nupkg
+          $sizeMb = [math]::Round(($packages | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
+          Write-Host "$($packages.Count) packages, $sizeMb MB."
+
+          if ($packages.Count -lt 60) { throw "Only $($packages.Count) packages staged. The set should be 68 or more." }
+          if ($sizeMb -lt 150) { throw "Only $sizeMb MB staged. That is too small to include the runtime packs." }
+
+          $name = "offline-packages-$env:GITHUB_REF_NAME"
+          Compress-Archive -Path offline-packages/* -DestinationPath "$name.zip"
+
+          # LF and two spaces, so GNU sha256sum -c accepts the file. Set-Content
+          # would write CRLF, which it reports as "no properly formatted checksum
+          # lines found" on exactly the machines most likely to check.
+          $hash = (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          [System.IO.File]::WriteAllText("$PWD/$name.zip.sha256", "$hash  $name.zip`n")
+          Write-Host "SHA256 $hash  $name.zip"
+
+      - name: Upload the offline package set
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: offline-packages
+          path: |
+            offline-packages-*.zip
+            offline-packages-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 90
+
   release:
     name: Attach package to the release
-    needs: package
+    needs: [package, offline-packages]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -345,14 +419,22 @@ jobs:
           name: deployment-package
           path: package
 
+      # Kept in its own directory: the renaming step below globs the deployment
+      # zip, and the offline set is already named after the tag.
+      - name: Download the offline package set
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: offline-packages
+          path: offline
+
       # Verifies the digest the Windows job computed, which proves the zip
       # survived the hop between runners and, incidentally, proves the checksum
       # file is in a format the operator's sha256sum will accept.
-      - name: Verify checksum
+      - name: Verify checksums
         run: |
           set -euo pipefail
-          cd package
-          sha256sum -c ./*.sha256
+          (cd package && sha256sum -c ./*.sha256)
+          (cd offline && sha256sum -c ./*.sha256)
 
       # Build.ps1 names the zip from the wall clock, which is right for a local
       # build and wrong for a release asset: --clobber only replaces an asset of
@@ -382,5 +464,5 @@ jobs:
                  --repo "${GITHUB_REPOSITORY}" \
                  --verify-tag --draft --generate-notes \
                  --title "${GITHUB_REF_NAME}"
-          gh release upload "${GITHUB_REF_NAME}" package/* --clobber --repo "${GITHUB_REPOSITORY}"
-          echo "Attached the deployment package to ${GITHUB_REF_NAME}."
+          gh release upload "${GITHUB_REF_NAME}" package/* offline/* --clobber --repo "${GITHUB_REPOSITORY}"
+          echo "Attached the deployment package and the offline package set to ${GITHUB_REF_NAME}."
