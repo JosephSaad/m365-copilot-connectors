@@ -214,6 +214,14 @@ the real problem. Stage the packages from a connected machine instead:
 Compress-Archive .\offline-packages\* offline-packages.zip
 ```
 
+Or skip that step: every release carries **`offline-packages-<tag>.zip`** beside
+the deployment package, built by CI from this same script. Two downloads then
+cover a machine that has neither NuGet nor a connected neighbour. Check with
+your reviewer first if your supply chain policy requires packages to come from
+`api.nuget.org` or an internal mirror rather than from a GitHub release — the
+bytes are identical and each `.nupkg` carries its author's signature, but the
+route is different, and that is sometimes the thing under review.
+
 Then, on the build machine, from a clone or from the `source\` tree inside a
 release package:
 
