@@ -125,6 +125,17 @@ All four projects target **net10.0**, the current LTS. `Grpc.Core` 2.40.0 and it
 generated contract code are `netstandard2.0`, so the retarget does not disturb
 them; the CI build on windows-latest is the evidence.
 
+The target framework is a single property, `ConnectorTargetFramework` in
+`Directory.Build.props`, and there is a second release line built with it set to
+`net9.0` for Visual Studio 2022, which has no .NET 10 support. Check which one
+you are reviewing: the framework is in the package name of a local build, in the
+`-net9` suffix of a release tag, and in `Directory.Build.props` of the source
+tree inside either package. The code is identical; the dependency set is not.
+The `net9.0` graph is twelve packages larger, because `System.Text.Json`,
+`System.IO.Pipelines` and their neighbours are NuGet packages there and part of
+the shared framework on `net10.0`. Those extra packages are Microsoft's, at the
+9.0.x servicing level, and they appear in that line's own offline package list.
+
 The release package is published `--self-contained`, so the .NET runtime ships
 inside the zip and the target server needs no runtime install. That widens the
 artefact's surface — the runtime is now part of what you are accepting — in

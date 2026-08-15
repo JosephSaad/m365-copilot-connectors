@@ -348,25 +348,32 @@ other approved installer.
 
 ## Transfer via SharePoint
 
-1. Upload the zip to a document library. Framework-dependent is roughly 15 MB;
-   self-contained roughly 70 MB.
+1. Upload the zip to a document library. A release package is roughly 90 MB; a
+   local `Build.ps1` without `-SelfContained` is roughly 15 MB.
 2. On the agent server, download it.
 3. Unblock before extracting. SharePoint downloads carry the mark of the web, and
-   .NET refuses to load blocked assemblies:
+   .NET refuses to load blocked assemblies.
+
+A release asset is named after its tag, and a local build after the time it ran
+— `SqlTicketsConnector-deploy-<timestamp>.zip`. Both work the same way; the
+commands below take whichever zip is in the current folder rather than naming a
+version that will be wrong by the next release:
 
 ```powershell
-Unblock-File .\SqlTicketsConnector-deploy-20260813-1400.zip
-Expand-Archive .\SqlTicketsConnector-deploy-20260813-1400.zip -DestinationPath C:\Staging\SqlTickets
+$zip = Get-Item .\SqlTicketsConnector-*.zip
+Unblock-File $zip
 ```
 
-If the package came from a CI run or a release, verify the checksum on the
-target server before extracting. A document library round trip is exactly the
-sort of hop that truncates a file quietly:
+If the package came from a CI run or a release it has a `.sha256` beside it.
+Verify before extracting: a document library round trip is exactly the sort of
+hop that truncates a file quietly.
 
 ```powershell
-$expected = (Get-Content .\SqlTicketsConnector-v1.0.1.zip.sha256).Split(' ')[0]
-$actual = (Get-FileHash .\SqlTicketsConnector-v1.0.1.zip -Algorithm SHA256).Hash.ToLower()
+$expected = (Get-Content "$($zip.Name).sha256").Split(' ')[0]
+$actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
 if ($actual -ne $expected) { throw "Checksum mismatch. Do not deploy this package." }
+
+Expand-Archive $zip -DestinationPath C:\Staging\SqlTickets
 ```
 
 If the tenant blocks `.ps1` in libraries, rename to `.ps1.txt` before upload and
