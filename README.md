@@ -35,8 +35,13 @@ installed.
 
 | Release | Framework | For |
 |---|---|---|
-| [**v1.2.5**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5) | `net10.0` | Visual Studio 2026, or the .NET 10 SDK |
-| [**v1.2.5-net9**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5-net9) | `net9.0` | Visual Studio 2022 17.12 or later, or the .NET 9 SDK |
+| [**Latest release**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/latest) | `net10.0` | Visual Studio 2026, or the .NET 10 SDK |
+| [**Latest `-net9` release**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases?q=net9&expanded=true) | `net9.0` | Visual Studio 2022 17.12 or later, or the .NET 9 SDK |
+
+Both lines are released together and carry the same version number. These links
+follow the current one rather than naming a version, so they cannot rot: the
+first resolves to whichever release is marked latest, the second lists the
+`-net9` line newest first.
 
 Each carries the same four assets:
 
@@ -110,7 +115,7 @@ tests/
 - **Visual Studio 2022 cannot open this configuration.** It has no .NET 10
   support, so a `net10.0` project will not load there whatever SDK is installed.
   Use the .NET 9 line instead: the
-  [`v1.2.5-net9` release](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5-net9)
+  [latest `-net9` release](https://github.com/JosephSaad/m365-copilot-sql-connector/releases?q=net9&expanded=true)
   to deploy, the [`release/net9`](https://github.com/JosephSaad/m365-copilot-sql-connector/tree/release/net9)
   branch to build — see [Visual Studio 2022 and .NET 9](#visual-studio-2022-and-net-9)
 - NuGet access to `api.nuget.org`, or a package folder staged from a connected
@@ -202,9 +207,10 @@ there. There is a .NET 9 line for that, and three ways into it depending on what
 you want.
 
 **To deploy, download nothing else:**
-[**`v1.2.5-net9`**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5-net9)
-— the same package as [`v1.2.5`](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5), self-contained with .NET 9.0.19
-bundled, built by the .NET 9 SDK rather than merely targeted at it. Releases on this line carry
+the [**latest `-net9` release**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases?q=net9&expanded=true)
+— the same package as the mainline release of the same version, self-contained
+with .NET 9.0.19 bundled, built by the .NET 9 SDK rather than merely targeted at
+it. Releases on this line carry
 the `-net9` suffix; the unsuffixed ones are .NET 10.
 
 **To work in Visual Studio 2022:** clone the
