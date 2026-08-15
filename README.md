@@ -41,8 +41,13 @@ installed.
 
 | Release | Framework | For |
 |---|---|---|
-| [**v1.2.5-net9**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5-net9) | `net9.0` | **This branch.** Visual Studio 2022 17.12 or later, or the .NET 9 SDK |
-| [**v1.2.5**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5) | `net10.0` | `main`. Visual Studio 2026, or the .NET 10 SDK |
+| [**Latest `-net9` release**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases?q=net9&expanded=true) | `net9.0` | **This branch.** Visual Studio 2022 17.12 or later, or the .NET 9 SDK |
+| [**Latest release**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/latest) | `net10.0` | `main`. Visual Studio 2026, or the .NET 10 SDK |
+
+Both lines are released together and carry the same version number. These links
+follow the current one rather than naming a version, so they cannot rot: the
+first lists the `-net9` line newest first, the second resolves to whichever
+release is marked latest.
 
 Each carries the same four assets:
 
