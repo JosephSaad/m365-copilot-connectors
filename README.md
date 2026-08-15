@@ -27,6 +27,31 @@ modes) and [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).**
 
 ---
 
+## Download
+
+Two lines, same code, different target framework. Take the one your toolchain
+can open — Visual Studio 2022 cannot load a `net10.0` project whatever SDK is
+installed.
+
+| Release | Framework | For |
+|---|---|---|
+| [**v1.2.5**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5) | `net10.0` | Visual Studio 2026, or the .NET 10 SDK |
+| [**v1.2.5-net9**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5-net9) | `net9.0` | Visual Studio 2022 17.12 or later, or the .NET 9 SDK |
+
+Each carries the same four assets:
+
+| Asset | Size | When you need it |
+|---|---|---|
+| `SqlTicketsConnector-<tag>.zip` | ~90 MB | Always. Self-contained build plus a buildable source tree — the only file a deployment needs |
+| `offline-packages-<tag>.zip` | ~220 MB | Only to rebuild on a machine with no route to `api.nuget.org` |
+| `…zip.sha256` | | Verify before deploying; a document library round trip is exactly the sort of hop that truncates a file quietly |
+
+Nothing else is required on the target server: the .NET runtime is inside the
+package. See [Transfer via SharePoint](#transfer-via-sharepoint) for the
+download, unblock and checksum sequence.
+
+---
+
 ## Contents
 
 ```
@@ -85,7 +110,7 @@ tests/
 - **Visual Studio 2022 cannot open this configuration.** It has no .NET 10
   support, so a `net10.0` project will not load there whatever SDK is installed.
   Use the .NET 9 line instead: the
-  [`v1.2.3-net9` release](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.3-net9)
+  [`v1.2.5-net9` release](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5-net9)
   to deploy, the [`release/net9`](https://github.com/JosephSaad/m365-copilot-sql-connector/tree/release/net9)
   branch to build — see [Visual Studio 2022 and .NET 9](#visual-studio-2022-and-net-9)
 - NuGet access to `api.nuget.org`, or a package folder staged from a connected
@@ -177,9 +202,9 @@ there. There is a .NET 9 line for that, and three ways into it depending on what
 you want.
 
 **To deploy, download nothing else:**
-[**`v1.2.3-net9`**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.3-net9)
-— the same package as `v1.2.3`, self-contained with .NET 9.0.19 bundled, built
-by the .NET 9 SDK rather than merely targeted at it. Releases on this line carry
+[**`v1.2.5-net9`**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5-net9)
+— the same package as [`v1.2.5`](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5), self-contained with .NET 9.0.19
+bundled, built by the .NET 9 SDK rather than merely targeted at it. Releases on this line carry
 the `-net9` suffix; the unsuffixed ones are .NET 10.
 
 **To work in Visual Studio 2022:** clone the
