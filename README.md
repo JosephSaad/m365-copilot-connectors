@@ -33,6 +33,31 @@ modes) and [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).**
 
 ---
 
+## Download
+
+Two lines, same code, different target framework. Take the one your toolchain
+can open — Visual Studio 2022 cannot load a `net10.0` project whatever SDK is
+installed.
+
+| Release | Framework | For |
+|---|---|---|
+| [**v1.2.5-net9**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5-net9) | `net9.0` | **This branch.** Visual Studio 2022 17.12 or later, or the .NET 9 SDK |
+| [**v1.2.5**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/tag/v1.2.5) | `net10.0` | `main`. Visual Studio 2026, or the .NET 10 SDK |
+
+Each carries the same four assets:
+
+| Asset | Size | When you need it |
+|---|---|---|
+| `SqlTicketsConnector-<tag>.zip` | ~90 MB | Always. Self-contained build plus a buildable source tree — the only file a deployment needs |
+| `offline-packages-<tag>.zip` | ~220 MB | Only to rebuild on a machine with no route to `api.nuget.org` |
+| `…zip.sha256` | | Verify before deploying; a document library round trip is exactly the sort of hop that truncates a file quietly |
+
+Nothing else is required on the target server: the .NET runtime is inside the
+package. See [Transfer via SharePoint](#transfer-via-sharepoint) for the
+download, unblock and checksum sequence.
+
+---
+
 ## Contents
 
 ```
