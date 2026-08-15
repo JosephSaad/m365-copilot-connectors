@@ -64,7 +64,9 @@ Each of these is also recorded in `docs/SECURITY.md` §4.
    Graph SDK nor the gRPC contracts.
 3. **Serilog raised from 3.1.1 to 4.3.1**, with the console and file sinks moved
    to 6.0.0. `Serilog.Sinks.EventLog` 4.0.0 requires Serilog 4.x, and the event
-   log sink is a required control.
+   log sink is a required control. Those were the versions this decision was
+   taken at; Dependabot has moved them within their major versions since, and
+   the project files are the current answer.
 4. **The OpenTelemetry exporter is behind a build switch as well as the runtime
    flag.** Referencing it unconditionally would add `Grpc.Net.Client` and a newer
    `Google.Protobuf` to every dependency scan for a feature that ships disabled.
@@ -115,6 +117,16 @@ Found by the new tests, not by inspection:
   customer's request. No source change was needed; the CI build on
   windows-latest and all 40 tests pass on net10.0. The target server therefore
   needs the .NET 10 runtime, or a `-SelfContained` package.
+- **A second release line, `release/net9`, added on 2026-08-15.** Visual Studio
+  2022 has no .NET 10 support and will not load a `net10.0` project whatever SDK
+  is installed, which made the retarget above a barrier for a VS 2022 shop. The
+  target framework moved into `Directory.Build.props` as one property, so the
+  branch differs from `main` in that property and a `global.json` that pins the
+  SDK to 9.0.x, and nothing else. Releases from it carry a `-net9` suffix. CI on
+  `main` builds and tests `net9.0` on every push, with the .NET 9 SDK alone
+  rather than the .NET 10 SDK targeting downwards, so the branch cannot rot
+  between releases and the toolchain being proved is the one a VS 2022 machine
+  actually has.
 - **CI added** in `.github/workflows/build.yml`: build, test, package, and
   attach the package to a draft release for a `v*` tag. It runs the same four
   gates as `Build.ps1`, plus a build of the optional OTLP configuration.
