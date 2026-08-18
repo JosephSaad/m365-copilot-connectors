@@ -17,6 +17,7 @@ namespace SqlTicketsConnector.Security.Credentials
     using Serilog;
     using SqlTicketsConnector.Security.Certificates;
     using SqlTicketsConnector.Security.Configuration;
+    using SqlTicketsConnector.Security.Secrets;
 
     /// <summary>
     /// Builds the credential named by Auth:Mode, and fails loudly for anything else.
@@ -24,8 +25,8 @@ namespace SqlTicketsConnector.Security.Credentials
     public static class TokenCredentialFactory
     {
         /// <summary>
-        /// Returns the credential for the configured mode:
-        /// ManagedIdentity, then Certificate, then a clear failure.
+        /// Returns the credential for the configured mode: ManagedIdentity,
+        /// ClientSecret, Certificate, then a clear failure.
         /// </summary>
         public static TokenCredential Create(AuthOptions auth, ICertificateResolver resolver, ILogger logger)
         {
@@ -50,6 +51,46 @@ namespace SqlTicketsConnector.Security.Credentials
                         ? new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned)
                         : new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(auth.ClientId));
 
+                case AuthMode.ClientSecret:
+                    // The bootstrap problem this mode solves: the credential that
+                    // reaches Key Vault cannot itself live in Key Vault. It comes
+                    // from Credential Manager, under the service account, and the
+                    // only thing in configuration is the entry's name.
+                    //
+                    // The OS test is not defensive coding. Credential Manager is a
+                    // Windows facility, and the alternative to failing here is a
+                    // PlatformNotSupportedException from the P/Invoke with nothing
+                    // to act on.
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        throw new InvalidOperationException(
+                            "Auth:Mode is ClientSecret, which reads the secret from Windows Credential Manager " +
+                            "and is therefore Windows only. Use Certificate or ManagedIdentity on this platform.");
+                    }
+
+                    string target = auth.ClientSecretCredentialTarget;
+
+                    log.Information(
+                        "Auth:Mode is ClientSecret. Reading Credential Manager target {CredentialTarget} for " +
+                        "client {ClientId} in tenant {TenantId}.",
+                        target,
+                        auth.ClientId,
+                        auth.TenantId);
+
+                    // Read once, at startup, so a missing or unreadable entry is a
+                    // deployment failure rather than a token failure during a
+                    // crawl. A secret rotated in place needs a service restart;
+                    // that trade is recorded in docs/SECURITY.md and the rotation
+                    // procedure is in docs/RUNBOOK.md.
+                    string secret = WindowsCredentialStore.Read(target);
+
+                    log.Information(
+                        "Client secret resolved from Credential Manager target {CredentialTarget}. The value is " +
+                        "held in memory only and is never logged.",
+                        target);
+
+                    return new ClientSecretCredential(auth.TenantId, auth.ClientId, secret);
+
                 case AuthMode.Certificate:
                     if (resolver == null)
                     {
@@ -68,9 +109,9 @@ namespace SqlTicketsConnector.Security.Credentials
 
                 default:
                     throw new InvalidOperationException(
-                        "Auth:Mode must be 'Certificate' or 'ManagedIdentity'. Found '" + (auth.Mode ?? "(null)") +
-                        "'. DefaultAzureCredential is not used in production paths because its fallback chain makes " +
-                        "the authenticating identity non-deterministic.");
+                        "Auth:Mode must be 'Certificate', 'ManagedIdentity' or 'ClientSecret'. Found '" +
+                        (auth.Mode ?? "(null)") + "'. DefaultAzureCredential is not used in production paths " +
+                        "because its fallback chain makes the authenticating identity non-deterministic.");
             }
         }
     }

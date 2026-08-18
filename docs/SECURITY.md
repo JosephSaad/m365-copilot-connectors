@@ -34,13 +34,14 @@ appearing there in a future change is a review failure, not a refactor:
 
 | ID | Control | Implementation | Evidence |
 |---|---|---|---|
-| SEC-1 | No secret, password, PFX or credential-bearing connection string in source, configuration, environment or logs | `src/SqlTicketsConnector/appsettings.json` and `src/SqlGraphPush/appsettings.json` hold vault URI, secret *names*, tenant ID, client ID, thumbprints, server and database only | `build/SecretHygiene.targets` fails the build on a credential-shaped key with a value; `.gitleaks.toml` scans history and staged changes |
+| SEC-1 | No secret, password, PFX or credential-bearing connection string in source, configuration, environment or logs | `src/SqlTicketsConnector/appsettings.json` and `src/SqlGraphPush/appsettings.json` hold vault URI, secret *names*, the Credential Manager target *name*, tenant ID, client ID, thumbprints, server and database only | `build/SecretHygiene.targets` fails the build on a credential-shaped key with a value; `.gitleaks.toml` scans history and staged changes |
 | SEC-2 | Secrets resolved at runtime, held in memory only | `Security/Secrets/KeyVaultSecretProvider.cs`, `Security/Sql/SqlConnectionFactory.cs` (the password enters a `SqlConnectionStringBuilder` and is never logged or persisted) | `ConfigurationTests.SqlLogin_requires_a_resolved_password_and_keeps_it_out_of_configuration` |
 | SEC-3 | `ISecretProvider` with a Key Vault production implementation | `Security/Secrets/ISecretProvider.cs`, `KeyVaultSecretProvider.cs` | — |
 | SEC-4 | Environment provider is development-only and refuses to run in Production | `Security/Secrets/EnvironmentSecretProvider.cs` — constructor throws when `Environment` is `Production`, and logs a prominent warning otherwise | `ConfigurationTests.The_environment_secret_provider_refuses_to_run_in_production` |
 | SEC-5 | In-memory cache with configurable TTL, default 60 minutes, never to disk | `Security/Secrets/CachingSecretProvider.cs` | `SecretCacheTests.Cached_value_is_reused_inside_the_time_to_live`, `.Value_is_resolved_again_once_the_time_to_live_expires` |
 | SEC-6 | Authentication failure invalidates the cached secret and retries **exactly once** | `Security/Secrets/SecretRefreshRetryPolicy.cs`, applied in `Security/Sql/SqlConnectionFactory.OpenAsync` | `SecretCacheTests.Authentication_failure_invalidates_the_secret_and_retries_exactly_once`, `.A_second_authentication_failure_is_surfaced_rather_than_retried_again` |
-| SEC-7 | No file-based or DPAPI secret provider exists | Only two implementations exist in `Security/Secrets/` | Directory listing |
+| SEC-7 | No file-based secret provider exists. One DPAPI-backed provider does, added deliberately — see deviation 7 | `Security/Secrets/` holds four providers: Key Vault, environment (development only), a cache, and Windows Credential Manager. None reads a secret from a file, and none writes one anywhere | Directory listing; `WindowsCredentialStore` contains `CredRead` and no `CredWrite` |
+| SEC-8 | The client secret mode keeps the secret out of source, configuration, environment and deployment scripts | `Auth:ClientSecretCredentialTarget` holds the *name* of a Credential Manager entry; `Security/Secrets/WindowsCredentialStore.cs` reads the value at startup | `ClientSecretAuthTests.A_secret_stored_in_credential_manager_is_read_back_unchanged`, `.A_secret_pasted_into_the_target_name_is_rejected_at_startup` |
 
 **On `SecureString`:** not used, deliberately. On .NET 10 `SecureString` is not
 encrypted at rest in memory on any platform the runtime supports for this
@@ -62,7 +63,7 @@ on `ISecretProvider` so it is visible at the point of use.
 | CERT-6 | Warning daily inside the expiry window, Error once expired | `StoreCertificateResolver.ReportExpiryState`, driven by a 24 hour timer in `Server/ConnectorServer.cs` | `CertificateResolutionTests.A_certificate_inside_the_warning_window_is_flagged_but_still_usable` |
 | CERT-7 | Rotation without an outage: install new, restart, confirm from the log, remove old | `Security/Credentials/RotatingCertificateCredential.cs` tries each candidate until a token is issued and logs the winning thumbprint at `Information` on first use | `docs/RUNBOOK.md` §1 |
 | CERT-8 | `SendCertificateChain = true` (subject name and issuer authentication) | `RotatingCertificateCredential` constructor | — |
-| CERT-9 | No `DefaultAzureCredential` in production paths | `Security/Credentials/TokenCredentialFactory.cs` returns `ManagedIdentityCredential` or `RotatingCertificateCredential`, and throws otherwise | Grep: `DefaultAzureCredential` appears nowhere in the solution |
+| CERT-9 | No `DefaultAzureCredential` in production paths | `Security/Credentials/TokenCredentialFactory.cs` returns `ManagedIdentityCredential`, `RotatingCertificateCredential` or `ClientSecretCredential` according to `Auth:Mode`, and throws otherwise | Grep: `DefaultAzureCredential` appears nowhere in the solution |
 | CERT-10 | Private key material never written to disk, including for TLS | `ConnectorServer.BuildServerCredentials` exports PEM in memory from the store certificate | — |
 
 ### SQL access
@@ -206,6 +207,38 @@ The agent-hosted connector holds **no** Graph permission.
    fails if `bin/`, `obj/` or `.git/` appear inside it. To reverse this, remove
    the source staging block in `Build.ps1` and publish the source archive as a
    separate release asset instead — GitHub already attaches one to every tag.
+
+7. **A DPAPI-backed secret store was added, against the original control set.**
+   The brief excluded file-based and DPAPI secret providers. `Auth:Mode` now
+   accepts `ClientSecret`, which reads the secret from Windows Credential
+   Manager, and Credential Manager is DPAPI backed. This was a customer decision
+   for tenants that will not issue a client certificate to this application.
+
+   What is kept: the secret is absent from source, `appsettings.json`,
+   environment variables and deployment scripts. Configuration holds only the
+   entry's name. The value is read at startup, held in memory, and never logged
+   — the redaction canary test covers it like any other secret.
+
+   What is given up, and should be weighed before choosing this mode:
+
+   - **The protection is DPAPI under one account on one machine.** Anything
+     running as the service account can read the secret, including a process
+     that is not this connector. A certificate's private key can be marked
+     non-exportable; a secret cannot.
+   - **No rotation without a restart.** The credential is read once at startup,
+     so replacing it takes a service restart. Certificate mode rotates without
+     one, because `RotatingCertificateCredential` tries each candidate in turn.
+   - **Expiry is invisible here.** Certificate mode warns daily for 30 days
+     before expiry (CERT-6). A client secret's expiry is known only to Entra, so
+     it has to be tracked outside this service.
+   - **The credential is per account.** An entry stored by an administrator is
+     unreadable by the service account, and a gMSA cannot log on to store one
+     interactively. `docs/RUNBOOK.md` has the two routes that work.
+
+   Certificate remains the default and the recommendation. This mode exists so
+   that a tenant policy against issuing certificates does not become a reason to
+   put a secret in a configuration file, which is the outcome it is competing
+   with.
 
 ---
 

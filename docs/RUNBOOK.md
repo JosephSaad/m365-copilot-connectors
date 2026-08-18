@@ -115,6 +115,89 @@ cached to disk.
 
 ---
 
+## 2a. The Entra client secret (`Auth:Mode: ClientSecret`)
+
+Only applies when `Auth:Mode` is `ClientSecret`. With the default `Certificate`
+mode there is no client secret and section 1 covers rotation instead.
+
+The secret lives in **Windows Credential Manager**, under the account the
+service runs as, and never in `appsettings.json`. Configuration holds only the
+entry's name:
+
+```json
+"Auth": {
+  "Mode": "ClientSecret",
+  "ClientSecretCredentialTarget": "SqlTicketsConnector/EntraClientSecret"
+}
+```
+
+### Storing it
+
+Credential Manager is **per account**. An entry stored while logged in as an
+administrator is invisible to the service account, and that is the single most
+common cause of `No Credential Manager entry named … is readable by …` at
+startup. Store it as the account the service runs as.
+
+**If the service account can log on interactively**, log on as it and run:
+
+```cmd
+cmdkey /generic:SqlTicketsConnector/EntraClientSecret /user:<client-id> /pass:<secret>
+```
+
+**If it cannot** — a gMSA, or an account denied interactive logon — use one of
+these, both of which run `cmdkey` in that account's profile:
+
+```cmd
+psexec -u "CONTOSO\svc_gca_reader$" -p ~ cmd /c cmdkey /generic:SqlTicketsConnector/EntraClientSecret /user:<client-id> /pass:<secret>
+```
+
+```powershell
+# Scheduled task route, no PsExec required
+$action = New-ScheduledTaskAction -Execute 'cmdkey.exe' `
+  -Argument '/generic:SqlTicketsConnector/EntraClientSecret /user:<client-id> /pass:<secret>'
+Register-ScheduledTask -TaskName 'StoreConnectorSecret' -Action $action `
+  -User 'CONTOSO\svc_gca_reader$' -LogonType Password
+Start-ScheduledTask -TaskName 'StoreConnectorSecret'
+Start-Sleep -Seconds 5
+Unregister-ScheduledTask -TaskName 'StoreConnectorSecret' -Confirm:$false
+```
+
+The secret appears in the command line of both, so it is visible to anything
+reading process arguments while it runs, and it lands in the PowerShell history
+file if you type the second one interactively. Clear that history afterwards, or
+paste the command from a file you then delete. This is the weakest moment in the
+whole scheme; certificate mode has no equivalent.
+
+Verify it stored under the right account:
+
+```cmd
+cmdkey /list:SqlTicketsConnector/EntraClientSecret
+```
+
+### Rotating it
+
+**This one needs a restart**, unlike SQL password rotation. The credential is
+read once at startup so that a missing entry fails deployment rather than a
+crawl.
+
+1. Add a new client secret to the app registration in Entra. Keep the old one
+   valid until step 4.
+2. Overwrite the Credential Manager entry with the same `cmdkey` command,
+   as the service account.
+3. Restart the service. Startup logs
+   `Client secret resolved from Credential Manager target …` — the target name,
+   never the value.
+4. Confirm a crawl completes, then delete the old secret in Entra.
+
+### Expiry
+
+Nothing here warns you. Certificate mode warns daily for 30 days before expiry;
+an Entra client secret's expiry is known only to Entra, so track it wherever you
+track certificate expiry, and give it a calendar reminder. A secret that expires
+unnoticed presents as `AuthenticationIssue` on every crawl.
+
+---
+
 ## 3. Where the logs are
 
 | Sink | Location | Level | Use it for |
