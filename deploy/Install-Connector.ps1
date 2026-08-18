@@ -257,6 +257,32 @@ Write-Host '== Step 4: Verify the certificate is present and readable ==' -Foreg
 if ($SkipCertificateCheck) {
     Write-Warning 'Certificate verification skipped by -SkipCertificateCheck. Do not do this on a production host.'
 }
+elseif ($config.Auth.Mode -eq 'ClientSecret') {
+    $target = $config.Auth.ClientSecretCredentialTarget
+    Write-Host "Auth:Mode is 'ClientSecret'; the secret comes from Windows Credential Manager, not a certificate."
+
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        Write-Warning 'Auth:ClientSecretCredentialTarget is empty. The service will refuse to start until it names a Credential Manager entry.'
+    }
+    else {
+        # Credential Manager is per account, and this script runs as an
+        # administrator rather than as the service account. Finding the entry
+        # here is therefore a warning sign, not a pass: it means the credential
+        # was very likely stored under the wrong profile.
+        $listing = & cmdkey.exe "/list:$target" 2>&1 | Out-String
+
+        if ($listing -match [regex]::Escape($target)) {
+            Write-Warning ("Credential Manager entry '$target' exists for $env:USERNAME, which is NOT the account the " +
+                'service runs as. Credential Manager is per account, so the service will still fail to read it. ' +
+                "Store it as $ServiceAccount instead, and remove this copy with: cmdkey /delete:$target")
+        }
+        else {
+            Write-Host "  No entry named '$target' under $env:USERNAME, which is correct: it belongs to $ServiceAccount."
+        }
+
+        Write-Host "  Verify it as the service account before starting the service. docs/RUNBOOK.md section 2a has the psexec and scheduled task routes."
+    }
+}
 elseif ($config.Auth.Mode -ne 'Certificate') {
     Write-Host "Auth:Mode is '$($config.Auth.Mode)'; no certificate check required."
 }

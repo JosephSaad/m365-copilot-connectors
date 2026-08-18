@@ -117,6 +117,15 @@ Found by the new tests, not by inspection:
   customer's request. No source change was needed; the CI build on
   windows-latest and all 40 tests pass on net10.0. The target server therefore
   needs the .NET 10 runtime, or a `-SelfContained` package.
+- **`Auth:Mode: ClientSecret` added on 2026-08-17**, at the customer's request,
+  for a tenant that will not issue a client certificate to this application. The
+  secret is read from Windows Credential Manager under the service account; only
+  the entry's name is in configuration. This is a deliberate departure from the
+  original control set, which excluded DPAPI-backed secret storage — recorded
+  with its trade-offs as deviation 7 in `docs/SECURITY.md`, and with the storing
+  and rotation procedure in `docs/RUNBOOK.md` §2a. Certificate remains the
+  default: the alternative this competes with is a secret in a configuration
+  file, not a certificate.
 - **A second release line, `release/net9`, added on 2026-08-15.** Visual Studio
   2022 has no .NET 10 support and will not load a `net10.0` project whatever SDK
   is installed, which made the retarget above a barrier for a VS 2022 shop. The

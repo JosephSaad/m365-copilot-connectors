@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // AuthOptions.cs
 // The "Auth" section. Everything here is non-sensitive: tenant ID, client ID,
-// certificate store coordinates. No secret, no PFX path, no password.
+// certificate store coordinates, and the *name* of a Windows Credential Manager
+// entry. No secret, no PFX path, no password.
 // ---------------------------------------------------------------------------
 
 namespace SqlTicketsConnector.Security.Configuration
@@ -21,6 +22,13 @@ namespace SqlTicketsConnector.Security.Configuration
 
         /// <summary>Platform-assigned managed identity. Not available on domain-joined on-premises servers.</summary>
         ManagedIdentity = 2,
+
+        /// <summary>
+        /// Client secret read from Windows Credential Manager at runtime. For a
+        /// tenant that will not issue a client certificate. The secret value is
+        /// never in configuration; only the Credential Manager target name is.
+        /// </summary>
+        ClientSecret = 3,
     }
 
     /// <summary>
@@ -28,7 +36,7 @@ namespace SqlTicketsConnector.Security.Configuration
     /// </summary>
     public sealed class AuthOptions
     {
-        /// <summary>Gets or sets the credential mode: Certificate or ManagedIdentity.</summary>
+        /// <summary>Gets or sets the credential mode: Certificate, ManagedIdentity or ClientSecret.</summary>
         public string Mode { get; set; } = "Certificate";
 
         /// <summary>Gets or sets the Entra tenant ID. Not sensitive.</summary>
@@ -60,6 +68,15 @@ namespace SqlTicketsConnector.Security.Configuration
         /// <summary>Gets or sets how many days before expiry the daily warning starts.</summary>
         public int ExpiryWarningDays { get; set; } = 30;
 
+        /// <summary>
+        /// Gets or sets the Windows Credential Manager target holding the client
+        /// secret, used when Mode is ClientSecret. This is a lookup key, not a
+        /// credential: the value lives in Credential Manager under the service
+        /// account and never appears in configuration. See docs/RUNBOOK.md for
+        /// how to store it as an account that cannot log on interactively.
+        /// </summary>
+        public string ClientSecretCredentialTarget { get; set; } = string.Empty;
+
         /// <summary>Gets the parsed credential mode.</summary>
         public AuthMode ParsedMode
         {
@@ -73,6 +90,11 @@ namespace SqlTicketsConnector.Security.Configuration
                 if (string.Equals(this.Mode, "ManagedIdentity", StringComparison.OrdinalIgnoreCase))
                 {
                     return AuthMode.ManagedIdentity;
+                }
+
+                if (string.Equals(this.Mode, "ClientSecret", StringComparison.OrdinalIgnoreCase))
+                {
+                    return AuthMode.ClientSecret;
                 }
 
                 return AuthMode.Unspecified;
@@ -90,6 +112,30 @@ namespace SqlTicketsConnector.Security.Configuration
             }
         }
 
+        /// <summary>
+        /// Entra client secrets are around 40 characters of base64 with no
+        /// separators. Target names in this deployment look like a path. The test
+        /// is deliberately loose: it exists to catch a paste, not to validate a
+        /// secret, and a false positive is a one word rename.
+        /// </summary>
+        private static bool LooksLikeASecretValue(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length < 30)
+            {
+                return false;
+            }
+
+            foreach (char c in value)
+            {
+                if (c == '/' || c == '\\' || c == ':' || c == ' ' || c == '-' || c == '_' || c == '.')
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         /// <summary>Adds a message for every invalid field rather than stopping at the first.</summary>
         public void Validate(ValidationErrors errors, string path)
         {
@@ -98,7 +144,7 @@ namespace SqlTicketsConnector.Security.Configuration
                 throw new ArgumentNullException(nameof(errors));
             }
 
-            errors.RequireOneOf(path + ":Mode", this.Mode, "Certificate", "ManagedIdentity");
+            errors.RequireOneOf(path + ":Mode", this.Mode, "Certificate", "ManagedIdentity", "ClientSecret");
             errors.RequireGuid(path + ":ClientId", this.ClientId);
 
             if (this.ParsedMode == AuthMode.Certificate)
@@ -134,6 +180,24 @@ namespace SqlTicketsConnector.Security.Configuration
                                 "must be a 40 character SHA-1 thumbprint in hexadecimal.");
                         }
                     }
+                }
+            }
+
+            if (this.ParsedMode == AuthMode.ClientSecret)
+            {
+                errors.RequireGuid(path + ":TenantId", this.TenantId);
+                errors.RequireNonEmpty(path + ":ClientSecretCredentialTarget", this.ClientSecretCredentialTarget);
+
+                // A secret pasted into configuration is the failure this mode
+                // exists to avoid, so it is rejected by shape rather than left to
+                // the build time scan, which only sees files in the repository.
+                if (LooksLikeASecretValue(this.ClientSecretCredentialTarget))
+                {
+                    errors.Add(
+                        path + ":ClientSecretCredentialTarget",
+                        "looks like a secret value rather than a Credential Manager target name. This key holds " +
+                        "the name of the entry, for example 'SqlTicketsConnector/EntraClientSecret'. Store the " +
+                        "secret itself with cmdkey under the service account.");
                 }
             }
 
