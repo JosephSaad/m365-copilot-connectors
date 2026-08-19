@@ -172,6 +172,12 @@ certificate uploaded to the app registration):
 `ExternalConnection.ReadWrite.OwnedBy`, `ExternalItem.ReadWrite.OwnedBy`.
 The agent-hosted connector holds **no** Graph permission.
 
+[`docs/APP-REGISTRATION.md`](APP-REGISTRATION.md) specifies all three identities
+in this deployment — the connector agent's own registration, this connector's
+Key Vault identity, and `SqlGraphPush` — permission by permission, with both
+credential types, the hardening settings to apply to each, and what each
+identity must never be granted.
+
 ---
 
 ## 4. Deviations and accepted risks
