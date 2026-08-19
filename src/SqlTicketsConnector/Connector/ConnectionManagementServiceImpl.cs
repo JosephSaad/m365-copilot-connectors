@@ -2,12 +2,20 @@
 // ConnectionManagementServiceImpl.cs
 // Called while an admin walks the "Add a Copilot connector" wizard. These calls
 // are infrequent and high value for diagnostics, so they log at Information.
+//
+// Every method here runs against a clock. The platform allows a
+// ConnectionManagementService call 30 seconds and then shows the admin its own
+// timeout, throwing away the StatusMessage this connector was about to return.
+// Because a reachability failure is exactly when that message matters most,
+// validation gives up first — Connector:ConnectionCallTimeoutSeconds, 20 by
+// default — and says so in words the admin can act on.
 // ---------------------------------------------------------------------------
 
 namespace SqlTicketsConnector.Connector
 {
     using System;
     using System.Collections.Generic;
+    using System.Threading;
     using System.Threading.Tasks;
     using Grpc.Core;
     using Microsoft.Graph.Connectors.Contracts.Grpc;
@@ -78,9 +86,48 @@ namespace SqlTicketsConnector.Connector
                     };
                 }
 
-                using (ITicketSource source = this.sourceFactory.Create(null))
+                TimeSpan budget = TimeSpan.FromSeconds(this.options.Connector.ConnectionCallTimeoutSeconds);
+
+                // Linked, so the platform cancelling still wins immediately; the
+                // timer only adds an earlier deadline of our own.
+                using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken))
                 {
-                    await source.ValidateAsync(context.CancellationToken).ConfigureAwait(false);
+                    deadline.CancelAfter(budget);
+
+                    try
+                    {
+                        using (ITicketSource source = this.sourceFactory.Create(null))
+                        {
+                            await source.ValidateAsync(deadline.Token).ConfigureAwait(false);
+                        }
+                    }
+                    catch (OperationCanceledException) when (!context.CancellationToken.IsCancellationRequested)
+                    {
+                        // Ours fired, not the platform's. Distinguishing the two
+                        // matters: this one is a data source that did not answer,
+                        // and the admin can do something about it.
+                        string message =
+                            "The data source did not respond within " +
+                            budget.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                            " seconds. Check that " + this.sourceFactory.Description +
+                            " is reachable from this server and that the firewall allows SQL traffic. " +
+                            "Connection setup allows 30 seconds in total, so this check stops early to " +
+                            "report the cause rather than time out silently.";
+
+                        this.logger.Warning(
+                            "ValidateAuthentication exceeded its {BudgetSeconds}s budget against {DataSource}.",
+                            budget.TotalSeconds,
+                            this.sourceFactory.Description);
+
+                        return new ValidateAuthenticationResponse
+                        {
+                            Status = new OperationStatus
+                            {
+                                Result = OperationResult.DatasourceError,
+                                StatusMessage = message,
+                            },
+                        };
+                    }
                 }
 
                 this.logger.Information(
