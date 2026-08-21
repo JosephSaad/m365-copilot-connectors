@@ -117,6 +117,16 @@ Found by the new tests, not by inspection:
   customer's request. No source change was needed; the CI build on
   windows-latest and all 40 tests pass on net10.0. The target server therefore
   needs the .NET 10 runtime, or a `-SelfContained` package.
+- **Connection validation bounded to 20 seconds on 2026-08-18.** The connectors
+  SDK documentation gives every `ConnectionManagementService` method 30 seconds
+  before the platform substitutes its own timeout message. With
+  `DataSource:ConnectTimeoutSeconds` at 30 and one secret-refresh retry, an
+  unreachable server could take about a minute, so the admin would have seen a
+  generic platform timeout rather than the message this connector writes.
+  Validation now gives up first, at `Connector:ConnectionCallTimeoutSeconds`,
+  and reports `DatasourceError` with what to check. Crawl methods are not
+  bounded this way: they are streaming calls with no such limit, and cutting a
+  crawl short would lose the watermark progress the stream carries.
 - **`Auth:Mode: ClientSecret` added on 2026-08-17**, at the customer's request,
   for a tenant that will not issue a client certificate to this application. The
   secret is read from Windows Credential Manager under the service account; only

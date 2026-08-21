@@ -86,6 +86,7 @@ deploy/
   ConnectionInfo.json                  TestApp input, no credentials
 docs/
   SECURITY.md                          Control mapping for the security reviewer
+  APP-REGISTRATION.md                  Entra apps, permission by permission, cert and secret
   RUNBOOK.md                           Rotation, log locations, five failure modes
   ASSUMPTIONS.md                       Decisions, deviations, open questions
 sql/
@@ -126,7 +127,9 @@ tests/
 
 **Target server** — if you deploy the release zip, this is the whole list
 - Windows Server 2019 or later
-- Microsoft Graph connector agent from https://aka.ms/gca, already registered against the tenant
+- Microsoft Graph connector agent from https://aka.ms/gca, already registered
+  against the tenant — see [`docs/APP-REGISTRATION.md`](docs/APP-REGISTRATION.md)
+  for the app registrations, permissions and network allow-list it needs
 - The connector's client certificate in `LocalMachine\My`, with its private key readable by the service account
 - Network path to SQL Server
 

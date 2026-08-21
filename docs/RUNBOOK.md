@@ -289,6 +289,40 @@ Related startup failure, if the TLS key is not exportable:
 The TLS certificate A1B2… has a private key that cannot be exported, so gRPC Core cannot use it. Re-import the certificate with an exportable key, set Connector:TlsCertificateThumbprint to one that is exportable, or set Connector:UseTls to false and rely on the loopback interface.
 ```
 
+### 4.3a Connection setup reports that the data source did not respond
+
+Symptom, in the connection wizard rather than in a crawl:
+
+```
+The data source did not respond within 20 seconds. Check that sql01.contoso.local/Ops
+is reachable from this server and that the firewall allows SQL traffic.
+```
+
+This is the connector giving up on purpose. The platform allows a connection
+management call 30 seconds and then shows its own timeout instead, so validation
+stops at `Connector:ConnectionCallTimeoutSeconds` (20 by default) to return a
+message that says what to check.
+
+What it means: TCP to SQL Server is being accepted and then nothing comes back,
+or the connection is being dropped silently. Credentials are not the issue —
+those produce an authentication error naming the login.
+
+1. From the connector host, prove the port is open:
+
+   ```powershell
+   Test-NetConnection sql01.contoso.local -Port 1433
+   ```
+
+2. If that succeeds but validation still times out, the listener is answering
+   and the instance is not. Check whether SQL Server is in a state that accepts
+   connections but stalls on login — an exhausted worker thread pool, or a
+   database in recovery.
+
+3. Raise `Connector:ConnectionCallTimeoutSeconds` only if the source is
+   legitimately slow and you have measured it. The ceiling is 29: past 30 the
+   platform times out first and you are back to a message nobody can act on.
+   Startup validation rejects anything higher.
+
 ### 4.4 SQL login or permission failure
 
 ```

@@ -161,11 +161,34 @@ namespace SqlTicketsConnector.Server
         /// </summary>
         public string TlsCertificateThumbprint { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Gets or sets the budget, in seconds, for a ConnectionManagementService
+        /// call.
+        /// </summary>
+        /// <remarks>
+        /// The platform gives these methods 30 seconds and then reports its own
+        /// timeout to the admin, discarding whatever this connector was about to
+        /// say. Since the whole point of the status messages is that the admin
+        /// reads a useful sentence in the wizard, validation has to give up
+        /// before the platform does. The default of 20 leaves room for the
+        /// round trip and for a message to arrive.
+        ///
+        /// Worth knowing what this bounds: DataSource:ConnectTimeoutSeconds is
+        /// 30 by default and SqlConnectionFactory retries once after invalidating
+        /// a cached secret, so an unreachable server could otherwise take about
+        /// a minute to fail.
+        /// </remarks>
+        public int ConnectionCallTimeoutSeconds { get; set; } = 20;
+
         /// <summary>Validates the section.</summary>
         public void Validate(ValidationErrors errors, string path)
         {
             errors.RequireGuid(path + ":Id", this.Id);
             errors.RequireRange(path + ":Port", this.Port, 1024, 65535);
+
+            // Above 30 the platform times out first and the setting is a lie;
+            // below 5 nothing slow enough to matter would ever complete.
+            errors.RequireRange(path + ":ConnectionCallTimeoutSeconds", this.ConnectionCallTimeoutSeconds, 5, 29);
 
             if (!string.IsNullOrWhiteSpace(this.TlsCertificateThumbprint) &&
                 !Security.Certificates.CertificateSelector.IsWellFormedThumbprint(

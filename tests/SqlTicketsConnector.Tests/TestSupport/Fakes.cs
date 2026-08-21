@@ -87,11 +87,13 @@ namespace SqlTicketsConnector.Tests.TestSupport
     {
         private readonly IReadOnlyList<TicketRow> rows;
         private readonly Exception failure;
+        private readonly bool hangOnValidate;
 
-        public FakeTicketSource(IReadOnlyList<TicketRow> rows, Exception failure = null)
+        public FakeTicketSource(IReadOnlyList<TicketRow> rows, Exception failure = null, bool hangOnValidate = false)
         {
             this.rows = rows;
             this.failure = failure;
+            this.hangOnValidate = hangOnValidate;
         }
 
         public string Description
@@ -111,6 +113,14 @@ namespace SqlTicketsConnector.Tests.TestSupport
             if (this.failure != null)
             {
                 throw this.failure;
+            }
+
+            if (this.hangOnValidate)
+            {
+                // Stands in for a SQL Server that accepts the TCP connection and
+                // then never answers — the case the platform's 30 second limit
+                // would otherwise turn into a generic timeout.
+                return Task.Delay(Timeout.Infinite, ct);
             }
 
             return Task.CompletedTask;
