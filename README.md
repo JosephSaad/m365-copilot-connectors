@@ -12,6 +12,8 @@ Generated against the contracts extracted from `GraphConnectorsTemplate.vsix`
 `src/SqlTicketsConnector/Contracts/` are Microsoft's originals, copied byte for
 byte and unmodified.
 
+![Data flow from SQL Server through the connector and agent to Microsoft Graph, the semantic index, and Copilot](docs/architecture.svg)
+
 | Project | Model | Runs where |
 |---|---|---|
 | `SqlTicketsConnector` | gRPC server behind the Graph connector agent. **Never calls Microsoft Graph.** | On-premises Windows Server with the agent installed |
@@ -85,6 +87,7 @@ deploy/
   Manifest.json                        Uploaded in the admin center wizard
   ConnectionInfo.json                  TestApp input, no credentials
 docs/
+  architecture.svg                     The data flow drawing embedded above
   SECURITY.md                          Control mapping for the security reviewer
   APP-REGISTRATION.md                  Entra apps, permission by permission, cert and secret
   RUNBOOK.md                           Rotation, log locations, five failure modes
