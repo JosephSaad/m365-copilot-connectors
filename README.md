@@ -29,7 +29,9 @@ modes) and [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).**
 
 **When something is wrong and you do not yet know what**, work through
 [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md): one stage at a time from
-the SQL row to the answer in Copilot, with a read-only script for each.
+the SQL row to the answer in Copilot, with a read-only script for each. The
+direct push path fails differently and has its own —
+[`docs/TROUBLESHOOTING-DIRECT-PUSH.md`](docs/TROUBLESHOOTING-DIRECT-PUSH.md).
 
 ---
 
@@ -85,6 +87,10 @@ deploy/
   Test-SqlSource.ps1                   Diagnose the source: grant, columns, watermark health, item sizes
   Get-CrawlHistory.ps1                 Reconstruct every crawl from the log, and check the watermark chain
   Verify-GraphConnection.ps1           Post-deploy: connection, schema, item, search
+  GraphPushAuth.ps1                    Shared app-only auth for the SqlGraphPush scripts below
+  Test-GraphPushPrereqs.ps1            SqlGraphPush pre-flight: token, consented roles, connection ownership
+  Watch-SchemaRegistration.ps1         The draft to ready wait, every state explained, the schema printed
+  Compare-SourceToIndex.ps1            Reconcile SQL against the index; finds the orphans a push leaves behind
   CustomConnectorPortMap.json          Reference copy of the agent port map entry
   Manifest.json                        Uploaded in the admin center wizard
   ConnectionInfo.json                  TestApp input, no credentials
@@ -94,6 +100,7 @@ docs/
   APP-REGISTRATION.md                  Entra apps, permission by permission, cert and secret
   RUNBOOK.md                           Rotation, log locations, five failure modes
   TROUBLESHOOTING.md                   Stage by stage, SQL to Copilot, when you do not yet know what broke
+  TROUBLESHOOTING-DIRECT-PUSH.md       The same for SqlGraphPush, which fails differently
   ASSUMPTIONS.md                       Decisions, deviations, open questions
   agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
 sql/
@@ -526,14 +533,22 @@ is why it deliberately does no I/O.
 
 ## Direct push path (`SqlGraphPush`)
 
-Useful to prove the tenant, app registration and Copilot grounding before
-investing in the agent model, or to re-seed a connection. It authenticates with
-the same certificate credential — there is no client secret anywhere in this
-solution.
+A seeding and repair tool: it proves the tenant, app registration and Copilot
+grounding before anyone installs an agent, and it re-seeds a connection that has
+gone wrong. It is **not** a synchroniser — it crawls nothing incrementally,
+runs on no schedule, and never deletes an item. Read
+[`docs/TROUBLESHOOTING-DIRECT-PUSH.md`](docs/TROUBLESHOOTING-DIRECT-PUSH.md)
+before relying on it for anything ongoing.
+
+It authenticates with the same certificate credential as the connector, and
+supports the same client secret alternative (`Auth:Mode`), with the value in
+Windows Credential Manager rather than in configuration.
 
 1. Register an Entra app with the `ExternalConnection.ReadWrite.OwnedBy` and
    `ExternalItem.ReadWrite.OwnedBy` application permissions, grant admin consent,
-   and upload the public certificate to it.
+   and upload the public certificate to it. Give it a connection ID the Graph
+   connector agent does not also use: `OwnedBy` means whichever app created a
+   connection is the only one that can manage it.
 2. Fill in `src/SqlGraphPush/appsettings.json` (same shape as the connector, plus
    a `Graph` section). `Auth:CertificateStoreLocation` is `CurrentUser` there,
    since it usually runs interactively.

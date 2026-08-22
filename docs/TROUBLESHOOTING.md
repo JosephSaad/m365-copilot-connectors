@@ -9,6 +9,12 @@ This document is the order to do that in. `docs/RUNBOOK.md` covers rotation and
 routine operation; this one covers the case where something is wrong and you do
 not yet know what.
 
+**This is the agent-hosted pipeline.** If you are running `SqlGraphPush`
+instead, it has no agent, no watermark and no deletions, so it fails in
+different places —
+[`TROUBLESHOOTING-DIRECT-PUSH.md`](TROUBLESHOOTING-DIRECT-PUSH.md) covers that
+one. Stages 1, 6 and 7 are shared between them.
+
 ---
 
 ## The pipeline
