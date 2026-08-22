@@ -27,6 +27,10 @@ Default port: `30303`
 (control mapping), [`docs/RUNBOOK.md`](docs/RUNBOOK.md) (rotation and failure
 modes) and [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).**
 
+**When something is wrong and you do not yet know what**, work through
+[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md): one stage at a time from
+the SQL row to the answer in Copilot, with a read-only script for each.
+
 ---
 
 ## Download
@@ -77,6 +81,9 @@ build/
   NuGet.offline.config                 Copy to the root as NuGet.config to stop restore using the network
 deploy/
   Install-Connector.ps1                Server-side install, run elevated
+  Test-ConnectorHost.ps1               Diagnose the host: config, service, cert, port, port map, SQL
+  Test-SqlSource.ps1                   Diagnose the source: grant, columns, watermark health, item sizes
+  Get-CrawlHistory.ps1                 Reconstruct every crawl from the log, and check the watermark chain
   Verify-GraphConnection.ps1           Post-deploy: connection, schema, item, search
   CustomConnectorPortMap.json          Reference copy of the agent port map entry
   Manifest.json                        Uploaded in the admin center wizard
@@ -86,6 +93,7 @@ docs/
   SECURITY.md                          Control mapping for the security reviewer
   APP-REGISTRATION.md                  Entra apps, permission by permission, cert and secret
   RUNBOOK.md                           Rotation, log locations, five failure modes
+  TROUBLESHOOTING.md                   Stage by stage, SQL to Copilot, when you do not yet know what broke
   ASSUMPTIONS.md                       Decisions, deviations, open questions
   agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
 sql/
