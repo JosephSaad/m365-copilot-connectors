@@ -86,6 +86,7 @@ docs/
   APP-REGISTRATION.md                  Entra apps, permission by permission, cert and secret
   RUNBOOK.md                           Rotation, log locations, five failure modes
   ASSUMPTIONS.md                       Decisions, deviations, open questions
+  agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
 sql/
   00-sample-source.sql                 Creates dbo.Tickets (with IsDeleted) and seeds 3 rows
   01-least-privilege.sql               Login, user and SELECT grant, with verification
