@@ -142,7 +142,7 @@ $packages = @(
     @{ Id = 'xunit.core'; Version = '2.9.3' }
     @{ Id = 'xunit.extensibility.core'; Version = '2.9.3' }
     @{ Id = 'xunit.extensibility.execution'; Version = '2.9.3' }
-    @{ Id = 'xunit.runner.visualstudio'; Version = '3.1.5' }
+    @{ Id = 'xunit.runner.visualstudio'; Version = '4.0.0' }
     # END BASE LIST
 )
 
