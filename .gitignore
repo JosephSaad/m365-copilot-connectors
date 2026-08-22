@@ -31,3 +31,8 @@ appsettings.local.json
 # Log output, when someone points Logging:Directory at the source tree.
 Logs/
 *.log
+
+# Office lock files. Opening a committed .pptx or .xlsx drops one of these
+# beside it, and it is binary noise that looks like a real document.
+~$*
+.DS_Store

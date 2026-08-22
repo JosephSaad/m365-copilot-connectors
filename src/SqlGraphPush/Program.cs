@@ -7,7 +7,8 @@
 // certificate authentication here is for Graph. Application permissions remain
 // ExternalConnection.ReadWrite.OwnedBy and ExternalItem.ReadWrite.OwnedBy,
 // granted with admin consent, with the public certificate uploaded to the app
-// registration. There is no client secret anywhere in this program.
+// registration. A client secret is supported as an alternative (Auth:Mode), read
+// from Windows Credential Manager; no secret value appears in configuration.
 // ---------------------------------------------------------------------------
 
 using Azure.Core;

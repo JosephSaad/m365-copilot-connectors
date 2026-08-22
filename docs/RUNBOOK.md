@@ -28,6 +28,12 @@ Get-NetTCPConnection -LocalPort 30303 -State Listen
 Get-Content C:\Connectors\SqlTickets\Logs\ConnectorLog.log -Tail 40
 ```
 
+Or the same ground and rather more, read-only:
+
+```powershell
+.\deploy\Test-ConnectorHost.ps1
+```
+
 ---
 
 ## 1. Certificate rotation (no outage)
@@ -227,6 +233,12 @@ item ID (`ticket1234`) and query SQL directly.
 ---
 
 ## 4. The five most likely failures
+
+These are the five you will recognise on sight. When you *cannot* — when the
+report is only "the tickets aren't in Copilot" — work through
+[`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) instead: it walks the pipeline one
+stage at a time, with a read-only script for each, and tells you which machine
+to run it on.
 
 ### 4.1 The service account cannot read the certificate's private key
 
