@@ -77,6 +77,7 @@ build/
   NuGet.offline.config                 Copy to the root as NuGet.config to stop restore using the network
 deploy/
   Install-Connector.ps1                Server-side install, run elevated
+  Verify-GraphConnection.ps1           Post-deploy: connection, schema, item, search
   CustomConnectorPortMap.json          Reference copy of the agent port map entry
   Manifest.json                        Uploaded in the admin center wizard
   ConnectionInfo.json                  TestApp input, no credentials
