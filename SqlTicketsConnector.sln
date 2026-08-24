@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34728.123
@@ -42,31 +42,86 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "build", "build", "{7A1C5E33
 		.pre-commit-config.yaml = .pre-commit-config.yaml
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SqlHierarchyPush", "src\SqlHierarchyPush\SqlHierarchyPush.csproj", "{8127A46C-1FE7-4C8F-A906-62252E46D4CC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
 		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Debug|x64.Build.0 = Debug|Any CPU
+		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Debug|x86.Build.0 = Debug|Any CPU
 		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Release|x64.ActiveCfg = Release|Any CPU
+		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Release|x64.Build.0 = Release|Any CPU
+		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Release|x86.ActiveCfg = Release|Any CPU
+		{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}.Release|x86.Build.0 = Release|Any CPU
 		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Debug|x64.Build.0 = Debug|Any CPU
+		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Debug|x86.Build.0 = Debug|Any CPU
 		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Release|x64.ActiveCfg = Release|Any CPU
+		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Release|x64.Build.0 = Release|Any CPU
+		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Release|x86.ActiveCfg = Release|Any CPU
+		{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}.Release|x86.Build.0 = Release|Any CPU
 		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Debug|x64.Build.0 = Debug|Any CPU
+		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Debug|x86.Build.0 = Debug|Any CPU
 		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Release|x64.ActiveCfg = Release|Any CPU
+		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Release|x64.Build.0 = Release|Any CPU
+		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Release|x86.ActiveCfg = Release|Any CPU
+		{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}.Release|x86.Build.0 = Release|Any CPU
 		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Debug|x64.Build.0 = Debug|Any CPU
+		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Debug|x86.Build.0 = Debug|Any CPU
 		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Release|x64.ActiveCfg = Release|Any CPU
+		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Release|x64.Build.0 = Release|Any CPU
+		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Release|x86.ActiveCfg = Release|Any CPU
+		{6B2F4C19-8E7D-4A33-B0F6-52C9E8A17D40}.Release|x86.Build.0 = Release|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Debug|x64.Build.0 = Debug|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Debug|x86.Build.0 = Debug|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Release|x64.ActiveCfg = Release|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Release|x64.Build.0 = Release|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Release|x86.ActiveCfg = Release|Any CPU
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{8127A46C-1FE7-4C8F-A906-62252E46D4CC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {0ADAFC15-EC15-4144-92E2-99BC8ED97973}

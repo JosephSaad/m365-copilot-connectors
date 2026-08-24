@@ -3,9 +3,10 @@
 [![build](https://github.com/JosephSaad/m365-copilot-sql-connector/actions/workflows/build.yml/badge.svg)](https://github.com/JosephSaad/m365-copilot-sql-connector/actions/workflows/build.yml)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
-A Visual Studio solution containing two working paths from a SQL Server table to
-Microsoft 365 Copilot grounding data, hardened for deployment into a regulated
-environment.
+A Visual Studio solution containing working paths from SQL Server to Microsoft
+365 Copilot grounding data, hardened for deployment into a regulated
+environment: one behind the Graph connector agent, and two that push straight to
+Microsoft Graph — a flat table, and a three level hierarchy.
 
 Generated against the contracts extracted from `GraphConnectorsTemplate.vsix`
 (`ms-graph-connectors.graphConnectors`, v3.4). The five `.proto` files under
@@ -17,8 +18,9 @@ byte and unmodified.
 | Project | Model | Runs where |
 |---|---|---|
 | `SqlTicketsConnector` | gRPC server behind the Graph connector agent. **Never calls Microsoft Graph.** | On-premises Windows Server with the agent installed |
-| `SqlTicketsConnector.Security` | Shared secrets, certificates, credentials, SQL connections, log redaction | Class library, referenced by both |
-| `SqlGraphPush` | Direct `PUT /external/connections/{id}/items/{itemId}` | Operator workstation or jump box with outbound HTTPS to Graph |
+| `SqlTicketsConnector.Security` | Shared secrets, certificates, credentials, SQL connections, log redaction | Class library, referenced by all three |
+| `SqlGraphPush` | Direct `PUT /external/connections/{id}/items/{itemId}` — one flat table | Operator workstation or jump box with outbound HTTPS to Graph |
+| `SqlHierarchyPush` | The same, for a three level hierarchy: Customer → Engagement → TimeEntry | Same |
 
 Connector ID: `9e5e2b95-e7ab-4266-98c7-4f7868d377bf`
 Default port: `30303`
@@ -97,6 +99,7 @@ deploy/
   Test-GraphPushPrereqs.ps1            SqlGraphPush pre-flight: token, consented roles, connection ownership
   Watch-SchemaRegistration.ps1         The draft to ready wait, every state explained, the schema printed
   Compare-SourceToIndex.ps1            Reconcile SQL against the index; finds the orphans a push leaves behind
+  Test-HierarchySearch.ps1             Proves a customer search returns engagement and time entry items too
   CustomConnectorPortMap.json          Reference copy of the agent port map entry
   Manifest.json                        Uploaded in the admin center wizard
   ConnectionInfo.json                  TestApp input, no credentials
@@ -107,12 +110,17 @@ docs/
   RUNBOOK.md                           Rotation, log locations, five failure modes
   TROUBLESHOOTING.md                   Stage by stage, SQL to Copilot, when you do not yet know what broke
   TROUBLESHOOTING-DIRECT-PUSH.md       The same for SqlGraphPush, which fails differently
+  HIERARCHY-TEST-CASE.md               The three level test case: why a flat index needs flattening, and how
   ASSUMPTIONS.md                       Decisions, deviations, open questions
   agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
 sql/
   00-sample-source.sql                 Creates dbo.Tickets (with IsDeleted) and seeds 3 rows
   01-least-privilege.sql               Login, user and SELECT grant, with verification
   02-soft-delete.sql                   IsDeleted column and composite watermark index
+  10-timesheet-source.sql              Three level test case: Customers, Engagements, TimeEntries
+  11-timesheet-sample-data.sql         12 customers, 62 engagements, 1052 time entries
+  12-timesheet-views.sql               The flattening layer — the whole test case is here
+  13-timesheet-least-privilege.sql     SELECT on the views only, base tables denied
 src/
   SqlTicketsConnector/
     Contracts/*.proto                  Microsoft contracts, unmodified
@@ -129,6 +137,9 @@ src/
     Configuration/                     Shared options and validation
   SqlGraphPush/
     Program.cs, PushOptions.cs, appsettings.json
+  SqlHierarchyPush/
+    Program.cs, HierarchyOptions.cs    Three level test case; same Security engine, its own schema
+    appsettings.json
 tests/
   SqlTicketsConnector.Tests/           40 tests, no live tenant, vault or database
 ```
@@ -550,6 +561,28 @@ dotnet run
 Schema registration is a server-side long-running operation; the tool polls until
 the connection reports `ready`, typically 5 to 15 minutes, and gives up after
 `Graph:SchemaReadyTimeoutMinutes`.
+
+### Three level variant (`SqlHierarchyPush`)
+
+The same path, for hierarchical data: **Customer → Engagement → TimeEntry**. It
+exists to answer one question — how do you make a search for a customer return
+their engagements and their time entries, when a Graph external item is flat and
+Copilot traverses nothing?
+
+The answer is to flatten deliberately, in both directions, in SQL views: every
+descendant physically carries its ancestors' searchable text, and every ancestor
+carries a roll-up of its descendants. See
+[`docs/HIERARCHY-TEST-CASE.md`](docs/HIERARCHY-TEST-CASE.md).
+
+It coexists with the ticket test case rather than replacing it — different
+tables, a different connection ID (`consultingwork`), and its own schema. Both
+can run against one tenant.
+
+```powershell
+dotnet run --project src\SqlHierarchyPush -- --dry-run   # read the source, call no API
+dotnet run --project src\SqlHierarchyPush
+.\deploy\Test-HierarchySearch.ps1                        # prove the cross level search
+```
 
 ---
 
