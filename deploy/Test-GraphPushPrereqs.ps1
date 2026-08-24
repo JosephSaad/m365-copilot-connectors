@@ -148,10 +148,36 @@ if ($config.Auth.Mode -eq 'Certificate') {
     }
 }
 elseif ($config.Auth.Mode -eq 'ClientSecret') {
-    Note 'Client secret mode: the value is prompted for, held as a SecureString and used once.'
-    if (-not $ClientSecret) {
-        $ClientSecret = Read-Host -AsSecureString "Client secret for app $($config.Auth.ClientId)"
+    $target = $config.Auth.ClientSecretCredentialTarget
+    if (-not $target) {
+        Fail 'Auth:Mode is ClientSecret but Auth:ClientSecretCredentialTarget is empty.'
     }
+    else {
+        # Read the entry the tool itself reads. Prompting instead would test the
+        # secret you typed rather than the one the push will use, which is
+        # precisely the failure this check exists to catch.
+        $resolved = Get-PushCredential -Config $config -ClientSecret $ClientSecret
+        $ClientSecret = $resolved.ClientSecret
+
+        switch ($resolved.Source) {
+            'store' {
+                Pass "client secret read from Credential Manager target '$target'"
+                Note 'Credential Manager is per account. This proves the entry is readable by THIS account —'
+                Note 'which is the right answer only if this session is the one that runs the push.'
+            }
+            'prompt' {
+                Warn "no Credential Manager entry named '$target' is readable by $([Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+                Note 'Falling back to the value you just typed. Everything below therefore tests that value, not'
+                Note 'the deployment: the push will still fail at startup with exit code 3 until the entry exists.'
+                Note "Store it as the account that runs the push:  cmdkey /generic:$target /user:<client-id> /pass:<secret>"
+            }
+            'parameter' {
+                Warn 'using the secret passed to -ClientSecret, not the stored entry'
+                Note 'This tests the value you supplied. Re-run without -ClientSecret to test the deployment itself.'
+            }
+        }
+    }
+    Note 'A client secret has no expiry warning of any kind. Track its Entra expiry wherever you track certificates.'
 }
 else {
     Fail "Auth:Mode '$($config.Auth.Mode)' is not one of Certificate or ClientSecret"

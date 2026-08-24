@@ -270,6 +270,12 @@ hoping.
 | Throttling | No backoff | Honours `Retry-After`, five attempts |
 | Dry run | No | `--dry-run` |
 
+Both accept a **certificate or a client secret** through `Auth:Mode`, using the
+same shared credential code as the agent-hosted connector. Certificate is the
+default; the client secret path keeps the value in Windows Credential Manager
+with only the entry's name in configuration, and is set up in
+[`HIERARCHY-DEPLOYMENT.md`](HIERARCHY-DEPLOYMENT.md#step-3b--using-a-client-secret-instead-of-a-certificate).
+
 **The connection IDs must differ.** `OwnedBy` means whichever app created a
 connection is the only one that can manage it, the two register different
 schemas, and a registered schema cannot be changed. `HierarchyGraphSection`

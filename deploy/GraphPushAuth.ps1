@@ -197,11 +197,98 @@ function Get-PushToken {
     return $result
 }
 
+
+function Get-StoredClientSecret {
+    <#
+    .SYNOPSIS
+        Reads a client secret from Windows Credential Manager, the same entry the
+        push tools read at startup.
+    .DESCRIPTION
+        Without this the pre-flight would have to prompt, and would then be
+        testing the secret you typed rather than the one the tool will actually
+        use — which is the failure it exists to catch. Credential Manager is per
+        account, so a hit here means the account running this script can read it;
+        run the script as whoever runs the tool.
+
+        Read only. CredReadW and CredFree, and deliberately no CredWrite —
+        mirroring Security/Secrets/WindowsCredentialStore.cs, which is the same
+        decision for the same reason.
+
+        Returns a SecureString, or $null when the entry does not exist or this is
+        not Windows. The value passes through a .NET string on the way out of the
+        unmanaged buffer, which is unavoidable with this API and matches what the
+        tools themselves do; it is never written anywhere.
+    #>
+    param([Parameter(Mandatory)][string]$Target)
+
+    $onWindows = $PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows
+    if (-not $onWindows) { return $null }
+
+    if (-not ('SqlConnectorCredMan' -as [type])) {
+        Add-Type -Namespace '' -Name 'SqlConnectorCredMan' -MemberDefinition @'
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+public struct CREDENTIAL
+{
+    public uint Flags;
+    public uint Type;
+    public IntPtr TargetName;
+    public IntPtr Comment;
+    public long LastWritten;
+    public uint CredentialBlobSize;
+    public IntPtr CredentialBlob;
+    public uint Persist;
+    public uint AttributeCount;
+    public IntPtr Attributes;
+    public IntPtr TargetAlias;
+    public IntPtr UserName;
+}
+
+[DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+public static extern bool CredReadW(string target, uint type, uint flags, out IntPtr credential);
+
+[DllImport("advapi32.dll")]
+public static extern void CredFree(IntPtr buffer);
+'@ -UsingNamespace 'System.Runtime.InteropServices'
+    }
+
+    $handle = [IntPtr]::Zero
+    # 1 is CRED_TYPE_GENERIC, which is what cmdkey /generic writes.
+    if (-not [SqlConnectorCredMan]::CredReadW($Target, 1, 0, [ref]$handle)) {
+        return $null
+    }
+
+    try {
+        $credential = [Runtime.InteropServices.Marshal]::PtrToStructure(
+            $handle, [Type][SqlConnectorCredMan+CREDENTIAL])
+        if ($credential.CredentialBlobSize -eq 0) { return $null }
+
+        $plain = [Runtime.InteropServices.Marshal]::PtrToStringUni(
+            $credential.CredentialBlob, $credential.CredentialBlobSize / 2)
+
+        $secure = New-Object System.Security.SecureString
+        foreach ($character in $plain.ToCharArray()) { $secure.AppendChar($character) }
+        $secure.MakeReadOnly()
+        return $secure
+    }
+    finally {
+        [SqlConnectorCredMan]::CredFree($handle)
+    }
+}
+
 function Get-PushCredential {
     <#
     .SYNOPSIS
-        Resolves whichever credential Auth:Mode calls for, prompting for a
-        client secret only when that is the configured mode.
+        Resolves whichever credential Auth:Mode calls for.
+    .DESCRIPTION
+        For ClientSecret mode the Credential Manager entry named in
+        Auth:ClientSecretCredentialTarget is read first, because that is what the
+        tool itself reads — testing anything else proves nothing. Prompting is
+        the fallback for when this session cannot see the entry, and the caller
+        is told which of the two happened, since "it worked when I typed it" and
+        "it worked from the store" are very different results.
+    .OUTPUTS
+        Certificate, ClientSecret, and Source: 'certificate', 'store',
+        'prompt' or 'parameter'.
     #>
     param(
         [Parameter(Mandatory)]$Config,
@@ -209,13 +296,23 @@ function Get-PushCredential {
     )
 
     if ($Config.Auth.Mode -eq 'ClientSecret') {
-        if (-not $ClientSecret) {
-            $ClientSecret = Read-Host -AsSecureString "Client secret for app $($Config.Auth.ClientId)"
+        if ($ClientSecret) {
+            return @{ Certificate = $null; ClientSecret = $ClientSecret; Source = 'parameter' }
         }
-        return @{ Certificate = $null; ClientSecret = $ClientSecret }
+
+        $target = $Config.Auth.ClientSecretCredentialTarget
+        if ($target) {
+            $stored = Get-StoredClientSecret -Target $target
+            if ($stored) {
+                return @{ Certificate = $null; ClientSecret = $stored; Source = 'store' }
+            }
+        }
+
+        $typed = Read-Host -AsSecureString "Client secret for app $($Config.Auth.ClientId)"
+        return @{ Certificate = $null; ClientSecret = $typed; Source = 'prompt' }
     }
 
-    return @{ Certificate = (Get-PushCertificate -Config $Config); ClientSecret = $null }
+    return @{ Certificate = (Get-PushCertificate -Config $Config); ClientSecret = $null; Source = 'certificate' }
 }
 
 function Get-RetryAfterSeconds {

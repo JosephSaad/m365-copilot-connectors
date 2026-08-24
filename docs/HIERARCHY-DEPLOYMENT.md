@@ -31,8 +31,10 @@ minutes there saves an afternoon here.
 
 - A route to SQL Server on 1433 **and** outbound HTTPS to `graph.microsoft.com`.
   This is the requirement people miss: a jump box usually has one or the other.
-- A certificate in **`CurrentUser\My`** with its private key — *not*
-  `LocalMachine\My`. This tool runs as a person, not a service.
+- **A credential.** Either a certificate in **`CurrentUser\My`** with its private
+  key — *not* `LocalMachine\My`, this tool runs as a person — or a client secret
+  in Windows Credential Manager. Both are supported; see
+  [Step 3b](#step-3b--using-a-client-secret-instead-of-a-certificate).
 - PowerShell 5.1 or later for the verification scripts, and the
   `Microsoft.Graph.Authentication` module for `Test-HierarchySearch.ps1`.
 
@@ -170,7 +172,9 @@ Four settings decide whether this works:
 
 **`Auth:CertificateStoreLocation` is `CurrentUser`.** Not `LocalMachine`. A
 certificate imported to the machine store is invisible here, and produces exit
-code 3 for a certificate you can plainly see in `certlm.msc`.
+code 3 for a certificate you can plainly see in `certlm.msc`. If you are using a
+client secret instead, this setting is ignored — see
+[Step 3b](#step-3b--using-a-client-secret-instead-of-a-certificate).
 
 **`Graph:ConnectionId` must not be `sqltickets`.** The tool rejects that value at
 startup. The two test cases register different schemas, a registered schema
@@ -184,6 +188,109 @@ pushing every item again — there is no ACL-only update.
 **No secret ever goes in this file.** Vault URI, secret *names*, the Credential
 Manager target *name*, tenant ID, client ID, thumbprints, server and database
 only. The build fails on anything else — see [`SECURITY.md`](SECURITY.md) SEC-1.
+
+---
+
+## Step 3b — Using a client secret instead of a certificate
+
+**Yes, this connector supports client secret authentication.** It is the same
+mechanism the agent-hosted connector uses, through the same shared code in
+`SqlTicketsConnector.Security` — nothing about it is specific to one tool.
+
+Certificate remains the default and the better option: a secret is a bearer
+credential that anyone who reads it can replay from anywhere, and unlike a
+certificate **nothing warns you before it expires**. Use this when the tenant
+will not issue a certificate to this application.
+
+### What goes where
+
+```json
+"Auth": {
+  "Mode": "ClientSecret",
+  "TenantId": "<your tenant GUID>",
+  "ClientId": "<the app registration's client ID>",
+  "ClientSecretCredentialTarget": "SqlHierarchyPush/EntraClientSecret"
+}
+```
+
+`CertificateThumbprints` and `CertificateStoreLocation` are ignored in this mode.
+**The secret itself never appears in this file** — only the *name* of the
+Credential Manager entry holding it. Paste the secret into that field by mistake
+and startup rejects it: the value is shape-checked, and anything that looks like
+a secret rather than a name fails validation with exit code 2.
+
+### Storing it
+
+Credential Manager is **per Windows account**. This is where deploying the push
+tool is genuinely easier than deploying the connector service: the connector runs
+as a service account that often cannot log on interactively, which is why
+[`RUNBOOK.md`](RUNBOOK.md) §2a needs PsExec and scheduled-task workarounds. This
+tool runs **as you**. So store it as yourself, in one line:
+
+```cmd
+cmdkey /generic:SqlHierarchyPush/EntraClientSecret /user:<client-id> /pass:<secret>
+```
+
+Confirm it landed:
+
+```cmd
+cmdkey /list:SqlHierarchyPush/EntraClientSecret
+```
+
+Two cautions that apply to that command and not to certificates. The secret
+appears in the process command line while it runs, so anything reading process
+arguments can see it; and typed interactively it lands in your PowerShell history
+file. Clear the history afterwards, or paste the command from a file you then
+delete. This is the weakest moment in the whole scheme, and certificate mode has
+no equivalent to it.
+
+If a different account will run the push — a scheduled task, say — the entry has
+to be stored under **that** account. `RUNBOOK.md` §2a has both routes for that
+case, and they apply here unchanged.
+
+### What the tool does with it
+
+The entry is read **once, at startup**, before any Graph call. A missing or
+unreadable entry is therefore a deployment failure you see immediately, not a
+token failure partway through a push:
+
+```
+[FTL] Could not build the Entra credential.
+```
+
+…and exit code **3**. The startup log names the *target*, never the value.
+
+**Windows only.** Credential Manager is a Windows facility, so this mode fails
+with a clear message on any other platform rather than a `PlatformNotSupported`
+exception from deep inside a P/Invoke. Certificate mode has no such restriction.
+
+### Rotating it
+
+Simpler than the service case, because there is no service to restart:
+
+1. Add a new client secret to the app registration. Keep the old one valid.
+2. Overwrite the Credential Manager entry with the same `cmdkey` command.
+3. Run the tool again and confirm it completes.
+4. Delete the old secret in Entra.
+
+**Nothing warns you before expiry.** A certificate warns daily for 30 days
+(`Auth:ExpiryWarningDays`); an Entra client secret's expiry is known only to
+Entra. Put it in the same calendar you use for certificate expiry, or the first
+symptom will be `AADSTS7000222` on a run that worked last month.
+
+### Verifying it
+
+`Test-GraphPushPrereqs.ps1` reads the **actual Credential Manager entry** the
+tool will read, rather than prompting — testing a secret you typed would prove
+nothing about the deployment. It tells you which happened:
+
+```
+  PASS  client secret read from Credential Manager target 'SqlHierarchyPush/EntraClientSecret'
+```
+
+A `WARN` saying it fell back to prompting means the entry is not readable by the
+account running the script. If that account is the one that runs the push, the
+push will fail at startup until you fix it.
 
 ---
 
@@ -341,7 +448,9 @@ unaffected either way.
 | Symptom | Where to look |
 |---|---|
 | `FATAL:` before any log line, exit code 2 | Configuration. Every problem is listed at once |
-| Exit code 3 | The certificate — almost always `CurrentUser` vs `LocalMachine` |
+| Exit code 3 | The credential. With `Certificate`, almost always `CurrentUser` vs `LocalMachine`; with `ClientSecret`, a Credential Manager entry the running account cannot read |
+| `AADSTS7000222` | The client secret has **expired**. Nothing warned you — see [Step 3b](#step-3b--using-a-client-secret-instead-of-a-certificate) |
+| `AADSTS7000215` | Invalid client secret. Check the entry holds the value and not the secret *ID* from the Entra blade |
 | A bare 403 from any Graph call | `Test-GraphPushPrereqs.ps1`; consent and ownership are indistinguishable without it |
 | Stuck in `draft`, then a timeout | Step 6. Re-run the watcher, do not recreate the connection |
 | Dry run shows the wrong level counts | The views, step 2 |
