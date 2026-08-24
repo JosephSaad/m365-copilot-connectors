@@ -61,6 +61,7 @@ authored. Rename a customer, push again, and every descendant item is rewritten.
 | [`sql/13-timesheet-least-privilege.sql`](../sql/13-timesheet-least-privilege.sql) | `SELECT` on the views only, with the base tables explicitly denied |
 | [`src/SqlHierarchyPush/`](../src/SqlHierarchyPush) | The push tool: schema registration and one `PUT` per row |
 | [`deploy/Test-HierarchySearch.ps1`](../deploy/Test-HierarchySearch.ps1) | Proves the requirement against the live index |
+| [`docs/hierarchy-in-copilot.pptx`](hierarchy-in-copilot.pptx) | The same argument as a deck, for explaining it to someone else |
 
 Sample data is sized so the demonstration means something: every customer has
 four to six engagements, every engagement twelve to twenty-two time entries. A

@@ -107,6 +107,7 @@ docs/
   HIERARCHY-TEST-CASE.md               The three level test case: why a flat index needs flattening, and how
   ASSUMPTIONS.md                       Decisions, deviations, open questions
   agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
+  hierarchy-in-copilot.pptx            Deck: how to handle hierarchical data in a flat index
 sql/
   00-sample-source.sql                 Creates dbo.Tickets (with IsDeleted) and seeds 3 rows
   01-least-privilege.sql               Login, user and SELECT grant, with verification
