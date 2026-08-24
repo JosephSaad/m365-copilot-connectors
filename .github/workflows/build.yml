@@ -239,17 +239,38 @@ jobs:
               'publish/System.Private.CoreLib.dll',       # bundled runtime
               'publish/hostpolicy.dll',                   # bundled host
               'publish/grpc_csharp_ext.x64.dll',          # Grpc.Core native asset
-              'SqlGraphPush/SqlGraphPush.exe',            # direct push tool
+              'SqlGraphPush/SqlGraphPush.exe',            # direct push tool, tickets
+              'SqlHierarchyPush/SqlHierarchyPush.exe',    # direct push tool, three level test case
               'Install-Connector.ps1',
               'Manifest.json',
               'ConnectionInfo.json',
               'CustomConnectorPortMap.json',
               'README.md',
+
+              # The diagnostic scripts the troubleshooting guides tell an
+              # operator to run. They have to be in the package, not only in
+              # the source copy, or the instruction is wrong.
+              'deploy/Test-ConnectorHost.ps1',
+              'deploy/Test-SqlSource.ps1',
+              'deploy/Get-CrawlHistory.ps1',
+              'deploy/Verify-GraphConnection.ps1',
+              'deploy/GraphPushAuth.ps1',
+              'deploy/Test-GraphPushPrereqs.ps1',
+              'deploy/Compare-SourceToIndex.ps1',
+              'deploy/Test-HierarchySearch.ps1',
+
               'sql/01-least-privilege.sql',
               'sql/02-soft-delete.sql',
+              'sql/10-timesheet-source.sql',              # three level test case
+              'sql/11-timesheet-sample-data.sql',
+              'sql/12-timesheet-views.sql',               # the flattening layer
+              'sql/13-timesheet-least-privilege.sql',
               'docs/SECURITY.md',
               'docs/RUNBOOK.md',
               'docs/ASSUMPTIONS.md',
+              'docs/TROUBLESHOOTING.md',
+              'docs/TROUBLESHOOTING-DIRECT-PUSH.md',
+              'docs/HIERARCHY-TEST-CASE.md',
 
               # A buildable source tree, so one download serves deployment and
               # rebuild. SecretHygiene.targets is imported by every project file:
@@ -258,6 +279,7 @@ jobs:
               'source/Directory.Build.props',              # holds the target framework
               'source/build/SecretHygiene.targets',
               'source/src/SqlTicketsConnector/SqlTicketsConnector.csproj',
+              'source/src/SqlHierarchyPush/SqlHierarchyPush.csproj',
               'source/src/SqlTicketsConnector/Contracts/CommonModels.proto',
               'source/tests/SqlTicketsConnector.Tests/SqlTicketsConnector.Tests.csproj'
           )

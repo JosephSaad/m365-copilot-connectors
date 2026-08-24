@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The three level test case: Customer -> Engagement -> TimeEntry, pushed
+    directly to Microsoft Graph.
+
+    Package set is identical to SqlGraphPush on purpose. Adding a package here
+    would change the offline restore graph that build/Get-OfflinePackages.ps1
+    pins, so anything new has to be a deliberate decision with that list
+    regenerated in the same change.
+
+    Like SqlGraphPush, this references SqlTicketsConnector.Security and nothing
+    from the connector: certificates, credentials, secrets, SQL connection
+    construction and log redaction are shared, and only the Graph-facing code is
+    per scenario. The agent-hosted connector still has no Graph dependency of
+    any kind.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SqlHierarchyPush</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Microsoft.Graph" Version="5.105.0" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+
+    <!--
+      Same advisory floor as SqlGraphPush: GHSA-7j59-v9qr-6fq9 /
+      CVE-2026-44503 (High) in the Kiota RedirectHandler, fixed in 1.22.0, while
+      Microsoft.Graph 5.105.0 still asks for 1.21.1. Remove both pins together
+      once the Graph SDK catches up.
+    -->
+    <PackageReference Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SqlTicketsConnector.Security\SqlTicketsConnector.Security.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>

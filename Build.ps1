@@ -57,6 +57,7 @@ $ErrorActionPreference = 'Stop'
 $solution = Join-Path $PSScriptRoot 'SqlTicketsConnector.sln'
 $connectorProject = Join-Path $PSScriptRoot 'src\SqlTicketsConnector\SqlTicketsConnector.csproj'
 $pushProject = Join-Path $PSScriptRoot 'src\SqlGraphPush\SqlGraphPush.csproj'
+$hierarchyProject = Join-Path $PSScriptRoot 'src\SqlHierarchyPush\SqlHierarchyPush.csproj'
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw 'dotnet SDK not found. Install the .NET 10 SDK from https://dotnet.microsoft.com/download'
@@ -131,12 +132,25 @@ $pushDir = Join-Path $OutputRoot 'SqlGraphPush'
 dotnet publish $pushProject -c $Configuration -r $Runtime --self-contained $selfContainedFlag -o $pushDir @frameworkArgs
 if ($LASTEXITCODE -ne 0) { throw 'Publish of SqlGraphPush failed.' }
 
+Write-Host '== Publishing the three level push tool ==' -ForegroundColor Cyan
+# The second test case: Customer -> Engagement -> TimeEntry. Independent of
+# SqlGraphPush, and published beside it rather than instead of it.
+$hierarchyDir = Join-Path $OutputRoot 'SqlHierarchyPush'
+dotnet publish $hierarchyProject -c $Configuration -r $Runtime --self-contained $selfContainedFlag -o $hierarchyDir @frameworkArgs
+if ($LASTEXITCODE -ne 0) { throw 'Publish of SqlHierarchyPush failed.' }
+
 Write-Host '== Staging deployment assets ==' -ForegroundColor Cyan
 Copy-Item (Join-Path $PSScriptRoot 'deploy\Install-Connector.ps1') $OutputRoot -Force
 Copy-Item (Join-Path $PSScriptRoot 'deploy\Manifest.json') $OutputRoot -Force
 Copy-Item (Join-Path $PSScriptRoot 'deploy\CustomConnectorPortMap.json') $OutputRoot -Force
 Copy-Item (Join-Path $PSScriptRoot 'deploy\ConnectionInfo.json') $OutputRoot -Force
 Copy-Item (Join-Path $PSScriptRoot 'README.md') $OutputRoot -Force
+
+# The diagnostic scripts, at the package root rather than only inside source\.
+# docs/TROUBLESHOOTING.md tells an operator to run .\deploy\Test-ConnectorHost.ps1
+# on the connector host; that instruction has to be true of what they unzipped.
+New-Item -ItemType Directory -Path (Join-Path $OutputRoot 'deploy') -Force | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'deploy\*.ps1') (Join-Path $OutputRoot 'deploy') -Force
 
 New-Item -ItemType Directory -Path (Join-Path $OutputRoot 'sql') -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'sql\*.sql') (Join-Path $OutputRoot 'sql') -Force

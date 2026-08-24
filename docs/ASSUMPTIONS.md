@@ -113,6 +113,28 @@ Found by the new tests, not by inspection:
 
 ## 5. Later changes
 
+- **A three level test case added on 2026-08-24**, at the customer's request:
+  Customer to Engagement to TimeEntry, pushed by a new `SqlHierarchyPush`
+  alongside the existing ticket test case rather than replacing it.
+
+  The decision worth recording is the **deliberate denormalisation**. A Graph
+  external item is flat and Copilot traverses nothing, so a search for a
+  customer can only reach that customer's time entries if each time entry
+  physically contains the customer's text. Every descendant item therefore
+  carries its ancestors' searchable fields, and every ancestor carries a roll-up
+  of its descendants, computed in the views in `sql/12-timesheet-views.sql`.
+
+  This duplicates a customer's name across roughly a hundred items. That is
+  accepted: these are index items rather than a system of record, `dbo.Customers`
+  remains the only place the name is authored, and a rename is corrected by
+  pushing again. The alternative — one connection per level — cannot be searched
+  as one thing, which is the entire requirement. Reasoning and the full property
+  annotation table are in `docs/HIERARCHY-TEST-CASE.md`.
+
+  Two consequences a reviewer should know: the roll-up figures (`totalHours`,
+  `childCount`) are correct as of the last push and not at query time, and the
+  sample data alone is 1126 items against tenant item quota.
+
 - **Retargeted from net8.0 to net10.0** (current LTS) on 2026-08-14, at the
   customer's request. No source change was needed; the CI build on
   windows-latest and all 40 tests pass on net10.0. The target server therefore
