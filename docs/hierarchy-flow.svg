@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 840" width="1440" height="840" role="img" aria-labelledby="hTitle hDesc">
+  <title id="hTitle">How a three level hierarchy is indexed into a flat Copilot index</title>
+  <desc id="hDesc">A Customer to Engagement to TimeEntry hierarchy in SQL Server is flattened by SQL views, which copy each ancestor's searchable text down onto every descendant item and roll descendant names up onto every ancestor item. The result is 1,126 flat external items in Microsoft Graph, each physically containing its ancestors' text, so that a single search for a customer name matches items at all three levels.</desc>
+
+  <rect x="0" y="0" width="1440" height="840" fill="#ffffff"/>
+
+  <text x="40" y="46" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="600" fill="#1f2328">Indexing a hierarchy into a flat index</text>
+  <text x="40" y="74" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#57606a">A Graph external item has no parent, no children and no join. The traversal is done once, in SQL, and baked into every item's own text.</text>
+
+  <!-- ================= panel 1: the source ================= -->
+  <rect x="40" y="104" width="390" height="544" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="64" y="134" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.4" fill="#57606a">1 — THE SOURCE, A HIERARCHY</text>
+
+  <rect x="68" y="162" width="334" height="74" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <text x="88" y="188" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="13.5" fill="#0550ae">dbo.Customers</text>
+  <text x="88" y="210" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">12 rows</text>
+  <text x="88" y="228" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">CustomerName, Industry, AccountManager</text>
+
+  <line x1="120" y1="236" x2="120" y2="272" stroke="#8c959f" stroke-width="2"/>
+  <polygon points="114,272 126,272 120,282" fill="#8c959f"/>
+  <text x="138" y="262" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#57606a">FK CustomerId</text>
+
+  <rect x="96" y="284" width="306" height="74" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <text x="116" y="310" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="13.5" fill="#0550ae">dbo.Engagements</text>
+  <text x="116" y="332" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">62 rows</text>
+  <text x="116" y="350" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">EngagementName, Practice, Status</text>
+
+  <line x1="148" y1="358" x2="148" y2="394" stroke="#8c959f" stroke-width="2"/>
+  <polygon points="142,394 154,394 148,404" fill="#8c959f"/>
+  <text x="166" y="384" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#57606a">FK EngagementId</text>
+
+  <rect x="124" y="406" width="278" height="74" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <text x="144" y="432" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="13.5" fill="#0550ae">dbo.TimeEntries</text>
+  <text x="144" y="454" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">1,052 rows</text>
+  <text x="144" y="472" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">ConsultantName, Hours, Narrative</text>
+
+  <rect x="68" y="510" width="334" height="112" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="88" y="536" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Two foreign keys — and Copilot sees neither.</text>
+  <text x="88" y="562" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">There is no parent property on an external item,</text>
+  <text x="88" y="580" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">no child collection, no join at retrieval and no</text>
+  <text x="88" y="598" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">API that enumerates an item's children.</text>
+
+  <!-- ================= panel 2: the flattening ================= -->
+  <polyline points="430,376 462,376" fill="none" stroke="#57606a" stroke-width="2"/>
+  <polygon points="462,370 462,382 472,376" fill="#57606a"/>
+
+  <rect x="482" y="104" width="336" height="544" rx="12" fill="#f2f8ff" stroke="#b6d3f5" stroke-width="1.5"/>
+  <text x="506" y="134" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.4" fill="#0a5ca8">2 — THE FLATTENING, IN VIEWS</text>
+
+  <rect x="510" y="162" width="280" height="58" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <text x="530" y="186" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">dbo.vwCustomerItems</text>
+  <text x="530" y="206" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">rolls its engagement names up</text>
+
+  <rect x="510" y="232" width="280" height="58" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <text x="530" y="256" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">dbo.vwEngagementItems</text>
+  <text x="530" y="276" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">carries the customer down, consultants up</text>
+
+  <rect x="510" y="302" width="280" height="58" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <text x="530" y="326" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">dbo.vwTimeEntryItems</text>
+  <text x="530" y="346" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">carries both ancestors down</text>
+
+  <line x1="650" y1="360" x2="650" y2="392" stroke="#0969da" stroke-width="2"/>
+  <polygon points="644,392 656,392 650,402" fill="#0969da"/>
+  <text x="668" y="384" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#0550ae">UNION ALL</text>
+
+  <rect x="510" y="404" width="280" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="2"/>
+  <rect x="510" y="404" width="6" height="70" rx="3" fill="#0969da"/>
+  <text x="534" y="430" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="13.5" fill="#0550ae">dbo.vwExternalItems</text>
+  <text x="534" y="452" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#1f2328">one row per item, one column shape</text>
+  <text x="534" y="468" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">the only thing the push tool reads</text>
+
+  <rect x="510" y="510" width="280" height="112" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="530" y="536" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Why views, not code</text>
+  <text x="530" y="562" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">A DBA reads exactly what leaves the</text>
+  <text x="530" y="580" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">database. The grant is on the views, so</text>
+  <text x="530" y="598" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">the push identity cannot read the tables.</text>
+
+  <!-- ================= panel 3: the index ================= -->
+  <polyline points="818,376 850,376" fill="none" stroke="#57606a" stroke-width="2"/>
+  <polygon points="850,370 850,382 860,376" fill="#57606a"/>
+
+  <rect x="870" y="104" width="530" height="544" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="894" y="134" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.4" fill="#57606a">3 — THE INDEX, 1,126 FLAT ITEMS</text>
+
+  <!-- item: customer -->
+  <rect x="898" y="158" width="474" height="112" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <text x="918" y="182" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700" fill="#1f2328">cust1</text>
+  <text x="978" y="182" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">itemType: Customer</text>
+  <text x="918" y="206" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#1f2328">customerName: Contoso Financial Services</text>
+  <text x="918" y="226" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#57606a">industry: Financial Services</text>
+  <rect x="912" y="236" width="446" height="24" rx="4" fill="#fff8c5" stroke="#d4a72c" stroke-width="1"/>
+  <text x="918" y="253" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#7d4e00">engagement list: Data Platform Migration; Payment…</text>
+
+  <!-- item: engagement -->
+  <rect x="898" y="286" width="474" height="132" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <text x="918" y="310" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700" fill="#1f2328">eng101</text>
+  <text x="988" y="310" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">itemType: Engagement</text>
+  <rect x="912" y="320" width="446" height="24" rx="4" fill="#fff8c5" stroke="#d4a72c" stroke-width="1"/>
+  <text x="918" y="337" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#7d4e00">customerName: Contoso Financial Services</text>
+  <text x="918" y="362" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#1f2328">engagementName: Data Platform Migration</text>
+  <text x="918" y="382" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#57606a">practice: Data and AI · status: Active</text>
+  <rect x="912" y="390" width="446" height="22" rx="4" fill="#fff8c5" stroke="#d4a72c" stroke-width="1"/>
+  <text x="918" y="406" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#7d4e00">consultants: Jonas Berg, Priya Raman, Yuki Tanaka</text>
+
+  <!-- item: time entry -->
+  <rect x="898" y="434" width="474" height="152" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="2"/>
+  <text x="918" y="458" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700" fill="#1f2328">time5001</text>
+  <text x="1002" y="458" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">itemType: TimeEntry</text>
+  <rect x="912" y="468" width="446" height="24" rx="4" fill="#fff8c5" stroke="#d4a72c" stroke-width="1"/>
+  <text x="918" y="485" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#7d4e00">customerName: Contoso Financial Services</text>
+  <rect x="912" y="496" width="446" height="24" rx="4" fill="#fff8c5" stroke="#d4a72c" stroke-width="1"/>
+  <text x="918" y="513" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#7d4e00">engagementName: Data Platform Migration</text>
+  <text x="918" y="538" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#1f2328">consultantName: Priya Raman · hours: 7.50</text>
+  <text x="918" y="558" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#57606a">narrative: Cut over the customer master domain…</text>
+  <text x="918" y="576" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" fill="#57606a">Two ancestors, carried down. About 200 bytes.</text>
+
+  <!-- legend -->
+  <rect x="898" y="602" width="20" height="14" rx="3" fill="#fff8c5" stroke="#d4a72c" stroke-width="1"/>
+  <text x="928" y="614" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">carried from an ancestor, or rolled up from descendants — the denormalisation</text>
+
+  <!-- ================= bottom band ================= -->
+  <rect x="40" y="676" width="1360" height="126" rx="12" fill="#ffffff" stroke="#0969da" stroke-width="2"/>
+  <rect x="40" y="676" width="6" height="126" rx="3" fill="#0969da"/>
+
+  <text x="72" y="710" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="600" fill="#1f2328">One search for “Contoso Financial Services” matches items at all three levels — because the string is physically in all three.</text>
+  <text x="72" y="736" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Nothing traverses anything. Every match is a document that already contained the words, decided when it was written rather than when it was asked for.</text>
+
+  <rect x="72" y="752" width="150" height="34" rx="17" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="147" y="774" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">1 customer</text>
+
+  <rect x="234" y="752" width="168" height="34" rx="17" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="318" y="774" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">5 engagements</text>
+
+  <rect x="414" y="752" width="182" height="34" rx="17" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="505" y="774" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">89 time entries</text>
+
+  <text x="620" y="774" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">95 of the 1,126 items in this sample. Ranking decides which of them Copilot actually reads.</text>
+</svg>

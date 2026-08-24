@@ -406,6 +406,28 @@ full crawl — existing items keep their old ACL until they are re-indexed.
 credential and the same ACL groups, and needs the Graph application permissions
 listed in `docs/SECURITY.md` §3.
 
+**The three level connector is a separate deployment.** `SqlHierarchyPush`
+(Customer → Engagement → TimeEntry) is not a Windows service, is not installed by
+`Install-Connector.ps1`, and shares nothing with this connector at run time — its
+own tables, its own Graph connection, its own schema. Nothing in sections 1 to 4
+above applies to it. It has its own end-to-end instructions in
+[`HIERARCHY-DEPLOYMENT.md`](HIERARCHY-DEPLOYMENT.md), and when it misbehaves the
+guide is [`TROUBLESHOOTING-DIRECT-PUSH.md`](TROUBLESHOOTING-DIRECT-PUSH.md).
+
+Three things about it are worth knowing at 03:00, because they look like faults
+and are not:
+
+- **It never deletes.** Rows soft-deleted since the last run are excluded from
+  the push, not removed from the index, so a deleted time entry stays findable.
+  `deploy/Compare-SourceToIndex.ps1` lists those orphans and prints the `DELETE`
+  for each without running it.
+- **Schema registration is silent for 5 to 15 minutes.** Watch it with
+  `deploy/Watch-SchemaRegistration.ps1`. Do not delete and recreate the
+  connection — that restarts the wait and discards every item already written.
+- **Its certificate lives in `CurrentUser\My`**, not `LocalMachine\My`, because
+  it runs as a person. A certificate in the machine store is invisible to it and
+  produces exit code 3.
+
 **After any change to `appsettings.json`**, check the first lines after restart:
 
 ```

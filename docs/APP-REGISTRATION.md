@@ -5,7 +5,7 @@ has to approve them. Every permission is listed with why it is needed and what
 happens without it. Both credential types are specified: certificate and client
 secret.
 
-**There are three identities in this deployment, and they are not
+**There are up to four identities in this deployment, and they are not
 interchangeable.** The most common failure in setting this up is granting one
 identity's permissions to another.
 
@@ -14,14 +14,16 @@ identity's permissions to another.
 | 1 | **Graph connector agent** | Microsoft Graph, on your behalf | Yes — three, below |
 | 2 | **SqlTicketsConnector** (this service) | Azure Key Vault only | **None. Ever.** |
 | 3 | **SqlGraphPush** (optional operator tool) | Microsoft Graph directly | Two, below |
+| 4 | **SqlHierarchyPush** (optional operator tool) | Microsoft Graph directly | The same two — and it may share identity 3 |
 
 Identity 2 never calls Microsoft Graph. If you find yourself adding
 `ExternalItem.ReadWrite.OwnedBy` to it, stop: the agent does the ingestion, and
 granting Graph access to the connector widens the blast radius of a service that
 runs unattended on a domain-joined server for no functional gain.
 
-Identity 3 is only needed if you use the direct push tool. Skip section 3
-otherwise.
+Identities 3 and 4 are only needed if you use a direct push tool. Skip section 3
+otherwise. They need identical permissions, so **one registration can serve
+both** — see §3.3, which is the decision that matters and is easy to get wrong.
 
 ---
 
@@ -278,10 +280,15 @@ and no expiry warning.
 
 ---
 
-## 3. SqlGraphPush — the direct push tool (optional)
+## 3. The direct push tools (optional)
 
-Only if you use the operator-run push path. It calls Microsoft Graph directly
-and needs no agent.
+Only if you use an operator-run push path. These call Microsoft Graph directly
+and need no agent. There are two of them and their requirements are identical:
+
+| Tool | Source | Connection ID |
+|---|---|---|
+| `SqlGraphPush` | `dbo.Tickets` — one flat table | `sqltickets` |
+| `SqlHierarchyPush` | `Customers` → `Engagements` → `TimeEntries` | `consultingwork` |
 
 ### 3.1 Permissions
 
@@ -302,11 +309,37 @@ private key in `CurrentUser\My` on the operator's workstation or jump box —
 `CurrentUser`, not `LocalMachine`, because it runs as a person, not a service.
 
 Client secret is supported the same way as §2.4 if certificates are not
-available.
+available. This applies to both tools.
+
+### 3.3 One registration or two — and why it matters
+
+`OwnedBy` means *connections owned by the application making the call*. Whichever
+app registration creates a connection is the only one that can ever manage it.
+Three consequences follow, and the first two are how this goes wrong:
+
+1. **The two tools must not share a connection ID.** They register different
+   schemas, and a registered schema cannot be changed. `SqlHierarchyPush`
+   rejects `sqltickets` at startup for exactly this reason.
+2. **The Graph connector agent's connections are not yours to push to.** If the
+   agent created a connection, a push tool gets a bare 403 on every call against
+   it — and cannot create its own, because the ID is taken.
+3. **Neither tool can manage a connection the other created**, unless they share
+   a registration.
+
+| | One shared registration | A registration per tool |
+|---|---|---|
+| Setup | One consent, one certificate, one credential to rotate | Two of everything |
+| Blast radius | A leaked credential reaches both connections | Contained to one |
+| Managing the other's connection | Possible — useful for a clean-up script | Not possible |
+| Recommended for | Most deployments, and every proof of concept | A production tenant where the two datasets have different owners |
+
+Name it for what it reaches rather than for one tool — `CopilotConnectors-Push-Prod`
+rather than `SqlGraphPush-Prod` — so a second tool arriving later does not read
+as a misuse of the first one's identity.
 
 ---
 
-## 4. Hardening that applies to all three
+## 4. Hardening that applies to every registration here
 
 Do these once per registration. They are cheap and they are what a reviewer
 looks for.
@@ -344,6 +377,7 @@ failures do not mask each other.
 | 2 | Agent registration | Agent config app → **Health check** | All endpoints reachable, registration succeeds |
 | 3 | Consent | Entra → app → API permissions | Every row **Granted** |
 | 4 | Connector certificate or secret | `.\Install-Connector.ps1 …` | Certificate found and readable, or the Credential Manager warning is absent |
+| 4a | Push tool identity, if used | `.\deploy\Test-GraphPushPrereqs.ps1` | A token is issued and **both** `OwnedBy` roles appear in its `roles` claim. This is the only client-side way to tell missing consent from a wrong connection owner |
 | 5 | Connector startup | Start the service, read the log | `Auth:Mode is …` then `resolved` — no placeholder errors |
 | 6 | Key Vault | Startup log | Secrets resolve; a 403 here means the role assignment or its scope is wrong |
 | 7 | End to end | Full crawl from the admin centre | Items appear in Copilot for a member of the granted group |
@@ -359,13 +393,13 @@ problem is the connection configuration in the admin centre, not identity.
 Worth stating explicitly, because these are the mistakes that get through
 review:
 
-- **SqlTicketsConnector must never hold a Graph application permission.** It
+- **SqlTicketsConnector must never hold a Graph application permission**, no matter how many push tools exist beside it. It
   does not call Graph. `docs/SECURITY.md` §1 makes the same point, and the
   connector project has no Graph SDK reference to make it possible.
 - **No identity here needs `ExternalItem.Read.All`,
   `Directory.ReadWrite.All`, `Application.ReadWrite.All`, or any `.All` write
   permission** beyond the `Directory.Read.All` decision in §1.2.
-- **No delegated permissions anywhere.** All three are app-only. A delegated
+- **No delegated permissions anywhere.** Every identity here is app-only. A delegated
   permission on these registrations means someone has misunderstood the flow.
 - **No certificate private key in Entra.** Upload `.cer`, never `.pfx`.
 - **No client secret in `appsettings.json`, a deployment script, an environment

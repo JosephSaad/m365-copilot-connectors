@@ -16,6 +16,11 @@ connection ID, a different schema and a different executable. `SqlGraphPush` and
 The requirement it exists to demonstrate: **a search for a customer in Copilot
 must return that customer's engagements and time entries too.**
 
+![How the Customer, Engagement and TimeEntry hierarchy is flattened by SQL views into flat external items, each carrying its ancestors' text, so one customer search matches all three levels](hierarchy-flow.svg)
+
+**To deploy it**, follow [`HIERARCHY-DEPLOYMENT.md`](HIERARCHY-DEPLOYMENT.md).
+This document is the design behind it.
+
 ---
 
 ## The problem, stated honestly
@@ -61,6 +66,7 @@ authored. Rename a customer, push again, and every descendant item is rewritten.
 | [`sql/13-timesheet-least-privilege.sql`](../sql/13-timesheet-least-privilege.sql) | `SELECT` on the views only, with the base tables explicitly denied |
 | [`src/SqlHierarchyPush/`](../src/SqlHierarchyPush) | The push tool: schema registration and one `PUT` per row |
 | [`deploy/Test-HierarchySearch.ps1`](../deploy/Test-HierarchySearch.ps1) | Proves the requirement against the live index |
+| [`docs/hierarchy-in-copilot.pptx`](hierarchy-in-copilot.pptx) | The same argument as a deck, for explaining it to someone else |
 
 Sample data is sized so the demonstration means something: every customer has
 four to six engagements, every engagement twelve to twenty-two time entries. A
