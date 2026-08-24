@@ -140,10 +140,20 @@ key, registered on the app, and both application permissions admin-consented.
 
 **Prove it.** `.\Test-GraphPushPrereqs.ps1`
 
+### Certificate or client secret
+
+Both push tools accept either, through `Auth:Mode`, using the same shared code as
+the connector. Certificate is the default. With `ClientSecret` the value lives in
+Windows Credential Manager and only the entry's *name* is in configuration —
+`Test-GraphPushPrereqs.ps1` reads that actual entry rather than prompting, and
+says which of the two it used. Note that the entry is per Windows account and is
+read **once at startup**, so a missing one is exit code 3 immediately rather than
+a failure partway through a push.
+
 ### The store location
 
-`Auth:CertificateStoreLocation` is **`CurrentUser`** here, not `LocalMachine` as
-in the connector. `SqlGraphPush` runs as a person; the connector runs as a
+This applies to `Auth:Mode: Certificate`. `Auth:CertificateStoreLocation` is
+**`CurrentUser`** here, not `LocalMachine` as in the connector. `SqlGraphPush` runs as a person; the connector runs as a
 service. A certificate imported into the machine store is invisible to a
 `CurrentUser` lookup and produces exit code 3 with a certificate that is plainly
 right there in `certlm.msc`. The pre-flight script looks in both stores and tells
@@ -179,7 +189,7 @@ in that list is over-privileged and `docs/APP-REGISTRATION.md` §6 says why.
 | `AADSTS700027` | The certificate is not registered on the app — upload the `.cer` |
 | `AADSTS700016` | The application is not in this tenant — check `ClientId` and `TenantId` |
 | `AADSTS7000222` | The client secret has **expired**. Nothing warns about this in advance |
-| `AADSTS7000215` | Invalid client secret |
+| `AADSTS7000215` | Invalid client secret. Check the Credential Manager entry holds the *value*, not the secret ID from the Entra blade |
 | `AADSTS900023` | That tenant ID is not a tenant |
 
 ### Key Vault is a separate audience

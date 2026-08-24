@@ -427,6 +427,12 @@ and are not:
 - **Its certificate lives in `CurrentUser\My`**, not `LocalMachine\My`, because
   it runs as a person. A certificate in the machine store is invisible to it and
   produces exit code 3.
+- **It also supports `Auth:Mode: ClientSecret`**, the same way this connector
+  does and through the same code — section 2a applies, with one simplification:
+  the tool runs as a person, so the Credential Manager entry is stored as
+  *yourself* with a plain `cmdkey` and needs none of the PsExec or scheduled-task
+  workarounds a service account forces. There is no service to restart after a
+  rotation either; just run it again.
 
 **After any change to `appsettings.json`**, check the first lines after restart:
 
