@@ -15,9 +15,11 @@ file, and where a test proves it, the test name.
 |---|---|
 | **Deployment** | On-premises Windows Server, alongside the Microsoft Graph connector agent (GCA). |
 | **Data flow** | `dbo.Tickets` → this process (gRPC over loopback) → GCA → Microsoft Graph → Copilot semantic index. |
+| **Two optional side paths** | `SqlGraphPush` (`dbo.Tickets`) and `SqlHierarchyPush` (`Customers`/`Engagements`/`TimeEntries`) call Microsoft Graph directly, bypassing the agent. Neither is required, and neither changes anything above. |
 | **Tenant relationship** | Held by the GCA. **This process never calls Microsoft Graph** and holds no Graph permission. |
 | **Certificate use in `SqlTicketsConnector`** | Azure Key Vault access and the loopback TLS listener only. |
 | **Certificate use in `SqlGraphPush`** | Microsoft Graph. That tool is a separate, operator-run utility. |
+| **Certificate use in `SqlHierarchyPush`** | Microsoft Graph. A second operator-run utility, for the three level test case; same permissions, its own connection. |
 | **Data at rest in this process** | None. Rows are streamed, never spooled to disk. |
 
 The connector project has no reference to the Microsoft Graph SDK. A reference
@@ -34,7 +36,7 @@ appearing there in a future change is a review failure, not a refactor:
 
 | ID | Control | Implementation | Evidence |
 |---|---|---|---|
-| SEC-1 | No secret, password, PFX or credential-bearing connection string in source, configuration, environment or logs | `src/SqlTicketsConnector/appsettings.json` and `src/SqlGraphPush/appsettings.json` hold vault URI, secret *names*, the Credential Manager target *name*, tenant ID, client ID, thumbprints, server and database only | `build/SecretHygiene.targets` fails the build on a credential-shaped key with a value; `.gitleaks.toml` scans history and staged changes |
+| SEC-1 | No secret, password, PFX or credential-bearing connection string in source, configuration, environment or logs | `src/SqlTicketsConnector/appsettings.json`, `src/SqlGraphPush/appsettings.json` and `src/SqlHierarchyPush/appsettings.json` hold vault URI, secret *names*, the Credential Manager target *name*, tenant ID, client ID, thumbprints, server and database only | `build/SecretHygiene.targets` fails the build on a credential-shaped key with a value; `.gitleaks.toml` scans history and staged changes |
 | SEC-2 | Secrets resolved at runtime, held in memory only | `Security/Secrets/KeyVaultSecretProvider.cs`, `Security/Sql/SqlConnectionFactory.cs` (the password enters a `SqlConnectionStringBuilder` and is never logged or persisted) | `ConfigurationTests.SqlLogin_requires_a_resolved_password_and_keeps_it_out_of_configuration` |
 | SEC-3 | `ISecretProvider` with a Key Vault production implementation | `Security/Secrets/ISecretProvider.cs`, `KeyVaultSecretProvider.cs` | — |
 | SEC-4 | Environment provider is development-only and refuses to run in Production | `Security/Secrets/EnvironmentSecretProvider.cs` — constructor throws when `Environment` is `Production`, and logs a prominent warning otherwise | `ConfigurationTests.The_environment_secret_provider_refuses_to_run_in_production` |
@@ -75,6 +77,9 @@ on `ISecretProvider` so it is visible at the point of use.
 | SQL-3 | `TrustServerCertificate=true` rejected in Production, wherever it is configured | `SqlConnectionStringFactory.InspectExtraOptions` (startup and per-call), applied to the wizard-supplied data source URL in `Connector/AgentRequestInspector.cs` | `ConfigurationTests.TrustServerCertificate_is_rejected_in_production` |
 | SQL-4 | No credential in any operator-editable connection text | `InspectExtraOptions` rejects `Password` and `User ID` | `ConfigurationTests.Credentials_in_operator_supplied_connection_text_are_rejected` |
 | SQL-5 | Least privilege: `SELECT` on `dbo.Tickets`, nothing else | `sql/01-least-privilege.sql`, including explicit `DENY` and a verification query | Run the verification query at the end of the script |
+| SQL-7 | Three level source: the push identity reads **views only** and cannot read the base tables | `sql/13-timesheet-least-privilege.sql` grants `SELECT` on the four views and `DENY`s every verb on `dbo.Customers`, `dbo.Engagements` and `dbo.TimeEntries`. Ownership chaining makes the grant sufficient; the `DENY` exists so a future role membership cannot widen it | Run the verification query at the end of the script — expect four rows, all `SELECT`, all on views |
+| SQL-8 | The soft-delete filter cannot be bypassed by editing the tool | It lives inside the views in `sql/12-timesheet-views.sql`, not in a `WHERE` clause in C#. `SqlHierarchyPush` selects from one view and adds no predicate | Code review: `Program.PushItemsAsync` builds no `WHERE` |
+| SQL-9 | The view name is not an injection surface | `Source:ItemView` is concatenated into a query, so it is validated as a `[schema.]name` identifier — letters, digits and underscores only, at most one dot — and rejected otherwise | `SourceSection.Validate`; a non-identifier value fails startup with exit code 2 |
 | SQL-6 | Transient faults retried, not surfaced as crawl failures | `ConnectRetryCount`/`ConnectRetryInterval` in the connection string; `Security/Sql/SqlErrorClassifier.cs` classifies by error number; transient failures return `RetryDetails` with `ExponentialBackOff` | `ConnectorCrawlerServiceImpl.BuildFailureStatus` |
 
 ### Access control on indexed items
@@ -83,7 +88,8 @@ on `ISecretProvider` so it is visible at the point of use.
 |---|---|---|---|
 | ACL-1 | Entra group principals, never "everyone" | `Connector/AclBuilder.cs` builds `PrincipalType.Group` + `IdentityType.AadId` entries from `Acl:GrantGroupObjectIds` | `ContentAndSchemaTests.A_built_item_carries_truncated_content_and_the_configured_acl` |
 | ACL-2 | Startup fails when no ACL is configured, rather than defaulting to everyone | `AclOptions.Validate`, `AclBuilder.Build` throws on an empty list | `ContentAndSchemaTests.An_empty_acl_configuration_fails_loudly_instead_of_granting_everyone`, `ConfigurationTests.An_empty_acl_section_fails_validation` |
-| ACL-3 | The direct push tool applies the same principals | `src/SqlGraphPush/Program.cs` builds `AclType.Group` entries from the same configuration section | Code review |
+| ACL-3 | Both direct push tools apply the same principals | `src/SqlGraphPush/Program.cs` and `src/SqlHierarchyPush/Program.cs` build `AclType.Group` entries from the same configuration section | Code review |
+| ACL-4 | Every level of the hierarchy carries the same ACL | `SqlHierarchyPush` stamps one ACL list onto customer, engagement and time entry items alike. A time entry narrative is at least as sensitive as the engagement it belongs to, so there is no case for trimming them differently | Code review: one `acl` list, built once, applied to every item |
 
 ### Logging and redaction
 
@@ -164,17 +170,19 @@ resolved and CI fails on any difference (BLD-5).
 | `Azure.Security.KeyVault.Secrets` | 4.11.0 | |
 | `Serilog` | 4.4.0 | Raised from 3.1.1: `Serilog.Sinks.EventLog` 4.0.0 requires Serilog 4.x, and the event log sink is control LOG-2. Dependabot has since moved it within 4.x. |
 | `Serilog.Sinks.OpenTelemetry` | 4.1.1, **not referenced by default** | The OTLP exporter pulls in `Grpc.Net.Client` and requires `Google.Protobuf` 3.26.1 or later, doubling the gRPC surface in the dependency scan for a feature that ships disabled. It is behind an MSBuild switch: `dotnet build -p:EnableOtlpExporter=true`, or `Build.ps1 -EnableOtlpExporter`. Enabling it also raises `Google.Protobuf` to 3.35.1, because the pinned 3.18.0 cannot satisfy the sink; the code generator is unchanged, so the contract types are identical either way. CI builds the solution in **both** configurations, so the optional path cannot rot into an unbuildable state. `Logging:Otlp:Enabled` controls it at runtime; if the flag is set but the build excluded the package, startup says so on stderr. |
-| `Microsoft.Graph` | 5.105.0 | **`SqlGraphPush` only.** Not referenced by the connector or the Security project. |
-| `Microsoft.Kiota.Abstractions` | 1.22.2, **pinned deliberately** | `SqlGraphPush` does not use it directly. The reference exists only to raise a transitive dependency past GHSA-7j59-v9qr-6fq9 / CVE-2026-44503 (High): the Kiota `RedirectHandler` leaks `Cookie` and `Proxy-Authorization` headers on a cross-host redirect, fixed in 1.22.0. `Microsoft.Graph` 5.105.0 still asks for 1.21.1. Remove the pin once the Graph SDK's own dependency reaches 1.22.0. |
+| `Microsoft.Graph` | 5.105.0 | **`SqlGraphPush` and `SqlHierarchyPush` only.** Not referenced by the connector or the Security project. |
+| `Microsoft.Kiota.Abstractions` | 1.22.2, **pinned deliberately** | Neither push tool uses it directly. The reference exists only to raise a transitive dependency past GHSA-7j59-v9qr-6fq9 / CVE-2026-44503 (High): the Kiota `RedirectHandler` leaks `Cookie` and `Proxy-Authorization` headers on a cross-host redirect, fixed in 1.22.0. `Microsoft.Graph` 5.105.0 still asks for 1.21.1. Both push tools carry the same pin; remove them together once the Graph SDK's own dependency reaches 1.22.0. |
 
-Graph application permissions (`SqlGraphPush` only, admin consent, public
+Graph application permissions (the two push tools only, admin consent, public
 certificate uploaded to the app registration):
 `ExternalConnection.ReadWrite.OwnedBy`, `ExternalItem.ReadWrite.OwnedBy`.
+Both tools need the same pair and can share one registration, which then owns
+both connections — `OwnedBy` scopes to what the calling app created.
 The agent-hosted connector holds **no** Graph permission.
 
-[`docs/APP-REGISTRATION.md`](APP-REGISTRATION.md) specifies all three identities
+[`docs/APP-REGISTRATION.md`](APP-REGISTRATION.md) specifies every identity
 in this deployment — the connector agent's own registration, this connector's
-Key Vault identity, and `SqlGraphPush` — permission by permission, with both
+Key Vault identity, and the push tools — permission by permission, with both
 credential types, the hardening settings to apply to each, and what each
 identity must never be granted.
 
@@ -251,7 +259,7 @@ identity must never be granted.
 ## 5. Running the evidence
 
 ```powershell
-dotnet test SqlTicketsConnector.sln                                  # 40 tests, no live dependencies
+dotnet test SqlTicketsConnector.sln                                  # 50 tests, no live dependencies
 dotnet build build\SecretHygiene.proj -t:ScanAppSettingsForSecrets    # configuration hygiene
 gitleaks detect --config .gitleaks.toml --redact                      # repository history
 pre-commit run --all-files                                            # the same checks a developer gets

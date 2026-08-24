@@ -29,6 +29,11 @@ Default port: `30303`
 (control mapping), [`docs/RUNBOOK.md`](docs/RUNBOOK.md) (rotation and failure
 modes) and [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).**
 
+**Deploying the three level connector** (Customer → Engagement → TimeEntry) is a
+separate procedure with its own document:
+[`docs/HIERARCHY-DEPLOYMENT.md`](docs/HIERARCHY-DEPLOYMENT.md), covering .NET 10
+and .NET 9.
+
 **When something is wrong and you do not yet know what**, work through
 [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md): one stage at a time from
 the SQL row to the answer in Copilot, with a read-only script for each. The
@@ -99,12 +104,14 @@ deploy/
   ConnectionInfo.json                  TestApp input, no credentials
 docs/
   architecture.svg                     The data flow drawing embedded above
+  hierarchy-flow.svg                   How the three level source is flattened into flat index items
   SECURITY.md                          Control mapping for the security reviewer
   APP-REGISTRATION.md                  Entra apps, permission by permission, cert and secret
   RUNBOOK.md                           Rotation, log locations, five failure modes
   TROUBLESHOOTING.md                   Stage by stage, SQL to Copilot, when you do not yet know what broke
   TROUBLESHOOTING-DIRECT-PUSH.md       The same for SqlGraphPush, which fails differently
   HIERARCHY-TEST-CASE.md               The three level test case: why a flat index needs flattening, and how
+  HIERARCHY-DEPLOYMENT.md              Step-by-step deployment of the three level connector, net10 and net9
   ASSUMPTIONS.md                       Decisions, deviations, open questions
   agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
   hierarchy-in-copilot.pptx            Deck: how to handle hierarchical data in a flat index
@@ -136,7 +143,7 @@ src/
     Program.cs, HierarchyOptions.cs    Three level test case; same Security engine, its own schema
     appsettings.json
 tests/
-  SqlTicketsConnector.Tests/           40 tests, no live tenant, vault or database
+  SqlTicketsConnector.Tests/           50 tests, no live tenant, vault or database
 ```
 
 ---
@@ -584,8 +591,16 @@ Copilot traverses nothing?
 
 The answer is to flatten deliberately, in both directions, in SQL views: every
 descendant physically carries its ancestors' searchable text, and every ancestor
-carries a roll-up of its descendants. See
-[`docs/HIERARCHY-TEST-CASE.md`](docs/HIERARCHY-TEST-CASE.md).
+carries a roll-up of its descendants.
+
+![How the Customer, Engagement and TimeEntry hierarchy is flattened by SQL views into flat external items, each carrying its ancestors' text, so one customer search matches all three levels](docs/hierarchy-flow.svg)
+
+**To deploy it, follow [`docs/HIERARCHY-DEPLOYMENT.md`](docs/HIERARCHY-DEPLOYMENT.md)** —
+step by step, .NET 10 and .NET 9, from the SQL scripts to a Copilot answer. It is
+a separate deployment from the ticket connector: not a Windows service, not
+installed by `Install-Connector.ps1`, and sharing nothing with it at run time.
+For *why* it is built this way, read
+[`docs/HIERARCHY-TEST-CASE.md`](docs/HIERARCHY-TEST-CASE.md) first.
 
 It coexists with the ticket test case rather than replacing it — different
 tables, a different connection ID (`consultingwork`), and its own schema. Both

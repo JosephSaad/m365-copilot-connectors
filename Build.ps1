@@ -157,6 +157,10 @@ Copy-Item (Join-Path $PSScriptRoot 'sql\*.sql') (Join-Path $OutputRoot 'sql') -F
 
 New-Item -ItemType Directory -Path (Join-Path $OutputRoot 'docs') -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'docs\*.md') (Join-Path $OutputRoot 'docs') -Force
+# The drawings too: README.md and HIERARCHY-TEST-CASE.md embed them by relative
+# path, so a package with the markdown and not the SVGs has broken images in the
+# one copy an operator actually reads.
+Copy-Item (Join-Path $PSScriptRoot 'docs\*.svg') (Join-Path $OutputRoot 'docs') -Force
 
 Write-Host '== Staging source ==' -ForegroundColor Cyan
 # The package carries a buildable copy of the tree under source\, so one

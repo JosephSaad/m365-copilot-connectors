@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 910" width="1440" height="910" role="img" aria-labelledby="diagramTitle diagramDesc">
   <title id="diagramTitle">SQL Server to Microsoft 365 Copilot data flow</title>
-  <desc id="diagramDesc">Rows are read from dbo.Tickets by SqlTicketsConnector, streamed over gRPC on loopback to the Microsoft Graph connector agent, ingested into Microsoft Graph as external items, indexed in the Copilot semantic index, and returned to users as grounded, security-trimmed answers in Copilot.</desc>
+  <desc id="diagramDesc">Rows are read from dbo.Tickets by SqlTicketsConnector, streamed over gRPC on loopback to the Microsoft Graph connector agent, ingested into Microsoft Graph as external items, indexed in the Copilot semantic index, and returned to users as grounded, security-trimmed answers in Copilot. Two optional operator-run tools, SqlGraphPush and SqlHierarchyPush, bypass the agent and write to Microsoft Graph directly.</desc>
 
   <rect x="0" y="0" width="1440" height="910" fill="#ffffff"/>
 
@@ -63,10 +63,14 @@
   <text x="96" y="691" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">• Holds the tenant relationship and ingests into Microsoft Graph</text>
   <text x="96" y="713" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Runs as NT Service\GcaHostService</text>
 
-  <!-- ============ D. SqlGraphPush (optional) ============ -->
-  <rect x="72" y="771" width="576" height="72" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 4"/>
-  <text x="96" y="798" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="600" fill="#57606a">SqlGraphPush — optional, operator-run</text>
-  <text x="96" y="822" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Bypasses the agent and writes to Graph directly. Needs its own app registration.</text>
+  <!-- ============ D. the direct push tools (optional) ============ -->
+  <rect x="72" y="756" width="576" height="98" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="96" y="781" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="600" fill="#57606a">Direct push tools — optional, operator-run</text>
+  <text x="96" y="805" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12" fill="#57606a">SqlGraphPush</text>
+  <text x="216" y="805" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">dbo.Tickets — one flat table</text>
+  <text x="96" y="825" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12" fill="#57606a">SqlHierarchyPush</text>
+  <text x="216" y="825" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Customer &#8250; Engagement &#8250; TimeEntry, flattened in SQL views</text>
+  <text x="96" y="845" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Both bypass the agent. Separate connection IDs — one app owns what it creates.</text>
 
   <!-- ============ arrow 3: agent to Graph (elbow) ============ -->
   <polyline points="648,640 702,640 702,196 782,196" fill="none" stroke="#57606a" stroke-width="2"/>
@@ -78,7 +82,7 @@
   <text x="716" y="461" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">only</text>
 
   <!-- arrow: SqlGraphPush direct (dashed) -->
-  <polyline points="648,807 736,807 736,238 782,238" fill="none" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <polyline points="648,805 736,805 736,238 782,238" fill="none" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 4"/>
   <polygon points="782,232 782,244 792,238" fill="#8c959f"/>
 
   <!-- ============ E. Microsoft Graph ============ -->
