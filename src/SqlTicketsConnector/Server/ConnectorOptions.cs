@@ -47,7 +47,7 @@ namespace SqlTicketsConnector.Server
         /// <summary>Gets a value indicating whether the strict production rules apply.</summary>
         public bool IsProduction
         {
-            get { return Security.Sql.SqlConnectionStringFactory.IsProduction(this.Environment); }
+            get { return SqlConnector.Security.Sql.SqlConnectionStringFactory.IsProduction(this.Environment); }
         }
 
         /// <summary>Reads appsettings.json from beside the executable.</summary>
@@ -196,8 +196,8 @@ namespace SqlTicketsConnector.Server
             errors.RequireRange(path + ":ConnectionCallTimeoutSeconds", this.ConnectionCallTimeoutSeconds, 5, 29);
 
             if (!string.IsNullOrWhiteSpace(this.TlsCertificateThumbprint) &&
-                !Security.Certificates.CertificateSelector.IsWellFormedThumbprint(
-                    Security.Certificates.CertificateSelector.NormalizeThumbprint(this.TlsCertificateThumbprint)))
+                !SqlConnector.Security.Certificates.CertificateSelector.IsWellFormedThumbprint(
+                    SqlConnector.Security.Certificates.CertificateSelector.NormalizeThumbprint(this.TlsCertificateThumbprint)))
             {
                 errors.Add(path + ":TlsCertificateThumbprint", "must be a 40 character SHA-1 thumbprint in hexadecimal.");
             }

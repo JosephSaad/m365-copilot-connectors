@@ -212,14 +212,14 @@ namespace SqlTicketsConnector.Tests
         public void The_environment_secret_provider_refuses_to_run_in_production()
         {
             Assert.Throws<InvalidOperationException>(
-                () => new Security.Secrets.EnvironmentSecretProvider("Production", Serilog.Core.Logger.None));
+                () => new SqlConnector.Security.Secrets.EnvironmentSecretProvider("Production", Serilog.Core.Logger.None));
 
-            var provider = new Security.Secrets.EnvironmentSecretProvider("Development", Serilog.Core.Logger.None);
+            var provider = new SqlConnector.Security.Secrets.EnvironmentSecretProvider("Development", Serilog.Core.Logger.None);
             Assert.NotNull(provider);
 
             Assert.Equal(
                 "SQL_TICKETS_READER_PASSWORD",
-                Security.Secrets.EnvironmentSecretProvider.ToVariableName("sql-tickets-reader-password"));
+                SqlConnector.Security.Secrets.EnvironmentSecretProvider.ToVariableName("sql-tickets-reader-password"));
         }
     }
 }
