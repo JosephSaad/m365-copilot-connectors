@@ -19,7 +19,7 @@ it then looks exactly like the steps below, with your own names.
 | **What it is** | A console tool an operator runs. **Not** a Windows service, and **not** installed by `Install-Connector.ps1`. |
 | **Where it runs** | A workstation or jump box that can reach **both** SQL Server and `graph.microsoft.com`. |
 | **What it needs on the host** | Nothing but the package. The runtime is bundled. |
-| **Graph connection** | `consultingwork` (configurable, must not be `sqltickets`). |
+| **Graph connection** | `consultingwork` (configurable; any connection another connector registered is refused by the schema-ownership check). |
 | **Exit codes** | `0` success · `2` configuration invalid · `3` credential · `4` ingestion |
 
 If you are looking for the agent-hosted ticket connector instead, that is
@@ -181,10 +181,14 @@ code 3 for a certificate you can plainly see in `certlm.msc`. If you are using a
 client secret instead, this setting is ignored — see
 [Step 3b](#step-3b--using-a-client-secret-instead-of-a-certificate).
 
-**`Graph:ConnectionId` must not be `sqltickets`.** The tool rejects that value at
-startup. The two test cases register different schemas, a registered schema
-cannot be changed, and `OwnedBy` means whichever app created a connection is the
-only one that can manage it.
+**`Graph:ConnectionId` must be this connector's own connection.** Before
+pushing anything, the engine fetches the schema already registered on the
+connection and refuses to continue if it carries any property this connector
+does not build — a connection another connector registered fails with the
+foreign properties named, before a single item is overwritten. A registered
+schema cannot be changed, and `OwnedBy` means whichever app created a
+connection is the only one that can manage it, so the only recovery from a
+collision is a different connection ID.
 
 **`Acl:GrantGroupObjectIds` is written into every item at push time.** An empty
 or wrong value means items nobody can find, and correcting it later requires

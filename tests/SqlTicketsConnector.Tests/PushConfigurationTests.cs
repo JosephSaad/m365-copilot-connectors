@@ -2,11 +2,12 @@
 // PushConfigurationTests.cs
 // Startup validation for the shared push configuration.
 //
-// Two of these guards are not style checks. The connection ID guard is what
-// stops one connector being pointed at another's connection, where it would try
-// to register a second, incompatible schema onto a connection whose schema is
-// already fixed. The view name guard is what makes concatenating that name into
-// a query safe, since a table cannot be a parameter.
+// Two of these guards are not style checks. The neighbour guard stops one
+// connector being pointed at another's connection within an executable, and the
+// engine's schema-ownership check (PushEngineTests) covers the cross-executable
+// case without any connector naming another. The view name guard is what makes
+// concatenating that name into a query safe, since a table cannot be a
+// parameter.
 // ---------------------------------------------------------------------------
 
 namespace SqlTicketsConnector.Tests
@@ -30,27 +31,6 @@ namespace SqlTicketsConnector.Tests
 
             ValidationErrors tickets = TestData.ValidPushOptions("sqltickets", "dbo.Tickets").Validate();
             Assert.False(tickets.HasErrors, tickets.ToMessage());
-        }
-
-        [Fact]
-        public void The_hierarchy_tool_refuses_the_ticket_test_cases_connection_id()
-        {
-            // Control evidence. Sharing an ID means one tool silently cannot
-            // manage the connection the other created — OwnedBy — and the second
-            // schema cannot be registered over the first, which is already fixed.
-            PushOptions options = TestData.ValidPushOptions("sqltickets");
-            var errors = new ValidationErrors();
-
-            new HierarchyPushConnector().ValidateOptions(options, errors);
-
-            Assert.True(errors.HasErrors);
-            Assert.Contains(errors.Errors, e => e.StartsWith("Graph:ConnectionId:", StringComparison.Ordinal));
-            Assert.Contains(errors.Errors, e => e.Contains("ticket test case", StringComparison.Ordinal));
-
-            // Case is not a defence: connection IDs are matched case insensitively.
-            var upper = new ValidationErrors();
-            new HierarchyPushConnector().ValidateOptions(TestData.ValidPushOptions("SqlTickets"), upper);
-            Assert.True(upper.HasErrors);
         }
 
         [Fact]

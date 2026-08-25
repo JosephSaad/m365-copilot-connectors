@@ -136,6 +136,27 @@ public sealed class PushEngine
 
         if (connection?.State == ConnectionState.Ready)
         {
+            // The connection exists and is live - but is it OURS? A registered
+            // schema cannot be replaced, and the PUT is an upsert, so pushing
+            // into a connection another connector registered would silently
+            // corrupt its index. Instead of each connector naming the others'
+            // connection IDs - a list that goes stale the day a connector is
+            // added - compare what is actually registered against what this
+            // connector builds. Any foreign property means a foreign connection.
+            Schema? registered = null;
+
+            try
+            {
+                registered = await this.graph.External.Connections[connectionId].Schema
+                    .GetAsync(cancellationToken: cancellationToken);
+            }
+            catch (ODataError ex) when (ex.ResponseStatusCode == 404)
+            {
+                // Ready with no readable schema: nothing to compare.
+            }
+
+            VerifySchemaOwnership(connectionId, this.connector.BuildSchema(), registered, this.log);
+
             this.log.Information("Schema already registered.");
             return;
         }
@@ -303,6 +324,63 @@ public sealed class PushEngine
         }
 
         return summary;
+    }
+
+    /// <summary>
+    /// Throws when a connection's registered schema was written by a different
+    /// connector. Pure and static so the control is testable without a tenant.
+    ///
+    /// The rule accounts for append-only evolution: a property this connector
+    /// expects but the connection lacks is a pending addition (warned, not
+    /// fatal); a property the connection carries that this connector does not
+    /// build can only have come from another connector, and is fatal.
+    /// </summary>
+    /// <param name="connectionId">The connection being checked, for the error.</param>
+    /// <param name="expected">The schema this connector builds.</param>
+    /// <param name="registered">The schema Graph returned, or null when unreadable.</param>
+    /// <param name="log">Where the pending-addition warning goes.</param>
+    /// <exception cref="InvalidOperationException">The connection belongs to another connector.</exception>
+    public static void VerifySchemaOwnership(string connectionId, Schema expected, Schema? registered, ILogger log)
+    {
+        if (registered?.Properties is null || registered.Properties.Count == 0)
+        {
+            return;
+        }
+
+        var expectedNames = new HashSet<string>(
+            (expected.Properties ?? new List<Property>()).Select(p => p.Name ?? string.Empty),
+            StringComparer.OrdinalIgnoreCase);
+
+        List<string> foreign = registered.Properties
+            .Select(p => p.Name ?? string.Empty)
+            .Where(name => !expectedNames.Contains(name))
+            .ToList();
+
+        if (foreign.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Connection {connectionId} carries a schema this connector did not register: " +
+                $"propert{(foreign.Count == 1 ? "y" : "ies")} {string.Join(", ", foreign)} " +
+                $"do{(foreign.Count == 1 ? "es" : string.Empty)} not exist in this connector's schema. " +
+                "It belongs to another connector, its schema cannot be replaced, and pushing into it would " +
+                "corrupt that connector's index. Configure this connector's own Graph:ConnectionId.");
+        }
+
+        var registeredNames = new HashSet<string>(
+            registered.Properties.Select(p => p.Name ?? string.Empty),
+            StringComparer.OrdinalIgnoreCase);
+
+        List<string> pending = expectedNames.Where(name => !registeredNames.Contains(name)).ToList();
+
+        if (pending.Count > 0)
+        {
+            log.Warning(
+                "Connection {ConnectionId} does not yet carry {Count} propert(y/ies) this connector now " +
+                "builds: {Pending}. The schema is append-only; add them deliberately before relying on them.",
+                connectionId,
+                pending.Count,
+                string.Join(", ", pending));
+        }
     }
 
     /// <summary>Builds the ACL every item in the connection carries.</summary>

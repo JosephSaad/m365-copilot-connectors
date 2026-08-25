@@ -23,6 +23,7 @@ namespace SqlTicketsConnector.Tests
     using Microsoft.Graph.Models.ExternalConnectors;
     using SqlGraphPush;
     using SqlHierarchyPush;
+    using Serilog.Core;
     using SqlPushCore;
     using SqlConnector.Security.Configuration;
     using SqlTicketsConnector.Tests.TestSupport;
@@ -192,6 +193,53 @@ namespace SqlTicketsConnector.Tests
 
             Assert.DoesNotContain(
                 "IsDeleted", new TicketsPushConnector().BuildQuery(options), StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void A_connection_carrying_a_foreign_schema_is_refused_before_any_write()
+        {
+            // The cross-connector guard, connector-name-agnostic by design: no
+            // connector names another's connection ID; the engine compares what
+            // is registered against what THIS connector builds. Pointing the
+            // hierarchy tool at the tickets connection - or at any connection
+            // some future connector registers - fails here, before the upsert
+            // can overwrite a single foreign item.
+            Schema hierarchy = new HierarchyPushConnector().BuildSchema();
+            Schema tickets = new TicketsPushConnector().BuildSchema();
+
+            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
+                () => PushEngine.VerifySchemaOwnership("someconnection", hierarchy, tickets, Logger.None));
+
+            Assert.Contains("someconnection", thrown.Message, StringComparison.Ordinal);
+            Assert.Contains("ticketId", thrown.Message, StringComparison.Ordinal);
+            Assert.Contains("another connector", thrown.Message, StringComparison.Ordinal);
+
+            // And the mirror image: the tickets tool against the hierarchy schema.
+            Assert.Throws<InvalidOperationException>(
+                () => PushEngine.VerifySchemaOwnership("other", tickets, hierarchy, Logger.None));
+        }
+
+        [Fact]
+        public void A_connections_own_schema_passes_the_ownership_check()
+        {
+            Schema schema = new HierarchyPushConnector().BuildSchema();
+
+            // Identical: the normal re-run.
+            PushEngine.VerifySchemaOwnership("consultingwork", schema, schema, Logger.None);
+
+            // Older connection missing a property this connector has since
+            // added: append-only evolution, warned but never fatal.
+            var older = new Schema
+            {
+                BaseType = schema.BaseType,
+                Properties = schema.Properties.Take(schema.Properties.Count - 1).ToList(),
+            };
+
+            PushEngine.VerifySchemaOwnership("consultingwork", schema, older, Logger.None);
+
+            // Unreadable or empty registered schema: nothing to compare.
+            PushEngine.VerifySchemaOwnership("consultingwork", schema, null, Logger.None);
+            PushEngine.VerifySchemaOwnership("consultingwork", schema, new Schema(), Logger.None);
         }
 
         [Fact]

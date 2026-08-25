@@ -151,9 +151,12 @@ Found by the new tests, not by inspection:
   connector-neutral. The shared `ItemUrlTemplate` also lost its tickets-URL
   default - the agent connector now requires the value in its own validation,
   where the need actually lives. Connector-specific names survive only where
-  they are the point: `TicketsPushConnector` is the tickets connector, and the
-  hierarchy tool's guard names `sqltickets` because rejecting it is the guard's
-  job.
+  they are the point: `TicketsPushConnector` is the tickets connector. The
+  hierarchy tool's hardcoded `sqltickets` rejection guard is gone entirely,
+  replaced by an engine-level check that compares the schema registered on a
+  connection against the one the running connector builds - any foreign
+  property refuses the push with that property named, protecting every
+  connector from every other without any of them naming another.
 
 - **A two-sweep adversarial audit fixed 71 confirmed findings on 2026-08-25**,
   run at the customer's request after the engine refactor. Eleven parallel
