@@ -34,6 +34,13 @@ modes) and [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).**
 change to the engine and no effect on the connectors already there:
 [`docs/ADDING-A-PUSH-CONNECTOR.md`](docs/ADDING-A-PUSH-CONNECTOR.md).
 
+**Before building a connector at all**, check that it is the right shape of
+answer: [`docs/COPILOT-ROUTING.md`](docs/COPILOT-ROUTING.md) covers connector
+versus live tool call versus MCP versus a Foundry application, what each costs
+to build and to run, and why data you own and data you licence from a vendor
+take opposite routes. It ships with a self-contained page holding the matrices
+and an eleven question router.
+
 **Deploying the three level connector** (Customer → Engagement → TimeEntry) is a
 separate procedure with its own document:
 [`docs/HIERARCHY-DEPLOYMENT.md`](docs/HIERARCHY-DEPLOYMENT.md), covering .NET 10
@@ -119,6 +126,10 @@ docs/
   HIERARCHY-DEPLOYMENT.md              Step-by-step deployment of the three level connector, net10 and net9
   ASSUMPTIONS.md                       Decisions, deviations, open questions
   ADDING-A-PUSH-CONNECTOR.md           One class and one config file: the recipe and the reasoning
+  COPILOT-ROUTING.md                   Connector, action, MCP or Foundry - the decision upstream of this repository
+  copilot-decision-matrix.html         Self-contained tool: the matrices, the tree, and an 11 question router
+  copilot-route-decision-tree.svg      The routing drawing embedded by COPILOT-ROUTING.md
+  copilot-route-decision-tree.png      The same drawing, 2000x1624, for a deck
   GENESIS-PROMPT.md                    The prompt that produces this repository, and why it looks like this
   agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
   hierarchy-in-copilot.pptx            Deck: how to handle hierarchical data in a flat index

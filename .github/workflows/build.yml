@@ -276,6 +276,10 @@ jobs:
               'docs/HIERARCHY-DEPLOYMENT.md',
               'docs/GENESIS-PROMPT.md',
               'docs/ADDING-A-PUSH-CONNECTOR.md',
+              'docs/COPILOT-ROUTING.md',
+              'docs/copilot-decision-matrix.html',        # linked by COPILOT-ROUTING.md
+              'docs/copilot-route-decision-tree.svg',     # embedded by it
+              'docs/copilot-route-decision-tree.png',
               'docs/architecture.svg',                    # embedded by README.md
               'docs/hierarchy-flow.svg',
 

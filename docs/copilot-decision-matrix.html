@@ -1,0 +1,1625 @@
+<title>Copilot Decision Matrix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Spectral:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground:      #F2F5F4;
+    --surface:     #FBFCFC;
+    --surface-alt: #E9EEEC;
+    --ink:         #111819;
+    --ink-muted:   #55656A;
+    --ink-faint:   #859599;
+    --rule:        #D6DEDC;
+    --rule-strong: #B6C2BF;
+    --accent:      #12514E;
+    --accent-soft: #E0EAE8;
+    --full:        #1C6B4E;
+    --partial:     #A8760F;
+    --none:        #96A2A5;
+    --risk:        #A0392F;
+    --risk-soft:   #F3E4E1;
+    --shadow:      0 1px 2px rgba(17, 24, 25, .05), 0 8px 24px -16px rgba(17, 24, 25, .22);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0C1214;
+      --surface:     #141C1E;
+      --surface-alt: #1B2427;
+      --ink:         #E4EBEA;
+      --ink-muted:   #94A3A6;
+      --ink-faint:   #6E7C80;
+      --rule:        #253032;
+      --rule-strong: #354245;
+      --accent:      #58C4AF;
+      --accent-soft: #16302E;
+      --full:        #4FB187;
+      --partial:     #D3A244;
+      --none:        #67757A;
+      --risk:        #E38175;
+      --risk-soft:   #33201D;
+      --shadow:      0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0C1214;
+    --surface:     #141C1E;
+    --surface-alt: #1B2427;
+    --ink:         #E4EBEA;
+    --ink-muted:   #94A3A6;
+    --ink-faint:   #6E7C80;
+    --rule:        #253032;
+    --rule-strong: #354245;
+    --accent:      #58C4AF;
+    --accent-soft: #16302E;
+    --full:        #4FB187;
+    --partial:     #D3A244;
+    --none:        #67757A;
+    --risk:        #E38175;
+    --risk-soft:   #33201D;
+    --shadow:      0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1rem, 4vw, 2.5rem) 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2.5rem, 5vw, 4rem);
+  }
+
+  /* ---------- type ---------- */
+
+  h1, h2, h3 {
+    font-family: Spectral, ui-serif, Georgia, serif;
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0;
+    line-height: 1.15;
+  }
+
+  h1 { font-size: clamp(2rem, 4.4vw, 3rem); letter-spacing: -0.015em; }
+  h2 { font-size: clamp(1.35rem, 2.4vw, 1.75rem); }
+  h3 { font-size: 1.05rem; font-weight: 500; }
+
+  p { margin: 0; max-width: 68ch; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0;
+  }
+
+  .lede { color: var(--ink-muted); font-size: 1.06rem; }
+  .note { color: var(--ink-muted); font-size: 0.9rem; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.88em;
+  }
+
+  /* ---------- header ---------- */
+
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding-bottom: 2rem;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+  }
+
+  /* ---------- sections ---------- */
+
+  section { display: flex; flex-direction: column; gap: 1.25rem; }
+  .section-head { display: flex; flex-direction: column; gap: 0.55rem; }
+
+  /* ---------- tables ---------- */
+
+  .scroller {
+    overflow-x: auto;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 940px;
+    font-size: 0.85rem;
+  }
+
+  caption {
+    caption-side: top;
+    text-align: left;
+    padding: 0.9rem 1rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--rule);
+    background: var(--surface-alt);
+  }
+
+  th, td {
+    padding: 0.55rem 0.7rem;
+    text-align: center;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: middle;
+  }
+
+  thead th {
+    font-weight: 600;
+    font-size: 0.76rem;
+    line-height: 1.25;
+    color: var(--ink);
+    background: var(--surface-alt);
+    border-bottom: 1.5px solid var(--rule-strong);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  th.rowhead, td.rowhead {
+    text-align: left;
+    font-weight: 400;
+    color: var(--ink);
+    background: var(--surface);
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    min-width: 250px;
+    border-right: 1.5px solid var(--rule-strong);
+  }
+
+  thead th.rowhead {
+    background: var(--surface-alt);
+    z-index: 3;
+    font-weight: 600;
+  }
+
+  tbody tr:hover td, tbody tr:hover th.rowhead { background: var(--accent-soft); }
+
+  .group-row th {
+    background: var(--ground);
+    text-align: left;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 500;
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid var(--rule);
+    position: sticky;
+    left: 0;
+  }
+
+  .added thead th, .added .group-row th { border-top: none; }
+
+  /* extension marker */
+  th.new::after {
+    content: "added";
+    display: block;
+    margin-top: 0.2rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.1em;
+    font-weight: 400;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  tr.new th.rowhead { border-left: 3px solid var(--accent); }
+
+  /* ---------- capability marks ---------- */
+
+  .mark {
+    display: inline-block;
+    width: 1.05rem;
+    height: 1.05rem;
+    line-height: 1;
+    font-size: 1.05rem;
+  }
+  .m-full    { color: var(--full); }
+  .m-partial { color: var(--partial); }
+  .m-none    { color: var(--none); }
+
+  td.val {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  td.val.pos { color: var(--full); }
+  td.val.neg { color: var(--risk); }
+
+  sup.fn {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.62rem;
+    color: var(--risk);
+    font-weight: 500;
+    padding-left: 0.15em;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1.6rem;
+    font-size: 0.82rem;
+    color: var(--ink-muted);
+    padding-top: 0.25rem;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+
+  /* ---------- rule callout ---------- */
+
+  .rule-card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 3px;
+    padding: 1.5rem clamp(1.25rem, 3vw, 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    box-shadow: var(--shadow);
+  }
+  .rule-card .big {
+    font-family: Spectral, ui-serif, Georgia, serif;
+    font-size: clamp(1.3rem, 3vw, 1.9rem);
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--ink);
+  }
+  .rule-card .big em { font-style: normal; color: var(--accent); }
+
+  /* ---------- diagram ---------- */
+
+  figure { margin: 0; display: flex; flex-direction: column; gap: 0.85rem; }
+
+  .figbox {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: clamp(0.75rem, 2vw, 1.5rem);
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+  }
+  .figbox svg { display: block; width: 100%; min-width: 760px; height: auto; color: var(--ink); }
+
+  figcaption { font-size: 0.88rem; color: var(--ink-muted); max-width: 70ch; }
+
+  .n-box   { fill: var(--surface); stroke: var(--rule-strong); stroke-width: 1.25; }
+  .n-gate  { fill: var(--surface-alt); stroke: var(--ink-muted); stroke-width: 1.25; }
+  .n-start { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+  .n-index { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.75; }
+  .n-call  { fill: var(--surface-alt); stroke: var(--ink); stroke-width: 1.75; }
+  .n-esc   { fill: var(--surface-alt); stroke: var(--rule-strong); stroke-width: 1.25; stroke-dasharray: 3 3; }
+
+  .t-title { fill: var(--ink); font-family: "IBM Plex Sans", sans-serif; font-size: 13px; font-weight: 600; }
+  .t-body  { fill: var(--ink); font-family: "IBM Plex Sans", sans-serif; font-size: 12.5px; }
+  .t-cost  { fill: var(--ink-muted); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; }
+  .t-edge  { fill: var(--ink-muted); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.03em; }
+  .t-accent{ fill: var(--accent); font-family: "IBM Plex Sans", sans-serif; font-size: 13.5px; font-weight: 600; letter-spacing: 0.04em; }
+  .t-risk  { fill: var(--risk); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; }
+
+  .edge      { stroke: var(--ink-muted); stroke-width: 1.4; fill: none; }
+  .edge-risk { stroke: var(--risk); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+  .tick      { stroke: var(--rule-strong); stroke-width: 1.25; fill: none; }
+
+  /* ---------- split panels ---------- */
+
+  .panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.25rem;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    box-shadow: var(--shadow);
+  }
+  .panel.own  { border-top: 3px solid var(--full); }
+  .panel.vend { border-top: 3px solid var(--risk); }
+  .panel h3 { font-family: "IBM Plex Sans", sans-serif; font-weight: 600; font-size: 1rem; }
+  .panel .tag {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .panel.own .tag  { color: var(--full); }
+  .panel.vend .tag { color: var(--risk); }
+  .panel ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.92rem; }
+  .panel li::marker { color: var(--ink-faint); }
+  .panel .verdict {
+    margin-top: 0.25rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.92rem;
+  }
+  .panel .verdict strong { font-weight: 600; }
+
+  /* ---------- steps ---------- */
+
+  ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: 1rem; }
+  ol.steps li {
+    counter-increment: s;
+    display: grid;
+    grid-template-columns: 2.1rem 1fr;
+    gap: 0.9rem;
+    align-items: start;
+  }
+  ol.steps li::before {
+    content: counter(s);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--accent);
+    border: 1px solid var(--rule-strong);
+    border-radius: 50%;
+    width: 2.1rem;
+    height: 2.1rem;
+    display: grid;
+    place-items: center;
+  }
+  ol.steps li p { margin: 0; }
+  ol.steps li .q { font-weight: 600; display: block; }
+
+  /* ---------- caveats ---------- */
+
+  .caveats {
+    background: var(--risk-soft);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--risk);
+    border-radius: 3px;
+    padding: 1.4rem clamp(1.25rem, 3vw, 1.8rem);
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .caveats h2 { font-size: 1.15rem; }
+  .caveats ol { margin: 0; padding-left: 1.3rem; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.94rem; }
+  .caveats li::marker { font-family: "IBM Plex Mono", monospace; font-size: 0.8rem; color: var(--risk); }
+
+  /* ---------- questionnaire ---------- */
+
+  .quiz {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+    gap: 1rem;
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  .q {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1.1rem 1.15rem 1.15rem;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    box-shadow: var(--shadow);
+  }
+
+  .q legend {
+    padding: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    line-height: 1.35;
+  }
+  .q legend .qn {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    flex: none;
+  }
+  .q .hint { font-size: 0.82rem; color: var(--ink-muted); margin: 0; }
+
+  .q .opts { display: flex; flex-direction: column; gap: 0.3rem; }
+
+  .q label {
+    display: grid;
+    grid-template-columns: 1.05rem 1fr;
+    gap: 0.6rem;
+    align-items: start;
+    padding: 0.42rem 0.5rem;
+    border-radius: 2px;
+    font-size: 0.89rem;
+    line-height: 1.45;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .q label:hover { background: var(--surface-alt); }
+  .q label:has(input:checked) {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+  .q label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .q input[type="radio"] { margin: 0.32rem 0 0; accent-color: var(--accent); }
+
+  .quiz-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1.25rem;
+  }
+  .quiz-bar button {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 0.88rem;
+    font-weight: 500;
+    padding: 0.6rem 1.4rem;
+    border-radius: 3px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--ground);
+    cursor: pointer;
+  }
+  .quiz-bar button.ghost { background: transparent; color: var(--ink-muted); border-color: var(--rule-strong); }
+  .quiz-bar button:hover { filter: brightness(1.08); }
+  .quiz-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .quiz-bar .progress {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .result {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 3px;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    box-shadow: var(--shadow);
+  }
+  .result[hidden] { display: none; }
+  .result .verdict-name {
+    font-family: Spectral, ui-serif, Georgia, serif;
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--accent);
+  }
+  .result .verdict-sub { color: var(--ink-muted); font-size: 0.95rem; }
+  .result h3 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+  }
+  .result ul { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.92rem; }
+  .result .block { display: flex; flex-direction: column; gap: 0.5rem; }
+  .result .cost {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 2rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-muted);
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .result .warn li::marker { color: var(--risk); }
+  .result .warn strong { color: var(--risk); }
+  .result .incomplete { color: var(--risk); font-size: 0.92rem; }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.5rem;
+    font-size: 0.84rem;
+    color: var(--ink-faint);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Grounding &amp; delivery reference</p>
+    <h1>Copilot Decision Matrix</h1>
+    <p class="lede">Your surface matrix, reconstructed and extended with the layer it doesn't cover: how data actually reaches those surfaces, what each path costs to build and to run, and why data you own and data you licence take different routes.</p>
+    <div class="meta">
+      <span>Rows 1&ndash;12 reconstructed from source</span>
+      <span>Extended rows &amp; tables marked</span>
+      <span>Verify against current docs</span>
+    </div>
+  </header>
+
+  <!-- ============ THE RULE ============ -->
+  <section>
+    <div class="rule-card">
+      <p class="eyebrow">The rule that decides most of it</p>
+      <p class="big">Own it &rarr; <em>index it</em>. Licence it &rarr; <em>call it</em>.</p>
+      <p class="note">A Graph connector makes a persistent copy in a Microsoft-hosted index and grants it to Entra groups. Against your own content that is cheap, broad and correct. Against Moody's or S&amp;P it collides with redistribution, per-seat entitlement, derived-data and AI-use clauses simultaneously &mdash; so licensed content is fetched live, entitled by the vendor, attributed and timestamped, and never stored.</p>
+    </div>
+  </section>
+
+  <!-- ============ DECISION TREE ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Figure 1</p>
+      <h2>Routing a question by ownership, then by cost</h2>
+      <p class="lede">Four gates. The first is about reach, the second about who owns the data, and the last two are the ones that actually decide &mdash; and the only crossing path on the diagram is the exceptional one.</p>
+    </div>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 1000 812" role="img" aria-label="Decision tree: a question for Copilot routes first on whether the askers hold M365 licences, then on who owns the data. Owned content with group-shaped access must also clear a freshness and deletion-SLA gate before it is indexed by a Graph connector; everything else, including almost all vendor-licensed data, is fetched by a live tool call. Each leaf carries its build effort and running meter.">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
+            </marker>
+          </defs>
+
+
+
+  <!-- START -->
+  <rect class="n-start" x="400" y="18" width="200" height="44" rx="3"/>
+  <text class="t-title" x="500" y="45" text-anchor="middle">A question for Copilot</text>
+  <path class="edge" d="M500,62 L500,94" marker-end="url(#ar)"/>
+
+  <!-- GATE 1 -->
+  <rect class="n-gate" x="368" y="96" width="264" height="48" rx="3"/>
+  <text class="t-body" x="500" y="125" text-anchor="middle">Do the askers hold M365 licences?</text>
+
+  <path class="edge" d="M632,120 L754,120" marker-end="url(#ar)"/>
+  <text class="t-edge" x="693" y="111" text-anchor="middle">no</text>
+  <rect class="n-esc" x="756" y="88" width="230" height="64" rx="3"/>
+  <text class="t-title" x="871" y="112" text-anchor="middle">Azure AI Foundry</text>
+  <text class="t-cost" x="871" y="130" text-anchor="middle">months to build</text>
+  <text class="t-cost" x="871" y="144" text-anchor="middle">tokens + hosting + headcount</text>
+
+  <path class="edge" d="M500,144 L500,178" marker-end="url(#ar)"/>
+  <text class="t-edge" x="512" y="167">yes</text>
+
+  <!-- GATE 2 -->
+  <rect class="n-gate" x="368" y="180" width="264" height="48" rx="3"/>
+  <text class="t-body" x="500" y="209" text-anchor="middle">Who owns the data?</text>
+
+  <path class="edge" d="M500,228 L500,256 L265,256 L265,288" marker-end="url(#ar)"/>
+  <path class="edge" d="M500,256 L735,256 L735,288" marker-end="url(#ar)"/>
+  <text class="t-edge" x="352" y="248" text-anchor="middle">we own it</text>
+  <text class="t-edge" x="655" y="248" text-anchor="middle">licensed from a vendor</text>
+
+  <!-- GATE 3 : owned -->
+  <rect class="n-gate" x="110" y="290" width="310" height="74" rx="3"/>
+  <text class="t-body" x="265" y="317" text-anchor="middle">Is it content &#8212; and is access</text>
+  <text class="t-body" x="265" y="336" text-anchor="middle">expressible as Entra groups?</text>
+  <text class="t-cost" x="265" y="353" text-anchor="middle">no RLS, no MNPI, no dynamic barriers</text>
+
+  <!-- GATE 4 : licensed -->
+  <rect class="n-gate" x="580" y="290" width="310" height="74" rx="3"/>
+  <text class="t-body" x="735" y="317" text-anchor="middle">Does the licence permit indexing</text>
+  <text class="t-body" x="735" y="336" text-anchor="middle">and AI grounding?</text>
+  <text class="t-cost" x="735" y="353" text-anchor="middle">redistribution + derived data + AI rider</text>
+
+  <!-- GATE 3 outputs -->
+  <path class="edge" d="M180,364 L180,398" marker-end="url(#ar)"/>
+  <text class="t-edge" x="190" y="386">both yes</text>
+  <path class="edge" d="M390,364 L390,505"/>
+  <text class="t-edge" x="400" y="400">either one is no</text>
+
+  <!-- GATE 3b : the SLA gate -->
+  <rect class="n-gate" x="60" y="400" width="280" height="76" rx="3"/>
+  <text class="t-body" x="200" y="427" text-anchor="middle">Can you live with crawl-interval</text>
+  <text class="t-body" x="200" y="446" text-anchor="middle">freshness and crawl-bound deletion?</text>
+  <text class="t-cost" x="200" y="464" text-anchor="middle">a direct push never deletes at all</text>
+
+  <path class="edge" d="M140,476 L140,598" marker-end="url(#ar)"/>
+  <text class="t-edge" x="150" y="520">yes</text>
+  <path class="edge" d="M300,476 L300,505"/>
+  <text class="t-edge" x="310" y="496">no</text>
+
+  <!-- shared trunk to CALL -->
+  <path class="edge" d="M300,505 L660,505 L660,598" marker-end="url(#ar)"/>
+
+  <!-- GATE 4 outputs -->
+  <path class="edge" d="M820,364 L820,598" marker-end="url(#ar)"/>
+  <text class="t-edge" x="830" y="430">no &#8212; the usual answer</text>
+
+  <path class="edge-risk" d="M620,364 L620,565 L250,565 L250,598" marker-end="url(#ar)"/>
+  <text class="t-risk" x="435" y="557" text-anchor="middle">yes, with a signed AI rider &#8212; rare, and audited</text>
+
+  <!-- OUTCOME BANDS -->
+  <rect class="n-index" x="60" y="600" width="410" height="52" rx="3"/>
+  <text class="t-accent" x="265" y="624" text-anchor="middle">INDEX IT</text>
+  <text class="t-cost" x="265" y="641" text-anchor="middle">Graph connector &#183; one copy, security-trimmed, M365-wide</text>
+
+  <rect class="n-call" x="530" y="600" width="410" height="52" rx="3"/>
+  <text class="t-title" x="735" y="624" text-anchor="middle">CALL IT</text>
+  <text class="t-cost" x="735" y="641" text-anchor="middle">live tool call &#183; no copy, entitled at the source</text>
+
+  <!-- leaves -->
+  <path class="tick" d="M160,652 L160,676"/>
+  <path class="tick" d="M370,652 L370,676"/>
+  <path class="tick" d="M630,652 L630,676"/>
+  <path class="tick" d="M840,652 L840,676"/>
+
+  <rect class="n-box" x="60" y="678" width="200" height="86" rx="3"/>
+  <text class="t-title" x="160" y="702" text-anchor="middle">Gallery connector</text>
+  <text class="t-cost" x="160" y="722" text-anchor="middle">build: hours&#8211;days</text>
+  <text class="t-cost" x="160" y="737" text-anchor="middle">run: item quota</text>
+  <text class="t-cost" x="160" y="754" text-anchor="middle">check this list first</text>
+
+  <rect class="n-box" x="270" y="678" width="200" height="86" rx="3"/>
+  <text class="t-title" x="370" y="702" text-anchor="middle">Custom connector</text>
+  <text class="t-cost" x="370" y="722" text-anchor="middle">build: weeks; then days</text>
+  <text class="t-cost" x="370" y="737" text-anchor="middle">run: item quota + crawl</text>
+  <text class="t-cost" x="370" y="754" text-anchor="middle">schema is append-only</text>
+
+  <rect class="n-box" x="530" y="678" width="200" height="86" rx="3"/>
+  <text class="t-title" x="630" y="702" text-anchor="middle">API action</text>
+  <text class="t-cost" x="630" y="722" text-anchor="middle">build: days&#8211;2 weeks</text>
+  <text class="t-cost" x="630" y="737" text-anchor="middle">run: per downstream call</text>
+  <text class="t-cost" x="630" y="754" text-anchor="middle">watch LLM fan-out</text>
+
+  <rect class="n-box" x="740" y="678" width="200" height="86" rx="3"/>
+  <text class="t-title" x="840" y="702" text-anchor="middle">MCP server</text>
+  <text class="t-cost" x="840" y="722" text-anchor="middle">build: days&#8211;2 weeks</text>
+  <text class="t-cost" x="840" y="737" text-anchor="middle">run: per call, many clients</text>
+  <text class="t-cost" x="840" y="754" text-anchor="middle">you own auth + audit</text>
+
+  <text class="t-cost" x="500" y="792" text-anchor="middle">Build effort assumes the source system and its API already exist. If they do not, that is the real project.</text>
+        </svg>
+      </div>
+      <figcaption><strong>Figure 1.</strong> Ownership routes the question before cost does, and the owned branch still has to clear an SLA gate: crawl-interval freshness and crawl-bound deletion are the two promises no index path can improve on. The dashed red path is the only route that puts licensed vendor content into an index &mdash; it exists, but it needs a rider your market-data team has to negotiate, and it re-imports every entitlement obligation into a system that counts seats by Entra group.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ QUESTIONNAIRE ============ -->
+  <section id="questionnaire">
+    <div class="section-head">
+      <p class="eyebrow">Walk the tree</p>
+      <h2>Eleven questions that pick your route</h2>
+      <p class="lede">The gates in Figure 1, plus the three that decide it in practice more often than ownership does: how fast a deleted record has to disappear, how stale an answer may be, and what infrastructure you actually have. Answer what you know &mdash; the first hard gate to fire wins, and the rest becomes watch-outs.</p>
+    </div>
+
+    <form class="quiz" id="quiz">
+
+      <fieldset class="q">
+        <legend><span class="qn">Q1</span> Where do the people asking sit?</legend>
+        <div class="opts">
+          <label><input type="radio" name="reach" value="licensed"><span>Inside the tenant, all M365 Copilot licensed</span></label>
+          <label><input type="radio" name="reach" value="mixed"><span>Inside the tenant, but not everyone is Copilot licensed</span></label>
+          <label><input type="radio" name="reach" value="outside"><span>Outside the tenant &mdash; clients, external partners, the public</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="q">
+        <legend><span class="qn">Q2</span> Who owns the data?</legend>
+        <div class="opts">
+          <label><input type="radio" name="own" value="ours"><span>We own it outright</span></label>
+          <label><input type="radio" name="own" value="vendor"><span>Licensed from a vendor, no AI or redistribution rider</span></label>
+          <label><input type="radio" name="own" value="rider"><span>Licensed, <em>with</em> a signed rider permitting indexing and AI grounding</span></label>
+          <label><input type="radio" name="own" value="unknown"><span>We haven't read the agreement yet</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="q">
+        <legend><span class="qn">Q3</span> How is access controlled today?</legend>
+        <div class="opts">
+          <label><input type="radio" name="access" value="groups"><span>Static Entra groups &mdash; everyone in the group sees everything</span></label>
+          <label><input type="radio" name="access" value="rls"><span>Row-level or per-user entitlement inside the source</span></label>
+          <label><input type="radio" name="access" value="barriers"><span>Dynamic barriers &mdash; MNPI, restricted lists, deal teams that change</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="q">
+        <legend><span class="qn">Q4</span> What is the answer, actually?</legend>
+        <div class="opts">
+          <label><input type="radio" name="kind" value="content"><span>Content &mdash; documents, case notes, records with text</span></label>
+          <label><input type="radio" name="kind" value="computed"><span>A computed value &mdash; a measure, an aggregate, a price</span></label>
+          <label><input type="radio" name="kind" value="write"><span>An action &mdash; it has to write or transact</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="q">
+        <legend><span class="qn">Q5</span> How stale may an answer be?</legend>
+        <p class="hint">Freshness is bounded by crawl interval on any index path. Nothing makes an index live.</p>
+        <div class="opts">
+          <label><input type="radio" name="fresh" value="live"><span>Current to the second or minute</span></label>
+          <label><input type="radio" name="fresh" value="hour"><span>Within the hour</span></label>
+          <label><input type="radio" name="fresh" value="day"><span>Within a day</span></label>
+          <label><input type="radio" name="fresh" value="slow"><span>Weekly or slower is fine</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="q">
+        <legend><span class="qn">Q6</span> Deletion SLA &mdash; how fast must a removed record stop appearing?</legend>
+        <p class="hint">The question people forget. A direct push <em>never</em> deletes; an agent-hosted crawl deletes on its next incremental pass.</p>
+        <div class="opts">
+          <label><input type="radio" name="del" value="immediate"><span>Immediately &mdash; right to erasure, or a compliance takedown</span></label>
+          <label><input type="radio" name="del" value="sameday"><span>Same business day</span></label>
+          <label><input type="radio" name="del" value="crawl"><span>By the next scheduled crawl is acceptable</span></label>
+          <label><input type="radio" name="del" value="never"><span>Records are effectively never deleted</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="q">
+        <legend><span class="qn">Q7</span> What infrastructure do you actually have?</legend>
+        <div class="opts">
+          <label><input type="radio" name="infra" value="onprem"><span>An on-prem Windows host that can run the Graph connector agent</span></label>
+          <label><input type="radio" name="infra" value="cloudjob"><span>No on-prem host &mdash; a VM or scheduled job with outbound HTTPS</span></label>
+          <label><input type="radio" name="infra" value="none"><span>Nothing. It has to be configuration only</span></label>
+          <label><input type="radio" name="infra" value="azure"><span>We can stand up Azure with VNet and private endpoints</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="q">
+        <legend><span class="qn">Q8</span> What can the source be read through?</legend>
+        <div class="opts">
+          <label><input type="radio" name="src" value="gallery"><span>It's on Microsoft's connector gallery list</span></label>
+          <label><input type="radio" name="src" value="sql"><span>A SQL or otherwise queryable database</span></label>
+          <label><input type="radio" name="src" value="api"><span>A REST API</span></label>
+          <label><input type="radio" name="src" value="neither"><span>Neither &mdash; no API, no queryable interface</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="q">
+        <legend><span class="qn">Q9</span> Roughly how many items?</legend>
+        <div class="opts">
+          <label><input type="radio" name="vol" value="small"><span>Under ~50,000</span></label>
+          <label><input type="radio" name="vol" value="mid"><span>50,000 to 500,000</span></label>
+          <label><input type="radio" name="vol" value="large"><span>Over 500,000, or unbounded</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="q">
+        <legend><span class="qn">Q10</span> How many more sources like this are coming?</legend>
+        <div class="opts">
+          <label><input type="radio" name="reuse" value="one"><span>This is the only one</span></label>
+          <label><input type="radio" name="reuse" value="few"><span>Two or three more, probably</span></label>
+          <label><input type="radio" name="reuse" value="many"><span>Many &mdash; this is a pattern we'll repeat</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="q">
+        <legend><span class="qn">Q11</span> What does compliance require of the data boundary?</legend>
+        <div class="opts">
+          <label><input type="radio" name="iso" value="tenant"><span>The M365 tenant boundary is acceptable</span></label>
+          <label><input type="radio" name="iso" value="nocopy"><span>No second copy &mdash; it must not be indexed anywhere</span></label>
+          <label><input type="radio" name="iso" value="vnet"><span>Network isolation, our own region and retention</span></label>
+        </div>
+      </fieldset>
+
+    </form>
+
+    <div class="quiz-bar">
+      <button type="button" id="run">Show my route</button>
+      <button type="button" class="ghost" id="clear">Clear</button>
+      <span class="progress" id="progress">0 of 11 answered</span>
+    </div>
+
+    <div class="result" id="result" hidden>
+      <div class="block">
+        <h3>Your route</h3>
+        <p class="verdict-name" id="r-name"></p>
+        <p class="verdict-sub" id="r-sub"></p>
+      </div>
+      <div class="cost" id="r-cost"></div>
+      <div class="block">
+        <h3>Why &mdash; the gate that fired</h3>
+        <ul id="r-why"></ul>
+      </div>
+      <div class="block" id="r-warn-block">
+        <h3>Watch-outs from your other answers</h3>
+        <ul class="warn" id="r-warn"></ul>
+      </div>
+      <p class="incomplete" id="r-incomplete" hidden></p>
+    </div>
+  </section>
+
+  <!-- ============ MATRIX A ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Table 1</p>
+      <h2>Surfaces &mdash; where the person is standing</h2>
+      <p class="lede">Rows 1&ndash;12 are your original matrix. The block below the rule is the extension: the questions that decide whether a surface can carry regulated or licensed data at all. <strong>Azure AI Foundry</strong> is added as a ninth column, because "the askers aren't M365 users" is a real branch and nothing in the original grid answers it.</p>
+    </div>
+
+    <div class="scroller">
+      <table>
+        <caption>Capability by surface &middot; &#9679; full &nbsp; &#9686; partial &nbsp; &ndash; not available</caption>
+        <thead>
+          <tr>
+            <th class="rowhead" scope="col">Capability</th>
+            <th scope="col">Copilot<br>Chat</th>
+            <th scope="col">M365<br>Copilot Chat</th>
+            <th scope="col">SharePoint<br>Agent</th>
+            <th scope="col">Agent<br>Builder</th>
+            <th scope="col">Copilot<br>Studio</th>
+            <th scope="col">Researcher<br>&amp; Analyst</th>
+            <th scope="col">Frontier<br>Cowork</th>
+            <th scope="col">Frontier<br>Workflows</th>
+            <th scope="col" class="new">Azure AI<br>Foundry</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="group-row"><th colspan="10" scope="colgroup">Grounding &mdash; what it can see</th></tr>
+
+          <tr>
+            <th class="rowhead" scope="row">Answers from public web</th>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Answers from personal M365 data<br><span class="note">emails, calendar, files, Teams</span></th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Answers from SharePoint documents</th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Uses Graph connectors / enterprise data<sup class="fn">1</sup></th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+          </tr>
+
+          <tr class="group-row"><th colspan="10" scope="colgroup">Doing &mdash; what it can act on</th></tr>
+
+          <tr>
+            <th class="rowhead" scope="row">Can take actions (read + write data)<sup class="fn">2</sup></th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Autonomous / long-running tasks</th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Deep research (multi-source reasoning)</th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Data analysis / Python execution</th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Personal workflow automation</th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+          </tr>
+
+          <tr class="group-row"><th colspan="10" scope="colgroup">Reach &amp; effort</th></tr>
+
+          <tr>
+            <th class="rowhead" scope="row">No code needed</th>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Available without an M365 Copilot licence<sup class="fn">3</sup></th>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Shareable to non-M365 users</th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+          </tr>
+
+          <tr class="group-row"><th colspan="10" scope="colgroup">Extension &mdash; regulated data, licensing and cost</th></tr>
+
+          <tr class="new">
+            <th class="rowhead" scope="row">Enforces entitlement live at the source<br><span class="note">RLS, per-seat, information barriers</span></th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Fits licensed third-party data<br><span class="note">Moody's, S&amp;P &mdash; without a redistribution rider</span></th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Network isolation &mdash; VNet, private endpoint</th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">You choose the model</th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Initial build effort</th>
+            <td class="val pos">none</td>
+            <td class="val pos">none</td>
+            <td class="val pos">hours</td>
+            <td class="val">hours&ndash;days</td>
+            <td class="val">days&ndash;weeks</td>
+            <td class="val pos">none</td>
+            <td class="val pos">none</td>
+            <td class="val">hours</td>
+            <td class="val neg">months</td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Recurrent meter</th>
+            <td class="val">per user</td>
+            <td class="val">per licence</td>
+            <td class="val">per licence</td>
+            <td class="val">per licence</td>
+            <td class="val">per message</td>
+            <td class="val">per licence</td>
+            <td class="val">per licence</td>
+            <td class="val">per licence</td>
+            <td class="val neg">tokens + hosting + ops</td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Whose budget</th>
+            <td class="val">IT</td>
+            <td class="val">IT</td>
+            <td class="val">IT</td>
+            <td class="val">IT</td>
+            <td class="val">business unit</td>
+            <td class="val">IT</td>
+            <td class="val">IT</td>
+            <td class="val">IT</td>
+            <td class="val">business unit + Azure</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="legend">
+      <span><span class="mark m-full">&#9679;</span> Full capability</span>
+      <span><span class="mark m-partial">&#9686;</span> Partial / out of the box only</span>
+      <span><span class="mark m-none">&ndash;</span> Not available</span>
+      <span><sup class="fn">n</sup> See <a href="#verify">verify before relying on this</a></span>
+    </div>
+  </section>
+
+  <!-- ============ MATRIX B ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Table 2 &middot; added</p>
+      <h2>Delivery paths &mdash; how the data gets there</h2>
+      <p class="lede">The layer your original matrix doesn't cover, and the one where the money and the licensing risk actually sit. These are not alternatives to the surfaces above; every surface consumes one or more of them.</p>
+    </div>
+
+    <div class="scroller">
+      <table>
+        <caption>Grounding &amp; invocation paths &middot; cost, freshness, and data fit</caption>
+        <thead>
+          <tr>
+            <th class="rowhead" scope="col">&nbsp;</th>
+            <th scope="col">Gallery<br>connector</th>
+            <th scope="col">Custom<br>connector</th>
+            <th scope="col">API action<br>/ plugin</th>
+            <th scope="col">MCP<br>server</th>
+            <th scope="col">Foundry<br>application</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="group-row"><th colspan="6" scope="colgroup">What it is</th></tr>
+          <tr>
+            <th class="rowhead" scope="row">Layer</th>
+            <td class="val">retrieval</td>
+            <td class="val">retrieval</td>
+            <td class="val">invocation</td>
+            <td class="val">invocation</td>
+            <td class="val">application</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Freshness of the answer</th>
+            <td class="val">crawl interval</td>
+            <td class="val">crawl interval</td>
+            <td class="val pos">live</td>
+            <td class="val pos">live</td>
+            <td class="val">your design</td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Deletion latency<br><span class="note">removed record stops appearing</span></th>
+            <td class="val">next crawl</td>
+            <td class="val neg">agent-hosted: next incremental crawl<br>direct push: <strong>never</strong></td>
+            <td class="val pos">immediate &mdash; nothing was stored</td>
+            <td class="val pos">immediate</td>
+            <td class="val">your design</td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Infrastructure you must provide</th>
+            <td class="val pos">none</td>
+            <td class="val">Windows host + connector agent, <em>or</em> a scheduled job with outbound HTTPS</td>
+            <td class="val">somewhere to host the action shim</td>
+            <td class="val">a host for the server</td>
+            <td class="val neg">Azure subscription, network, ops</td>
+          </tr>
+
+          <tr class="group-row"><th colspan="6" scope="colgroup">Cost</th></tr>
+          <tr>
+            <th class="rowhead" scope="row">Initial build</th>
+            <td class="val pos">hours&ndash;days</td>
+            <td class="val neg">weeks<br><span class="note">days for the next one</span></td>
+            <td class="val">days&ndash;2 weeks</td>
+            <td class="val">days&ndash;2 weeks</td>
+            <td class="val neg">months</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Recurrent meter</th>
+            <td class="val">item quota</td>
+            <td class="val">item quota + crawl compute</td>
+            <td class="val">per downstream call</td>
+            <td class="val">per downstream call</td>
+            <td class="val neg">tokens + hosting + search</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">The recurrent cost nobody budgets</th>
+            <td class="val pos">low &mdash; Microsoft maintains it</td>
+            <td class="val neg">append-only schema; orphan reconciliation; source drift</td>
+            <td class="val neg">LLM fan-out multiplies vendor queries</td>
+            <td class="val neg">you own auth, audit and rate limiting</td>
+            <td class="val neg">headcount &mdash; evals, incidents, model updates</td>
+          </tr>
+
+          <tr class="group-row"><th colspan="6" scope="colgroup">Security &amp; data boundary</th></tr>
+          <tr>
+            <th class="rowhead" scope="row">Who enforces access</th>
+            <td class="val">Entra ACL, written at push time</td>
+            <td class="val">Entra ACL, written at push time</td>
+            <td class="val pos">the source, live, as the user</td>
+            <td class="val">the server &mdash; you build it</td>
+            <td class="val">you build it</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Persistent copy created?</th>
+            <td class="val neg">yes &mdash; M365 tenant index</td>
+            <td class="val neg">yes &mdash; M365 tenant index</td>
+            <td class="val pos">no</td>
+            <td class="val pos">no</td>
+            <td class="val">yes &mdash; in your Azure</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Audit trail of who saw what</th>
+            <td class="val">limited</td>
+            <td class="val">limited</td>
+            <td class="val pos">source / vendor API logs</td>
+            <td class="val">your logs</td>
+            <td class="val pos">yours, by design</td>
+          </tr>
+
+          <tr class="group-row"><th colspan="6" scope="colgroup">Data fit</th></tr>
+          <tr>
+            <th class="rowhead" scope="row">First-party content, group-shaped access</th>
+            <td><span class="mark m-full">&#9679;</span><div class="val">best fit if listed</div></td>
+            <td><span class="mark m-full">&#9679;</span><div class="val">best fit otherwise</div></td>
+            <td><span class="mark m-none">&ndash;</span><div class="val">rebuilding search</div></td>
+            <td><span class="mark m-none">&ndash;</span><div class="val">no index</div></td>
+            <td><span class="mark m-partial">&#9686;</span><div class="val">over-engineered</div></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">First-party with RLS, MNPI or barriers</th>
+            <td><span class="mark m-none">&ndash;</span><div class="val">loses the model</div></td>
+            <td><span class="mark m-none">&ndash;</span><div class="val">loses the model</div></td>
+            <td><span class="mark m-full">&#9679;</span><div class="val">source enforces</div></td>
+            <td><span class="mark m-partial">&#9686;</span><div class="val">if you build it</div></td>
+            <td><span class="mark m-full">&#9679;</span><div class="val">if isolation is required</div></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Licensed third-party <span class="note">(Moody's, S&amp;P)</span></th>
+            <td><span class="mark m-none">&ndash;</span><div class="val">redistribution</div></td>
+            <td><span class="mark m-none">&ndash;</span><div class="val">redistribution</div></td>
+            <td><span class="mark m-full">&#9679;</span><div class="val">best fit</div></td>
+            <td><span class="mark m-full">&#9679;</span><div class="val">good, multi-client</div></td>
+            <td><span class="mark m-partial">&#9686;</span><div class="val">needs licence review</div></td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Metadata <em>about</em> licensed data</th>
+            <td><span class="mark m-partial">&#9686;</span></td>
+            <td><span class="mark m-full">&#9679;</span><div class="val">the hybrid pattern</div></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 1P vs 3P ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">The split that matters most</p>
+      <h2>Data you own vs data you licence</h2>
+      <p class="lede">Same technology, opposite answers &mdash; and the deciding factor is contractual, not technical. Get the licence read before the architecture is drawn, because it changes the design rather than the paperwork.</p>
+    </div>
+
+    <div class="panels">
+      <div class="panel own">
+        <p class="tag">First-party &mdash; you own it</p>
+        <h3>Index it, and index it broadly</h3>
+        <ul>
+          <li><strong>No redistribution question.</strong> It's yours; a second copy in your own tenant index costs you nothing contractual.</li>
+          <li><strong>No per-query meter.</strong> Crawl cost is compute you already pay for. Widening the audience is free.</li>
+          <li><strong>M365-wide reach for one build.</strong> One connector puts the content in Copilot chat, Word, Outlook, Teams and Search without a retrieval story per surface.</li>
+          <li><strong>The second source is cheap.</strong> Once the engine exists, a new SQL source is a class and a config file &mdash; weeks becomes days.</li>
+        </ul>
+        <p class="verdict"><strong>But not always.</strong> Row-level security, MNPI, restricted lists and dynamic information barriers are all first-party and all wrong for an index &mdash; a Graph ACL is written at push time, and a wall-crossing next Tuesday isn't in it. Those go through a live call like vendor data does.</p>
+      </div>
+
+      <div class="panel vend">
+        <p class="tag">Third-party &mdash; you licence it</p>
+        <h3>Call it live, and never store it</h3>
+        <ul>
+          <li><strong>Redistribution.</strong> A searchable corpus serving users is usually storage and redistribution, not internal use. It needs an explicit rider.</li>
+          <li><strong>Entitlement counting.</strong> Index it, ACL it to a group, and you have entitled everyone in that group. Pay for 200 seats, expose 3,000, and that is exactly what an audit finds.</li>
+          <li><strong>AI and derived-data clauses.</strong> Recent agreements address ingestion into AI systems explicitly. Several vendors now sell an AI-use tier &mdash; ask what it costs before designing around it.</li>
+          <li><strong>Caching windows and attribution.</strong> Many agreements cap retention and require source and as-of timestamp. Last Tuesday's index entry satisfies neither.</li>
+        </ul>
+        <p class="verdict"><strong>The trap:</strong> the LLM decides how many calls to make. "Compare our exposure across these fifteen counterparties" is fifteen vendor lookups per turn, per user. Model volume at 5&ndash;10&times; human usage, budget per user per day in the action itself, and log call volume from day one.</p>
+      </div>
+    </div>
+
+    <div class="rule-card">
+      <p class="eyebrow">The hybrid that resolves all three cases</p>
+      <p class="big">Index the metadata. <em>Call for the value.</em></p>
+      <p class="note">Index that you <em>hold</em> a rating for an issuer, its as-of date, the methodology, your own analyst commentary, and a link &mdash; all of which is either yours or non-substantive. Then fetch the rating itself live, entitled and attributed. Copilot answers <em>"which issuers did we downgrade internally last quarter, and what does Moody's say now?"</em> &mdash; first half from the index, second from the call. Neither half alone gets there, and the licensed content never lands in the index. The same shape resolved your Power BI semantic model and your Fabric warehouse.</p>
+    </div>
+  </section>
+
+  <!-- ============ THREE QUESTIONS ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">In practice</p>
+      <h2>Three questions, in order</h2>
+    </div>
+    <ol class="steps">
+      <li><p><span class="q">Where is the person standing when they ask?</span> Teams, Word or Outlook &rarr; an M365 surface, grounded by a connector. Your public site or a call-centre desktop &rarr; Foundry or Copilot Studio; M365 Copilot is not reachable from there. An IDE or an analyst's tooling &rarr; MCP.</p></li>
+      <li><p><span class="q">Is the answer content, or is it computed?</span> Text that can sit still &mdash; a ticket, a case note, a policy, a measure's <em>definition</em> &mdash; index it. A number that moves, or anything that writes &mdash; call it. Indexing a computed value freezes it, and a frozen number that disagrees with the live report is a control problem, not a nuisance.</p></li>
+      <li><p><span class="q">Who enforces access, and can they still do it afterwards?</span> If the answer is "the source system, live, per user", you cannot index it without losing the enforcement. That single question resolves RLS, MNPI, information barriers and vendor seat licensing in one move.</p></li>
+    </ol>
+  </section>
+
+  <!-- ============ CAVEATS ============ -->
+  <section id="verify">
+    <div class="caveats">
+      <h2>Verify before you rely on this</h2>
+      <ol>
+        <li><strong>Row 4, Graph connectors.</strong> Your source shows M365 Copilot Chat as unable to use Graph connector content, which contradicts how connector grounding is documented to work &mdash; connector content is a primary grounding source for licensed Copilot chat. I have reproduced the cell as photographed rather than silently correcting it. Check it; I believe it is a source error.</li>
+        <li><strong>Row 5, actions from Agent Builder.</strong> Declarative agents built there do support API plugins and actions, so the flat "not available" is likely too strong. Reproduced as photographed; extended rows mark it partial.</li>
+        <li><strong>Row 11, Researcher &amp; Analyst without a Copilot licence.</strong> These have historically required an M365 Copilot licence or an agent add-on. Reproduced as photographed &mdash; worth confirming against your own tenant's licensing.</li>
+        <li><strong>Frontier Cowork and Frontier Workflows</strong> are early-access programme features. Names, availability and capabilities move quickly and may already differ from both the source and this page.</li>
+        <li><strong>No prices anywhere on this page, deliberately.</strong> I cannot verify current M365 Copilot, Copilot Studio or Azure rate cards, and invented figures in a financial-services business case are worse than none. Effort bands and cost <em>shape</em> are what's stable; get the numbers from your licensing desk.</li>
+        <li><strong>Vendor licence terms are the gating item.</strong> The third-party column reflects the common shape of market-data agreements, not yours. Redistribution, derived data, caching, AI use and audit clauses need reading by your market-data licensing team, in writing, before engineering starts.</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    <p>Reconstructed from a photographed capability matrix and extended with the grounding, cost and data-provenance analysis from the surrounding architecture review.</p>
+    <p>Microsoft's Copilot surface naming and capability boundaries move faster than anything else in this stack &mdash; particularly MCP support inside M365 and the line between declarative agents and Copilot Studio. Treat the tables as the shape of the decision, and confirm current boundaries before committing.</p>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var FIELDS = ["reach","own","access","kind","fresh","del","infra","src","vol","reuse","iso"];
+
+  var ROUTES = {
+    gallery: {
+      name: "Gallery Graph connector",
+      sub: "Configuration, not code. Microsoft maintains it, and it is the only path here with no engineering to own.",
+      cost: ["build: hours–days", "run: item quota", "maintenance: Microsoft's"]
+    },
+    custom: {
+      name: "Custom Graph connector",
+      sub: "Your own crawler or push tool. Weeks for the first one; days for every one after it, once the engine exists.",
+      cost: ["build: weeks (then days)", "run: item quota + crawl compute", "maintenance: yours — append-only schema"]
+    },
+    action: {
+      name: "API action — call it live",
+      sub: "No copy, no index. The source enforces entitlement per user at answer time and returns its own as-of timestamp.",
+      cost: ["build: days–2 weeks", "run: per downstream call", "maintenance: API contract drift"]
+    },
+    mcp: {
+      name: "MCP server",
+      sub: "The same invocation layer as an API action, exposed once to many clients instead of wired per surface.",
+      cost: ["build: days–2 weeks", "run: per downstream call", "maintenance: you own auth + audit"]
+    },
+    foundry: {
+      name: "Azure AI Foundry application",
+      sub: "You own the whole application — model, retrieval, guardrails, network, evaluation and operations.",
+      cost: ["build: months", "run: tokens + hosting + search", "maintenance: headcount"]
+    },
+    blocked: {
+      name: "No viable path yet",
+      sub: "Something has to be built or agreed before any Copilot route exists.",
+      cost: ["build: unknown", "run: unknown", "maintenance: unknown"]
+    }
+  };
+
+  function read() {
+    var a = {};
+    FIELDS.forEach(function (f) {
+      var el = document.querySelector('input[name="' + f + '"]:checked');
+      a[f] = el ? el.value : null;
+    });
+    return a;
+  }
+
+  function answered(a) {
+    return FIELDS.filter(function (f) { return a[f]; }).length;
+  }
+
+  function decide(a) {
+    var why = [];
+    var route = null;
+
+    function gate(condition, key, reason) {
+      if (route || !condition) { return; }
+      route = key;
+      why.push(reason);
+    }
+
+    gate(a.src === "neither", "blocked",
+      "The source has no API and nothing queryable. There is no route until one exists — building that interface is the real project.");
+
+    gate(a.iso === "vnet", "foundry",
+      "Compliance requires network isolation and your own region. No M365 surface offers a VNet or a private endpoint; only an application you host does.");
+
+    gate(a.reach === "outside", "foundry",
+      "The askers are outside the tenant. M365 Copilot is not reachable by people without an Entra identity in it, however well a connector would have worked.");
+
+    gate(a.iso === "nocopy", "action",
+      "Compliance forbids a second copy. Every index path creates one by definition, so the answer has to be fetched at the moment it is asked.");
+
+    gate(a.own === "vendor", "action",
+      "The data is vendor-licensed with no rider. Indexing it is a redistribution and entitlement event: an ACL grants everyone in the group, and vendors audit seat counts.");
+
+    gate(a.own === "unknown", "action",
+      "The agreement has not been read yet. Calling live is the reversible choice — it commits to nothing that an indexing rider would later have to permit.");
+
+    gate(a.access === "barriers", "action",
+      "Access is governed by dynamic barriers. A Graph ACL is written at push time; a wall-crossing next Tuesday is not in it, and nothing goes back to fix items already written.");
+
+    gate(a.access === "rls", "action",
+      "Access is row-level inside the source. Flattening rows into items discards that enforcement silently — the push succeeds, the search works, and nobody notices.");
+
+    gate(a.kind === "write", "action",
+      "It has to write. That is a tool call by definition; retrieval cannot do it.");
+
+    gate(a.kind === "computed", "action",
+      "The answer is computed. Indexing freezes one result, and a frozen number that disagrees with the live report is a control problem rather than a nuisance.");
+
+    gate(a.fresh === "live", "action",
+      "The answer must be current to the minute. Nothing makes an index live — freshness on any index path is bounded by the crawl interval.");
+
+    gate(a.del === "immediate", "action",
+      "A removed record must disappear immediately. No index path can promise that: a direct push never deletes at all, and a crawl deletes on its next pass at best.");
+
+    gate(a.src === "gallery", "gallery",
+      "Owned, group-shaped content, and the source is already on Microsoft's list. Take the configuration answer before writing anything.");
+
+    gate(a.own !== null && a.access === "groups" && a.kind === "content", "custom",
+      "Owned content, group-shaped access, and no freshness or deletion pressure. This is what a Graph connector is for: one build, security-trimmed, appearing across every M365 surface.");
+
+    if (!route) {
+      route = "custom";
+      why.push("No hard gate fired on what you have answered so far. Owned content with group-shaped access defaults to the index path — but finish the questions before relying on that.");
+    }
+
+    if (route === "action" && a.reuse === "many") {
+      why.push("Because many more sources are coming, expose it as an MCP server rather than a per-surface action — the same invocation layer, written once for every client.");
+      route = "mcp";
+    }
+
+    return { route: route, why: why };
+  }
+
+  function warnings(a, route) {
+    var w = [];
+    var index = (route === "gallery" || route === "custom");
+
+    if (index && a.del === "sameday") {
+      w.push("<strong>Same-day deletion constrains which index model you may use.</strong> Only the agent-hosted connector deletes, and only on its next incremental crawl — so you need a soft-delete column, crawls scheduled inside the SLA, and a monitor proving they ran. Direct push cannot meet this at all.");
+    }
+    if (index && a.del === "crawl" && a.infra !== "onprem") {
+      w.push("<strong>Without an on-prem host you are on the direct push model, which never deletes.</strong> Excluded rows leave their items in the index indefinitely. Budget for periodic reconciliation and someone to run the deletes it finds.");
+    }
+    if (index && a.del === "never") {
+      w.push("“Never deleted” is worth re-checking with the record owner. Retention schedules, erasure requests and legal holds all delete things a system diagram calls permanent.");
+    }
+    if (index && a.fresh === "hour") {
+      w.push("<strong>Hourly freshness is tight for a crawl.</strong> It needs a watermark column, incremental crawls, and an alert when the watermark chain breaks — a silent break looks exactly like “nothing changed today”.");
+    }
+    if (index && a.vol === "large") {
+      w.push("<strong>Over 500,000 items is quota territory.</strong> Check your Copilot item allowance against licence count before designing the schema, and expect to narrow the grain rather than index everything.");
+    }
+    if (index && a.vol === "mid") {
+      w.push("Check the item quota against your licence count now, rather than after the first full crawl.");
+    }
+    if (index && a.infra === "none") {
+      w.push("<strong>This conflicts with your infrastructure answer.</strong> A custom connector needs somewhere to run — a Windows host for the agent, or at minimum a scheduled job. If there is genuinely nothing, the only routes are a gallery connector or a SaaS-hosted source.");
+    }
+    if (route === "custom" && a.infra === "onprem") {
+      w.push("With an on-prem host you can use the agent-hosted model, which is the only one supporting incremental crawls and deletions. Prefer it over direct push unless something specific rules it out.");
+    }
+    if (route === "custom" && a.reuse === "one") {
+      w.push("For a single source, weeks of engineering never amortises. Push hard on whether a gallery connector or a small action would do before committing.");
+    }
+    if (route === "custom" && a.reuse === "many") {
+      w.push("Build the shared engine before the second connector, not after the third. The marginal source should cost a class and a config file, not another copy of the program.");
+    }
+    if ((route === "action" || route === "mcp") && (a.own === "vendor" || a.own === "rider")) {
+      w.push("<strong>Model query volume at 5–10× human usage.</strong> The model decides how many calls to make, and one question about fifteen counterparties is fifteen metered vendor lookups. Put a per-user daily budget in the action itself and log call volume from day one.");
+      w.push("If you reach for a cache to control that volume, read the retention clause first — caching may be the thing the live call was avoiding. A short TTL agreed explicitly with the vendor is the usual middle ground.");
+    }
+    if ((route === "action" || route === "mcp") && a.reach === "mixed") {
+      w.push("Not everyone is Copilot licensed. Confirm which surfaces your unlicensed users can actually reach before assuming the action is available to them.");
+    }
+    if (route === "foundry" && a.reuse !== "many") {
+      w.push("<strong>Foundry is months, and then headcount.</strong> For a single use case, check whether Copilot Studio published to an external channel clears the bar first — it usually does, unless the constraint was network isolation.");
+    }
+    if (route === "foundry") {
+      w.push("You are taking on a production AI application: evaluation regression, model updates, incident response and its own audit trail. Name the team that owns it before the build starts.");
+    }
+    if (a.own === "unknown") {
+      w.push("<strong>Get the licence read.</strong> Redistribution, derived data, caching, AI use and audit clauses decide this architecture rather than decorate it — and several vendors now sell an AI-use tier that may be cheaper than designing around its absence.");
+    }
+    if (a.own === "rider" && index) {
+      w.push("A rider permits indexing but does not make entitlement someone else's problem. You still have to keep the Graph ACL aligned with the seats you pay for, and prove it at audit.");
+    }
+    if (index && a.src === "api") {
+      w.push("Crawling a REST API means paging, rate limits, and a watermark the API may not expose. Confirm it can answer “what changed since X” before committing to incremental crawls.");
+    }
+    if (route === "gallery" && a.access && a.access !== "groups") {
+      w.push("Gallery connectors map source permissions in their own way. Verify the ACL it actually produces against your access model before trusting it.");
+    }
+    return w;
+  }
+
+  function render() {
+    var a = read();
+    var d = decide(a);
+    var r = ROUTES[d.route];
+    var n = answered(a);
+
+    document.getElementById("r-name").textContent = r.name;
+    document.getElementById("r-sub").textContent = r.sub;
+
+    var cost = document.getElementById("r-cost");
+    cost.textContent = "";
+    r.cost.forEach(function (c) {
+      var s = document.createElement("span");
+      s.textContent = c;
+      cost.appendChild(s);
+    });
+
+    var why = document.getElementById("r-why");
+    why.textContent = "";
+    d.why.forEach(function (t) {
+      var li = document.createElement("li");
+      li.textContent = t;
+      why.appendChild(li);
+    });
+
+    var w = warnings(a, d.route);
+    var warnBlock = document.getElementById("r-warn-block");
+    var warnList = document.getElementById("r-warn");
+    warnList.textContent = "";
+    if (w.length) {
+      warnBlock.hidden = false;
+      w.forEach(function (t) {
+        var li = document.createElement("li");
+        li.innerHTML = t;
+        warnList.appendChild(li);
+      });
+    } else {
+      warnBlock.hidden = true;
+    }
+
+    var inc = document.getElementById("r-incomplete");
+    if (n < FIELDS.length) {
+      inc.hidden = false;
+      inc.textContent = "Answered " + n + " of " + FIELDS.length + ". The route can still change — a gate only fires on a question you have answered.";
+    } else {
+      inc.hidden = true;
+    }
+
+    document.getElementById("result").hidden = false;
+  }
+
+  function progress() {
+    var n = answered(read());
+    document.getElementById("progress").textContent = n + " of " + FIELDS.length + " answered";
+    if (!document.getElementById("result").hidden) { render(); }
+  }
+
+  document.getElementById("quiz").addEventListener("change", progress);
+  document.getElementById("run").addEventListener("click", render);
+  document.getElementById("clear").addEventListener("click", function () {
+    document.getElementById("quiz").reset();
+    document.getElementById("result").hidden = true;
+    progress();
+  });
+
+  progress();
+})();
+</script>
