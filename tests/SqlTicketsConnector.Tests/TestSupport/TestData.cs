@@ -13,6 +13,8 @@ namespace SqlTicketsConnector.Tests.TestSupport
     using Serilog;
     using Serilog.Core;
     using Serilog.Events;
+    using SqlGraphPush;
+    using SqlHierarchyPush;
     using SqlTicketsConnector.Connector;
     using SqlTicketsConnector.Logging;
     using SqlTicketsConnector.Security.Configuration;
@@ -24,6 +26,33 @@ namespace SqlTicketsConnector.Tests.TestSupport
     {
         /// <summary>An Entra group object ID used by the ACL tests.</summary>
         public const string GroupObjectId = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+
+        /// <summary>Certificate mode auth that passes validation.</summary>
+        public static AuthOptions ValidAuth()
+        {
+            return new AuthOptions
+            {
+                Mode = "Certificate",
+                TenantId = "8f3a1c22-0d5e-4a1e-9c2b-6a7d5e4f3b21",
+                ClientId = "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed",
+                CertificateStoreLocation = "LocalMachine",
+                CertificateThumbprints = new List<string> { new string('A', 40) },
+                ExpiryWarningDays = 30,
+            };
+        }
+
+        /// <summary>Windows integrated SQL settings that pass validation.</summary>
+        public static DataSourceOptions ValidDataSource()
+        {
+            return new DataSourceOptions
+            {
+                Server = "sql01.contoso.local",
+                Database = "Ops",
+                SqlAuthMode = "WindowsIntegrated",
+                MaxContentBytes = 3670016,
+                SoftDeleteEnabled = true,
+            };
+        }
 
         /// <summary>Returns configuration that passes validation.</summary>
         public static ConnectorOptions ValidOptions()
@@ -72,6 +101,63 @@ namespace SqlTicketsConnector.Tests.TestSupport
                     Directory = System.IO.Path.GetTempPath(),
                     MinimumLevel = "Information",
                     EventLogEnabled = false,
+                },
+            };
+        }
+
+        /// <summary>Returns three level push configuration that passes validation.</summary>
+        public static HierarchyOptions ValidHierarchyOptions()
+        {
+            return new HierarchyOptions
+            {
+                Environment = "Production",
+                Auth = ValidAuth(),
+                KeyVault = new KeyVaultOptions
+                {
+                    Uri = "https://kv-connectors-test.vault.azure.net/",
+                    SecretCacheTtlMinutes = 60,
+                },
+                DataSource = ValidDataSource(),
+                Acl = new AclOptions
+                {
+                    GrantGroupObjectIds = new List<string> { GroupObjectId },
+                },
+                Graph = new HierarchyGraphSection
+                {
+                    ConnectionId = "consultingwork",
+                    ConnectionName = "Consulting work",
+                    SchemaReadyTimeoutMinutes = 30,
+                },
+                Source = new SourceSection
+                {
+                    ItemView = "dbo.vwExternalItems",
+                    MaxItems = 0,
+                },
+            };
+        }
+
+        /// <summary>Returns ticket push configuration that passes validation.</summary>
+        public static PushOptions ValidPushOptions()
+        {
+            return new PushOptions
+            {
+                Environment = "Production",
+                Auth = ValidAuth(),
+                KeyVault = new KeyVaultOptions
+                {
+                    Uri = "https://kv-connectors-test.vault.azure.net/",
+                    SecretCacheTtlMinutes = 60,
+                },
+                DataSource = ValidDataSource(),
+                Acl = new AclOptions
+                {
+                    GrantGroupObjectIds = new List<string> { GroupObjectId },
+                },
+                Graph = new GraphSection
+                {
+                    ConnectionId = "sqltickets",
+                    ConnectionName = "SQL Support Tickets",
+                    SchemaReadyTimeoutMinutes = 30,
                 },
             };
         }
