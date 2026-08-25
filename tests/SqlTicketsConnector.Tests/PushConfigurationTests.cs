@@ -1,12 +1,12 @@
 // ---------------------------------------------------------------------------
 // PushConfigurationTests.cs
-// Startup validation for the two direct push tools.
+// Startup validation for the shared push configuration.
 //
 // Two of these guards are not style checks. The connection ID guard is what
-// stops the three level tool from being pointed at the ticket test case's
-// connection, where it would try to register a second, incompatible schema onto
-// a connection whose schema is already fixed. The view name guard is what makes
-// concatenating that name into a query safe, since a view cannot be a parameter.
+// stops one connector being pointed at another's connection, where it would try
+// to register a second, incompatible schema onto a connection whose schema is
+// already fixed. The view name guard is what makes concatenating that name into
+// a query safe, since a table cannot be a parameter.
 // ---------------------------------------------------------------------------
 
 namespace SqlTicketsConnector.Tests
@@ -15,6 +15,7 @@ namespace SqlTicketsConnector.Tests
     using System.IO;
     using SqlGraphPush;
     using SqlHierarchyPush;
+    using SqlPushCore;
     using SqlTicketsConnector.Security.Configuration;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;
@@ -22,12 +23,12 @@ namespace SqlTicketsConnector.Tests
     public class PushConfigurationTests
     {
         [Fact]
-        public void Valid_configuration_produces_no_errors_for_either_push_tool()
+        public void Valid_configuration_produces_no_errors_for_either_connector()
         {
-            ValidationErrors hierarchy = TestData.ValidHierarchyOptions().Validate();
+            ValidationErrors hierarchy = TestData.ValidPushOptions().Validate();
             Assert.False(hierarchy.HasErrors, hierarchy.ToMessage());
 
-            ValidationErrors tickets = TestData.ValidPushOptions().Validate();
+            ValidationErrors tickets = TestData.ValidPushOptions("sqltickets", "dbo.Tickets").Validate();
             Assert.False(tickets.HasErrors, tickets.ToMessage());
         }
 
@@ -37,18 +38,42 @@ namespace SqlTicketsConnector.Tests
             // Control evidence. Sharing an ID means one tool silently cannot
             // manage the connection the other created — OwnedBy — and the second
             // schema cannot be registered over the first, which is already fixed.
-            HierarchyOptions options = TestData.ValidHierarchyOptions();
-            options.Graph.ConnectionId = "sqltickets";
+            PushOptions options = TestData.ValidPushOptions("sqltickets");
+            var errors = new ValidationErrors();
 
-            ValidationErrors errors = options.Validate();
+            new HierarchyPushConnector().ValidateOptions(options, errors);
 
             Assert.True(errors.HasErrors);
-            Assert.Contains(errors.Errors, e => e.Contains("Graph:ConnectionId", StringComparison.Ordinal));
+            Assert.Contains(errors.Errors, e => e.StartsWith("Graph:ConnectionId:", StringComparison.Ordinal));
             Assert.Contains(errors.Errors, e => e.Contains("ticket test case", StringComparison.Ordinal));
 
             // Case is not a defence: connection IDs are matched case insensitively.
-            options.Graph.ConnectionId = "SqlTickets";
-            Assert.True(options.Validate().HasErrors);
+            var upper = new ValidationErrors();
+            new HierarchyPushConnector().ValidateOptions(TestData.ValidPushOptions("SqlTickets"), upper);
+            Assert.True(upper.HasErrors);
+        }
+
+        [Fact]
+        public void A_connector_cannot_be_pointed_at_a_neighbours_connection_without_naming_it()
+        {
+            // The generic form of the rule above, and the one that covers a
+            // connector added later: the host compares the configured ID against
+            // every other connector hosted alongside it, so nothing has to be
+            // told about the newcomer.
+            var connectors = new IPushConnector[] { new TicketsPushConnector(), new HierarchyPushConnector() };
+            PushOptions options = TestData.ValidPushOptions("sqltickets");
+            var errors = new ValidationErrors();
+
+            PushHost.RejectNeighboursConnection(options, new HierarchyPushConnector(), connectors, errors);
+
+            Assert.True(errors.HasErrors);
+            Assert.Contains(errors.Errors, e => e.Contains("'tickets' connector", StringComparison.Ordinal));
+
+            // Its own connection is fine, obviously.
+            var own = new ValidationErrors();
+            PushHost.RejectNeighboursConnection(
+                TestData.ValidPushOptions("consultingwork"), new HierarchyPushConnector(), connectors, own);
+            Assert.False(own.HasErrors, own.ToMessage());
         }
 
         [Theory]
@@ -59,25 +84,17 @@ namespace SqlTicketsConnector.Tests
         [InlineData("None")]                                 // reserved value
         public void A_connection_id_graph_would_reject_is_caught_in_configuration(string connectionId)
         {
-            HierarchyOptions hierarchy = TestData.ValidHierarchyOptions();
-            hierarchy.Graph.ConnectionId = connectionId;
-            Assert.True(hierarchy.Validate().HasErrors, connectionId + " should have been rejected");
+            PushOptions options = TestData.ValidPushOptions(connectionId);
 
-            PushOptions tickets = TestData.ValidPushOptions();
-            tickets.Graph.ConnectionId = connectionId;
-            Assert.True(tickets.Validate().HasErrors, connectionId + " should have been rejected");
+            Assert.True(options.Validate().HasErrors, connectionId + " should have been rejected");
         }
 
         [Fact]
         public void A_connection_id_of_exactly_thirty_two_characters_is_accepted()
         {
             // The rule is 3 to 32 inclusive. Both ends belong to the caller.
-            HierarchyOptions options = TestData.ValidHierarchyOptions();
-            options.Graph.ConnectionId = new string('a', 32);
-            Assert.False(options.Validate().HasErrors);
-
-            options.Graph.ConnectionId = new string('a', 33);
-            Assert.True(options.Validate().HasErrors);
+            Assert.False(TestData.ValidPushOptions(new string('a', 32)).Validate().HasErrors);
+            Assert.True(TestData.ValidPushOptions(new string('a', 33)).Validate().HasErrors);
         }
 
         [Theory]
@@ -92,13 +109,10 @@ namespace SqlTicketsConnector.Tests
             // Control evidence. The view name is concatenated into the query
             // because a view cannot be a parameter; restricting it to an
             // identifier shape is the entire reason that is safe.
-            HierarchyOptions options = TestData.ValidHierarchyOptions();
-            options.Source.ItemView = view;
-
-            ValidationErrors errors = options.Validate();
+            ValidationErrors errors = TestData.ValidPushOptions("consultingwork", view).Validate();
 
             Assert.True(errors.HasErrors, view + " should have been rejected");
-            Assert.Contains(errors.Errors, e => e.Contains("Source:ItemView", StringComparison.Ordinal));
+            Assert.Contains(errors.Errors, e => e.StartsWith("Source:ItemView:", StringComparison.Ordinal));
         }
 
         [Theory]
@@ -107,18 +121,15 @@ namespace SqlTicketsConnector.Tests
         [InlineData("reporting.vw_external_items")]
         public void A_view_name_may_be_bare_or_schema_qualified(string view)
         {
-            HierarchyOptions options = TestData.ValidHierarchyOptions();
-            options.Source.ItemView = view;
-
-            ValidationErrors errors = options.Validate();
+            ValidationErrors errors = TestData.ValidPushOptions("consultingwork", view).Validate();
 
             Assert.False(errors.HasErrors, errors.ToMessage());
         }
 
         [Fact]
-        public void Every_invalid_field_in_a_hierarchy_configuration_is_reported_in_one_pass()
+        public void Every_invalid_field_is_reported_in_one_pass()
         {
-            var options = new HierarchyOptions
+            var options = new PushOptions
             {
                 Environment = "Prod",                        // not one of the allowed values
                 Auth = new AuthOptions
@@ -134,9 +145,9 @@ namespace SqlTicketsConnector.Tests
                     SqlAuthMode = "WindowsIntegrated",
                 },
                 Acl = new AclOptions(),                      // empty: no silent everyone
-                Graph = new HierarchyGraphSection
+                Graph = new GraphSection
                 {
-                    ConnectionId = "sqltickets",             // the other test case's
+                    ConnectionId = "sql tickets",
                     ConnectionName = string.Empty,
                     SchemaReadyTimeoutMinutes = 0,           // below the allowed range
                 },
@@ -174,17 +185,103 @@ namespace SqlTicketsConnector.Tests
         }
 
         [Fact]
+        public void A_configuration_file_that_omits_a_section_falls_back_to_the_connectors_own_defaults()
+        {
+            // This is what keeps an already deployed appsettings.json working when
+            // the core gains a section. SqlGraphPush shipped without Source for
+            // three releases; the connector declares dbo.Tickets and the file that
+            // never mentioned it still validates.
+            var options = new PushOptions();
+
+            PushHost.ApplyDefaults(options, new TicketsPushConnector());
+
+            Assert.Equal("sqltickets", options.Graph.ConnectionId);
+            Assert.Equal("SQL Support Tickets", options.Graph.ConnectionName);
+            Assert.Equal("dbo.Tickets", options.Source.ItemView);
+
+            // What the file does say wins over the default.
+            var configured = new PushOptions
+            {
+                Graph = new GraphSection { ConnectionId = "othertickets" },
+                Source = new SourceSection { ItemView = "dbo.OtherTickets" },
+            };
+
+            PushHost.ApplyDefaults(configured, new TicketsPushConnector());
+
+            Assert.Equal("othertickets", configured.Graph.ConnectionId);
+            Assert.Equal("dbo.OtherTickets", configured.Source.ItemView);
+        }
+
+        [Fact]
+        public void Connector_specific_settings_live_in_a_bag_so_the_core_does_not_grow_a_property()
+        {
+            string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+            File.WriteAllText(
+                path,
+                "{ \"Settings\": { \"RegionFilter\": \"EMEA\", \"BatchSize\": \"250\", \"IncludeDrafts\": \"true\" } }");
+
+            try
+            {
+                PushOptions options = PushOptions.Load(path);
+
+                Assert.Equal("EMEA", options.Setting("RegionFilter"));
+                Assert.Equal(250, options.Setting("BatchSize", 25));
+                Assert.True(options.Setting("IncludeDrafts", false));
+
+                // Case insensitive, and the comparer survives deserialization —
+                // which it does not by default, because System.Text.Json builds a
+                // fresh dictionary rather than filling the one the property held.
+                Assert.Equal("EMEA", options.Setting("regionfilter"));
+
+                // Absent keys fall back rather than throwing.
+                Assert.Equal("all", options.Setting("Practice", "all"));
+                Assert.Equal(7, options.Setting("Missing", 7));
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void A_missing_configuration_file_names_the_path_it_looked_in()
         {
             string missing = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
 
-            InvalidOperationException hierarchy = Assert.Throws<InvalidOperationException>(
-                () => HierarchyOptions.Load(missing));
-            Assert.Contains(missing, hierarchy.Message, StringComparison.Ordinal);
-
-            InvalidOperationException tickets = Assert.Throws<InvalidOperationException>(
+            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
                 () => PushOptions.Load(missing));
-            Assert.Contains(missing, tickets.Message, StringComparison.Ordinal);
+
+            Assert.Contains(missing, thrown.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void The_key_specific_file_is_preferred_and_the_shared_one_is_the_fallback()
+        {
+            // How two connectors coexist in one executable without either one's
+            // configuration being touched by the other.
+            string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+
+            try
+            {
+                string shared = Path.Combine(directory, "appsettings.json");
+                File.WriteAllText(shared, "{}");
+
+                Assert.Equal(shared, PushOptions.ResolveFile(directory, "tickets"));
+
+                string specific = Path.Combine(directory, "appsettings.tickets.json");
+                File.WriteAllText(specific, "{}");
+
+                Assert.Equal(specific, PushOptions.ResolveFile(directory, "tickets"));
+
+                // The neighbour still gets the shared file. Adding one connector's
+                // configuration does not move another's.
+                Assert.Equal(shared, PushOptions.ResolveFile(directory, "consultingwork"));
+            }
+            finally
+            {
+                Directory.Delete(directory, true);
+            }
         }
 
         [Fact]
@@ -198,7 +295,7 @@ namespace SqlTicketsConnector.Tests
             try
             {
                 InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-                    () => HierarchyOptions.Load(path));
+                    () => PushOptions.Load(path));
 
                 Assert.Contains(path, thrown.Message, StringComparison.Ordinal);
                 Assert.Contains("not valid JSON", thrown.Message, StringComparison.Ordinal);
@@ -210,7 +307,7 @@ namespace SqlTicketsConnector.Tests
         }
 
         [Fact]
-        public void Comments_and_trailing_commas_are_accepted_because_the_shipped_file_has_them()
+        public void Comments_and_trailing_commas_are_accepted_because_the_shipped_files_have_them()
         {
             string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
             File.WriteAllText(
@@ -220,7 +317,7 @@ namespace SqlTicketsConnector.Tests
 
             try
             {
-                HierarchyOptions options = HierarchyOptions.Load(path);
+                PushOptions options = PushOptions.Load(path);
 
                 Assert.Equal("dbo.vwExternalItems", options.Source.ItemView);
                 Assert.Equal(path, options.SourcePath);

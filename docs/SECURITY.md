@@ -21,6 +21,14 @@ file, and where a test proves it, the test name.
 | **Certificate use in `SqlGraphPush`** | Microsoft Graph. That tool is a separate, operator-run utility. |
 | **Certificate use in `SqlHierarchyPush`** | Microsoft Graph. A second operator-run utility, for the three level test case; same permissions, its own connection. |
 | **Data at rest in this process** | None. Rows are streamed, never spooled to disk. |
+| **Where the side paths' code lives** | `SqlPushCore`, one engine both run on. A push tool is a schema, a query and a row mapping; credentials, SQL, ACLs, truncation and throttling are the engine's. Adding a third source changes no file in it — see `docs/ADDING-A-PUSH-CONNECTOR.md`. |
+
+**`SqlPushCore` is where the Graph SDK is allowed to be, and that is deliberate.**
+It sits between the push tools and `SqlTicketsConnector.Security`, so the shared
+credential, vault and SQL code can be shared with the agent-hosted connector
+without the Graph SDK reaching it. `SqlTicketsConnector.Security` references
+neither the Graph SDK nor the gRPC contracts, and that is what keeps the
+boundary below honest rather than merely stated.
 
 The connector project has no reference to the Microsoft Graph SDK. A reference
 appearing there in a future change is a review failure, not a refactor:
@@ -78,7 +86,7 @@ on `ISecretProvider` so it is visible at the point of use.
 | SQL-4 | No credential in any operator-editable connection text | `InspectExtraOptions` rejects `Password` and `User ID` | `ConfigurationTests.Credentials_in_operator_supplied_connection_text_are_rejected` |
 | SQL-5 | Least privilege: `SELECT` on `dbo.Tickets`, nothing else | `sql/01-least-privilege.sql`, including explicit `DENY` and a verification query | Run the verification query at the end of the script |
 | SQL-7 | Three level source: the push identity reads **views only** and cannot read the base tables | `sql/13-timesheet-least-privilege.sql` grants `SELECT` on the four views and `DENY`s every verb on `dbo.Customers`, `dbo.Engagements` and `dbo.TimeEntries`. Ownership chaining makes the grant sufficient; the `DENY` exists so a future role membership cannot widen it | Run the verification query at the end of the script — expect four rows, all `SELECT`, all on views |
-| SQL-8 | The soft-delete filter cannot be bypassed by editing the tool | It lives inside the views in `sql/12-timesheet-views.sql`, not in a `WHERE` clause in C#. `SqlHierarchyPush` selects from one view and adds no predicate | Code review: `Program.PushItemsAsync` builds no `WHERE` |
+| SQL-8 | The soft-delete filter cannot be bypassed by editing the tool | It lives inside the views in `sql/12-timesheet-views.sql`, not in a `WHERE` clause in C#. `SqlHierarchyPush` selects from one view and adds no predicate | Code review: `HierarchyPushConnector.BuildQuery` builds no `WHERE`, and `PushEngine` adds none |
 | SQL-9 | The view name is not an injection surface | `Source:ItemView` is concatenated into a query, so it is validated as a `[schema.]name` identifier — letters, digits and underscores only, at most one dot — and rejected otherwise | `PushConfigurationTests.A_view_name_that_is_not_a_plain_identifier_is_rejected` puts six values through it, including a trailing `; DROP TABLE`. A non-identifier value fails startup with exit code 2 |
 | SQL-6 | Transient faults retried, not surfaced as crawl failures | `ConnectRetryCount`/`ConnectRetryInterval` in the connection string; `Security/Sql/SqlErrorClassifier.cs` classifies by error number; transient failures return `RetryDetails` with `ExponentialBackOff` | `ConnectorCrawlerServiceImpl.BuildFailureStatus` |
 
@@ -117,7 +125,7 @@ on `ISecretProvider` so it is visible at the point of use.
 | BLD-3 | Repository secret scanning configuration | `.gitleaks.toml`, extending the default rule set with SQL connection string, `TrustServerCertificate`, key material and Entra secret rules | `gitleaks detect --config .gitleaks.toml --redact` |
 | BLD-4 | Release packages cannot be produced from a failing tree | `Build.ps1` runs the secret scan and the full test suite before publishing, and refuses to package `.pfx`, `.p12`, `.pem` or `.key` files | Run `Build.ps1` |
 | BLD-5 | The declared dependency set matches the one the build actually resolves | `build/Get-OfflinePackages.ps1` lists every package required, and `build/Test-OfflinePackageList.ps1` compares that list with `project.assets.json` in all three configurations — base, OTLP, and the self-contained publish's runtime packs. CI fails on drift | `pwsh build/Test-OfflinePackageList.ps1 -Configuration Base` after a restore |
-| BLD-6 | An external schema mistake cannot reach the tenant | A registered Graph schema is append-only: no property's type, annotation or label can be changed afterwards, so a mistake is corrected only by deleting the connection and every item in it. `ExternalSchemaRules` enforces the two irrecoverable rules — 32 alphanumeric characters, and searchable and refinable being mutually exclusive — and both push tools build every property through it, throwing before the first Graph call rather than failing server side fifteen minutes into registration | `PushSchemaTests`, in particular `A_searchable_and_refinable_property_is_rejected_before_any_graph_call` and `A_property_name_the_platform_would_reject_is_caught_before_any_graph_call`. Both are in the `ControlEvidenceTests` tripwire |
+| BLD-6 | An external schema mistake cannot reach the tenant | A registered Graph schema is append-only: no property's type, annotation or label can be changed afterwards, so a mistake is corrected only by deleting the connection and every item in it. `ExternalSchemaRules` enforces the two irrecoverable rules — 32 alphanumeric characters, and searchable and refinable being mutually exclusive — and `PushSchema.Prop` is the only way a connector builds a property, so a connector added later cannot opt out. It throws before the first Graph call rather than failing server side fifteen minutes into registration | `PushSchemaTests`, in particular `A_searchable_and_refinable_property_is_rejected_before_any_graph_call` and `A_property_name_the_platform_would_reject_is_caught_before_any_graph_call`. Both are in the `ControlEvidenceTests` tripwire |
 | BLD-7 | Removing a control's evidence fails the build | `ControlEvidenceTests` names eleven tests that exist as evidence for the rows in this document and asserts each is still present and still a `[Fact]`. Deleting or renaming one is a build failure that names it, rather than a quiet reduction in coverage | `dotnet test --filter ControlEvidenceTests` |
 
 **Allowlisted configuration paths.** The build scan permits exactly two paths
@@ -130,7 +138,12 @@ whose names match the credential pattern but whose values are not credentials:
 
 ## 3. Dependency notes for the scan
 
-The test project references both push tools as well as the connector, so its
+Package versions for the push path live in `src/SqlPushCore/SqlPushCore.csproj`
+alone. The executables reference the engine and declare no package of their own,
+so the Kiota advisory pin cannot be applied to one push tool and forgotten on
+another, and a connector added later inherits it without being told.
+
+The test project references the engine, both push tools and the connector, so its
 dependency graph includes `Microsoft.Graph` and Kiota. That is a reference to
 projects already in this solution rather than a new dependency: the package set
 the repository resolves is unchanged, which `build/Test-OfflinePackageList.ps1`
@@ -268,7 +281,7 @@ identity must never be granted.
 ## 5. Running the evidence
 
 ```powershell
-dotnet test SqlTicketsConnector.sln                                  # 82 tests, no live dependencies
+dotnet test SqlTicketsConnector.sln                                  # 98 tests, no live dependencies
 dotnet build build\SecretHygiene.proj -t:ScanAppSettingsForSecrets    # configuration hygiene
 gitleaks detect --config .gitleaks.toml --redact                      # repository history
 pre-commit run --all-files                                            # the same checks a developer gets

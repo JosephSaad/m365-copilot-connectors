@@ -267,8 +267,8 @@ hoping.
 | Items | One per ticket | One per customer, engagement and time entry |
 | Schema | 6 properties | 26 properties |
 | Connection ID | `sqltickets` | `consultingwork` |
-| Throttling | No backoff | Honours `Retry-After`, five attempts |
-| Dry run | No | `--dry-run` |
+| Engine | `SqlPushCore`, the same one | `SqlPushCore`, the same one |
+| Throttling, dry run, exit codes | The engine's | The engine's, identical |
 
 Both accept a **certificate or a client secret** through `Auth:Mode`, using the
 same shared credential code as the agent-hosted connector. Certificate is the

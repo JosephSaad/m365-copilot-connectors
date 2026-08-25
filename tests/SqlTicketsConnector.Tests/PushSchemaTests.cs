@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // PushSchemaTests.cs
-// The external schemas both push tools register, and the two platform rules
-// that cannot be recovered from once a schema is live.
+// The external schemas the connectors register, and the two platform rules that
+// cannot be recovered from once a schema is live.
 //
 // This is the most expensive mistake in the system to make. A registered schema
 // is append-only: a property can be added, but no property's type, annotation
@@ -18,11 +18,12 @@ namespace SqlTicketsConnector.Tests
     using Microsoft.Graph.Models.ExternalConnectors;
     using SqlGraphPush;
     using SqlHierarchyPush;
+    using SqlPushCore;
     using SqlTicketsConnector.Connector;
     using SqlTicketsConnector.Security.Schema;
     using Xunit;
-    using ContractSchema = Microsoft.Graph.Connectors.Contracts.Grpc.DataSourceSchema;
     using ContractProperty = Microsoft.Graph.Connectors.Contracts.Grpc.SourcePropertyDefinition;
+    using ContractSchema = Microsoft.Graph.Connectors.Contracts.Grpc.DataSourceSchema;
 
     public class PushSchemaTests
     {
@@ -44,15 +45,15 @@ namespace SqlTicketsConnector.Tests
         [Fact]
         public void The_hierarchy_schema_registers_exactly_the_properties_the_views_produce()
         {
-            Schema schema = HierarchySchema.Build();
+            Schema schema = new HierarchyPushConnector().BuildSchema();
 
             Assert.Equal(HierarchyProperties, schema.Properties.Select(p => p.Name).ToArray());
         }
 
         [Fact]
-        public void No_property_in_either_schema_is_both_searchable_and_refinable()
+        public void No_property_in_any_schema_is_both_searchable_and_refinable()
         {
-            foreach (Property property in AllPushProperties())
+            foreach (Property property in AllProperties())
             {
                 Assert.False(
                     property.IsSearchable == true && property.IsRefinable == true,
@@ -62,9 +63,9 @@ namespace SqlTicketsConnector.Tests
         }
 
         [Fact]
-        public void Every_property_name_in_either_schema_is_within_the_platform_limit()
+        public void Every_property_name_in_any_schema_is_within_the_platform_limit()
         {
-            foreach (Property property in AllPushProperties())
+            foreach (Property property in AllProperties())
             {
                 // Throws with the offending name if the rule is broken.
                 ExternalSchemaRules.ValidatePropertyName(property.Name);
@@ -86,7 +87,7 @@ namespace SqlTicketsConnector.Tests
                 "hierarchyPath", "containerName", "title", "consultantName",
             };
 
-            Schema schema = HierarchySchema.Build();
+            Schema schema = new HierarchyPushConnector().BuildSchema();
 
             foreach (string name in mustBeSearchable)
             {
@@ -106,7 +107,7 @@ namespace SqlTicketsConnector.Tests
             // types, refinable is what they filter by. These are filtered by.
             string[] mustBeRefinable = { "itemType", "industry", "region", "practice", "status", "workType" };
 
-            Schema schema = HierarchySchema.Build();
+            Schema schema = new HierarchyPushConnector().BuildSchema();
 
             foreach (string name in mustBeRefinable)
             {
@@ -133,7 +134,7 @@ namespace SqlTicketsConnector.Tests
                 { "containerUrl", Label.ContainerUrl },
             };
 
-            Schema schema = HierarchySchema.Build();
+            Schema schema = new HierarchyPushConnector().BuildSchema();
 
             foreach (KeyValuePair<string, Label> pair in expected)
             {
@@ -145,7 +146,7 @@ namespace SqlTicketsConnector.Tests
 
             List<Label?> allLabels = schema.Properties
                 .Where(p => p.Labels is not null)
-                .SelectMany(p => p.Labels!)
+                .SelectMany(p => p.Labels)
                 .ToList();
 
             Assert.Equal(expected.Count, allLabels.Count);
@@ -155,7 +156,7 @@ namespace SqlTicketsConnector.Tests
         [Fact]
         public void The_ticket_schema_is_unchanged_and_still_carries_its_title_and_url_labels()
         {
-            Schema schema = TicketSchema.Build();
+            Schema schema = new TicketsPushConnector().BuildSchema();
 
             Assert.Equal(
                 new[] { "ticketId", "title", "status", "assignedTo", "lastModified", "url" },
@@ -178,14 +179,11 @@ namespace SqlTicketsConnector.Tests
             // Control evidence. Without this the failure arrives fifteen minutes
             // into server side registration, against a draft connection that then
             // has to be deleted rather than corrected.
-            InvalidOperationException hierarchy = Assert.Throws<InvalidOperationException>(
-                () => HierarchySchema.Prop("region", PropertyType.String, searchable: true, refinable: true));
+            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
+                () => PushSchema.Prop("region", PropertyType.String, searchable: true, refinable: true));
 
-            Assert.Contains("region", hierarchy.Message, StringComparison.Ordinal);
-            Assert.Contains("searchable and refinable", hierarchy.Message, StringComparison.OrdinalIgnoreCase);
-
-            Assert.Throws<InvalidOperationException>(
-                () => TicketSchema.Prop("status", PropertyType.String, searchable: true, refinable: true));
+            Assert.Contains("region", thrown.Message, StringComparison.Ordinal);
+            Assert.Contains("searchable and refinable", thrown.Message, StringComparison.OrdinalIgnoreCase);
 
             Assert.Throws<InvalidOperationException>(
                 () => ExternalSchemaRules.ValidateProperty("anything", searchable: true, refinable: true));
@@ -198,11 +196,12 @@ namespace SqlTicketsConnector.Tests
             string overLimit = new string('a', ExternalSchemaRules.MaxPropertyNameLength + 1);
 
             InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-                () => HierarchySchema.Prop(overLimit, PropertyType.String, retrievable: true));
+                () => PushSchema.Prop(overLimit, PropertyType.String, retrievable: true));
 
             Assert.Contains(overLimit, thrown.Message, StringComparison.Ordinal);
 
-            foreach (string bad in new[] { "customer_name", "customer-name", "customer name", "customer.name", string.Empty })
+            foreach (string bad in new[]
+                     { "customer_name", "customer-name", "customer name", "customer.name", string.Empty })
             {
                 Assert.Throws<InvalidOperationException>(() => ExternalSchemaRules.ValidatePropertyName(bad));
             }
@@ -216,7 +215,7 @@ namespace SqlTicketsConnector.Tests
         {
             // The IDs sql/12-timesheet-views.sql composes, which is why they are
             // composed rather than taken from a natural key.
-            foreach (string id in new[] { "cust12", "eng62", "time1052" })
+            foreach (string id in new[] { "cust12", "eng62", "time1052", "ticket7" })
             {
                 Assert.True(ExternalSchemaRules.IsValidItemId(id));
                 ExternalSchemaRules.ValidateItemId(id);
@@ -237,8 +236,8 @@ namespace SqlTicketsConnector.Tests
         {
             // The connector hands a DataSourceSchema to the agent, which maps it
             // onto a Graph schema — so the Graph rules reach it too, one step
-            // removed. It builds its properties by hand rather than through a
-            // guard, so this is the check that it stays inside them.
+            // removed. It builds its properties by hand rather than through
+            // PushSchema, so this is the check that it stays inside them.
             ContractSchema schema = SqlDataSource.BuildSchema();
 
             uint searchable = (uint)ContractProperty.Types.SearchAnnotations.IsSearchable;
@@ -255,9 +254,10 @@ namespace SqlTicketsConnector.Tests
             }
         }
 
-        private static IEnumerable<Property> AllPushProperties()
+        private static IEnumerable<Property> AllProperties()
         {
-            return HierarchySchema.Build().Properties!.Concat(TicketSchema.Build().Properties!);
+            return new HierarchyPushConnector().BuildSchema().Properties
+                .Concat(new TicketsPushConnector().BuildSchema().Properties);
         }
     }
 }

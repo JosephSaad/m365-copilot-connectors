@@ -9,6 +9,11 @@ same database.
 Instructions are given for **.NET 10 and .NET 9** throughout. Take whichever
 column matches your toolchain; nothing else differs.
 
+If what you actually want is to index **a different SQL source**, this is not
+the document: a new source is one class and one configuration file, and the
+recipe is [`ADDING-A-PUSH-CONNECTOR.md`](ADDING-A-PUSH-CONNECTOR.md). Deploying
+it then looks exactly like the steps below, with your own names.
+
 | | |
 |---|---|
 | **What it is** | A console tool an operator runs. **Not** a Windows service, and **not** installed by `Install-Connector.ps1`. |

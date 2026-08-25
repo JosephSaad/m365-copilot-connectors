@@ -46,6 +46,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SqlHierarchyPush", "src\SqlHierarchyPush\SqlHierarchyPush.csproj", "{8127A46C-1FE7-4C8F-A906-62252E46D4CC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SqlPushCore", "src\SqlPushCore\SqlPushCore.csproj", "{749DC955-490A-4D1D-8721-8423DB781A93}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -116,12 +118,25 @@ Global
 		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Release|x64.Build.0 = Release|Any CPU
 		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Release|x86.ActiveCfg = Release|Any CPU
 		{8127A46C-1FE7-4C8F-A906-62252E46D4CC}.Release|x86.Build.0 = Release|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Debug|x64.Build.0 = Debug|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Debug|x86.Build.0 = Debug|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Release|Any CPU.Build.0 = Release|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Release|x64.ActiveCfg = Release|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Release|x64.Build.0 = Release|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Release|x86.ActiveCfg = Release|Any CPU
+		{749DC955-490A-4D1D-8721-8423DB781A93}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{8127A46C-1FE7-4C8F-A906-62252E46D4CC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{749DC955-490A-4D1D-8721-8423DB781A93} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {0ADAFC15-EC15-4144-92E2-99BC8ED97973}
