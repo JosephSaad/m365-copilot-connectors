@@ -15,7 +15,7 @@ namespace SqlTicketsConnector.Server
     using System.Collections.Generic;
     using System.IO;
     using System.Text.Json;
-    using SqlTicketsConnector.Security.Configuration;
+    using SqlConnector.Security.Configuration;
 
     /// <summary>Root of appsettings.json.</summary>
     public sealed class ConnectorOptions
@@ -114,6 +114,11 @@ namespace SqlTicketsConnector.Server
             (this.Connector ?? new ConnectorSection()).Validate(errors, "Connector");
             (this.Auth ?? new AuthOptions()).Validate(errors, "Auth");
             (this.DataSource ?? new DataSourceOptions()).Validate(errors, "DataSource", this.Environment);
+
+            // This connector builds an item URL for every ticket, so the template
+            // is required HERE - the shared library no longer defaults it,
+            // because a tickets URL must not be the fallback for every connector.
+            errors.RequireNonEmpty("DataSource:ItemUrlTemplate", this.DataSource?.ItemUrlTemplate);
             (this.Acl ?? new AclOptions()).Validate(errors, "Acl");
             (this.Logging ?? new LoggingOptions()).Validate(errors, "Logging");
 

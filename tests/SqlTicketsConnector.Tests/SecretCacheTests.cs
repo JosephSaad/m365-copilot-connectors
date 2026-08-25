@@ -13,7 +13,7 @@ namespace SqlTicketsConnector.Tests
     using System.Threading.Tasks;
     using Serilog;
     using Serilog.Core;
-    using SqlTicketsConnector.Security.Secrets;
+    using SqlConnector.Security.Secrets;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;
 

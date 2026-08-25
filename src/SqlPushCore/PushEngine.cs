@@ -25,9 +25,9 @@ using Microsoft.Graph;
 using Microsoft.Graph.Models.ExternalConnectors;
 using Microsoft.Graph.Models.ODataErrors;
 using Serilog;
-using SqlTicketsConnector.Security.Content;
-using SqlTicketsConnector.Security.Schema;
-using SqlTicketsConnector.Security.Sql;
+using SqlConnector.Security.Content;
+using SqlConnector.Security.Schema;
+using SqlConnector.Security.Sql;
 
 /// <summary>Runs one connector against one connection.</summary>
 public sealed class PushEngine

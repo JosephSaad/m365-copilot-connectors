@@ -312,7 +312,7 @@ jobs:
               'source/src/SqlPushCore/IPushConnector.cs',             # the extension point itself
               'source/src/SqlGraphPush/SqlGraphPush.csproj',
               'source/src/SqlHierarchyPush/SqlHierarchyPush.csproj',
-              'source/src/SqlTicketsConnector.Security/SqlTicketsConnector.Security.csproj',
+              'source/src/SqlConnector.Security/SqlConnector.Security.csproj',
               'source/src/SqlTicketsConnector/Contracts/CommonModels.proto',
               'source/tests/SqlTicketsConnector.Tests/SqlTicketsConnector.Tests.csproj'
           )

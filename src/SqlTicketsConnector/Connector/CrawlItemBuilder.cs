@@ -13,8 +13,8 @@ namespace SqlTicketsConnector.Connector
     using Microsoft.Graph.Connectors.Contracts.Grpc;
     using Serilog;
     using SqlTicketsConnector.Logging;
-    using SqlTicketsConnector.Security.Configuration;
-    using SqlTicketsConnector.Security.Content;
+    using SqlConnector.Security.Configuration;
+    using SqlConnector.Security.Content;
 
     /// <summary>An item ready to stream, or a decision to skip the row.</summary>
     public sealed class BuiltItem

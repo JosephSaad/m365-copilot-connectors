@@ -19,8 +19,8 @@ namespace SqlTicketsConnector.Connector
     using Serilog;
     using Serilog.Context;
     using SqlTicketsConnector.Logging;
-    using SqlTicketsConnector.Security.Logging;
-    using SqlTicketsConnector.Security.Sql;
+    using SqlConnector.Security.Logging;
+    using SqlConnector.Security.Sql;
     using SqlTicketsConnector.Server;
     using static Microsoft.Graph.Connectors.Contracts.Grpc.ConnectorCrawlerService;
 

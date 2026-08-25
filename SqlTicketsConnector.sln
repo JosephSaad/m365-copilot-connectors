@@ -5,7 +5,7 @@ VisualStudioVersion = 17.9.34728.123
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SqlTicketsConnector", "src\SqlTicketsConnector\SqlTicketsConnector.csproj", "{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SqlTicketsConnector.Security", "src\SqlTicketsConnector.Security\SqlTicketsConnector.Security.csproj", "{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SqlConnector.Security", "src\SqlConnector.Security\SqlConnector.Security.csproj", "{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SqlGraphPush", "src\SqlGraphPush\SqlGraphPush.csproj", "{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}"
 EndProject

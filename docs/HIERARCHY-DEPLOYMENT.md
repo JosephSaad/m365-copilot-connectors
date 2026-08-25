@@ -200,7 +200,7 @@ only. The build fails on anything else — see [`SECURITY.md`](SECURITY.md) SEC-
 
 **Yes, this connector supports client secret authentication.** It is the same
 mechanism the agent-hosted connector uses, through the same shared code in
-`SqlTicketsConnector.Security` — nothing about it is specific to one tool.
+`SqlConnector.Security` — nothing about it is specific to one tool.
 
 Certificate remains the default and the better option: a secret is a bearer
 credential that anyone who reads it can replay from anywhere, and unlike a

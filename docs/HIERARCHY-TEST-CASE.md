@@ -282,7 +282,7 @@ schemas, and a registered schema cannot be changed. `HierarchyGraphSection`
 rejects `sqltickets` at startup for that reason.
 
 Everything security-related is shared, not duplicated:
-`SqlTicketsConnector.Security` resolves the certificate, builds the credential,
+`SqlConnector.Security` resolves the certificate, builds the credential,
 constructs the SQL connection and scrubs the logs for both tools. Only the schema
 and the item shape are new. The agent-hosted connector still has no Graph
 dependency of any kind.

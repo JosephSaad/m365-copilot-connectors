@@ -17,7 +17,7 @@
     Package set is identical to the two push executables on purpose, so the
     offline restore graph that build/Get-OfflinePackages.ps1 pins is unchanged.
 
-    It references SqlTicketsConnector.Security and nothing from the connector.
+    It references SqlConnector.Security and nothing from the connector.
     The agent-hosted connector still has no Graph dependency of any kind, which
     is why the Graph SDK is here rather than in Security.
   -->
@@ -48,7 +48,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SqlTicketsConnector.Security\SqlTicketsConnector.Security.csproj" />
+    <ProjectReference Include="..\SqlConnector.Security\SqlConnector.Security.csproj" />
   </ItemGroup>
 
   <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />

@@ -63,7 +63,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SqlTicketsConnector.Security\SqlTicketsConnector.Security.csproj" />
+    <ProjectReference Include="..\SqlConnector.Security\SqlConnector.Security.csproj" />
   </ItemGroup>
 
   <ItemGroup>

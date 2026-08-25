@@ -13,7 +13,7 @@ This document is the recipe and the reasoning. If you only want the recipe,
 
 | | Where it lives | Who writes it |
 |---|---|---|
-| Certificate or client secret, Key Vault, token acquisition | `SqlPushCore` → `SqlTicketsConnector.Security` | Nobody. It is done |
+| Certificate or client secret, Key Vault, token acquisition | `SqlPushCore` → `SqlConnector.Security` | Nobody. It is done |
 | SQL connection, encryption, retry, error classification | Same | Nobody |
 | Creating the external connection, registering the schema, polling to `Ready` | `SqlPushCore/PushEngine.cs` | Nobody |
 | Content truncation, ACLs, item ID rules, the `PUT`, throttling backoff | Same | Nobody |

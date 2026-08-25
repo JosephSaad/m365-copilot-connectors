@@ -24,9 +24,9 @@ file, and where a test proves it, the test name.
 | **Where the side paths' code lives** | `SqlPushCore`, one engine both run on. A push tool is a schema, a query and a row mapping; credentials, SQL, ACLs, truncation and throttling are the engine's. Adding a third source changes no file in it — see `docs/ADDING-A-PUSH-CONNECTOR.md`. |
 
 **`SqlPushCore` is where the Graph SDK is allowed to be, and that is deliberate.**
-It sits between the push tools and `SqlTicketsConnector.Security`, so the shared
+It sits between the push tools and `SqlConnector.Security`, so the shared
 credential, vault and SQL code can be shared with the agent-hosted connector
-without the Graph SDK reaching it. `SqlTicketsConnector.Security` references
+without the Graph SDK reaching it. `SqlConnector.Security` references
 neither the Graph SDK nor the gRPC contracts, and that is what keeps the
 boundary below honest rather than merely stated.
 
@@ -34,7 +34,7 @@ The connector project has no reference to the Microsoft Graph SDK. A reference
 appearing there in a future change is a review failure, not a refactor:
 `src/SqlTicketsConnector/SqlTicketsConnector.csproj` should list only
 `Google.Protobuf`, `Grpc.Core`, `Grpc.Tools`, `Microsoft.Data.SqlClient`,
-`Serilog` and its sinks, plus the `SqlTicketsConnector.Security` project.
+`Serilog` and its sinks, plus the `SqlConnector.Security` project.
 
 ---
 

@@ -17,7 +17,7 @@ namespace SqlTicketsConnector.Logging
     using Grpc.Core.Interceptors;
     using Serilog;
     using Serilog.Events;
-    using SqlTicketsConnector.Security.Logging;
+    using SqlConnector.Security.Logging;
 
     /// <summary>
     /// Logs method name, duration and outcome for every gRPC call.

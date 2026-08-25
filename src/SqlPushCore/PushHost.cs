@@ -25,12 +25,12 @@ using Microsoft.Graph;
 using Microsoft.Graph.Models.ODataErrors;
 using Serilog;
 using Serilog.Events;
-using SqlTicketsConnector.Security.Certificates;
-using SqlTicketsConnector.Security.Configuration;
-using SqlTicketsConnector.Security.Credentials;
-using SqlTicketsConnector.Security.Logging;
-using SqlTicketsConnector.Security.Secrets;
-using SqlTicketsConnector.Security.Sql;
+using SqlConnector.Security.Certificates;
+using SqlConnector.Security.Configuration;
+using SqlConnector.Security.Credentials;
+using SqlConnector.Security.Logging;
+using SqlConnector.Security.Secrets;
+using SqlConnector.Security.Sql;
 
 /// <summary>Startup for every direct push executable.</summary>
 public static class PushHost

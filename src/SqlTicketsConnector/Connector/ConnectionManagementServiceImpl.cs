@@ -20,8 +20,8 @@ namespace SqlTicketsConnector.Connector
     using Grpc.Core;
     using Microsoft.Graph.Connectors.Contracts.Grpc;
     using Serilog;
-    using SqlTicketsConnector.Security.Logging;
-    using SqlTicketsConnector.Security.Sql;
+    using SqlConnector.Security.Logging;
+    using SqlConnector.Security.Sql;
     using SqlTicketsConnector.Server;
     using static Microsoft.Graph.Connectors.Contracts.Grpc.ConnectionManagementService;
 

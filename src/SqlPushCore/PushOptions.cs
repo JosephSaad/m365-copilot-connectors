@@ -16,7 +16,7 @@ namespace SqlPushCore;
 
 using System.Globalization;
 using System.Text.Json;
-using SqlTicketsConnector.Security.Configuration;
+using SqlConnector.Security.Configuration;
 
 /// <summary>Root of a push connector's appsettings file.</summary>
 public sealed class PushOptions
