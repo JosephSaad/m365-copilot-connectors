@@ -194,6 +194,31 @@ contracts: connection management, crawl, info, OAuth.
   Startup validation rejects each one **by name**, so a half-finished deployment
   cannot start and quietly index against the wrong tenant.
 
+## 6a. The push engine
+
+The two direct push tools below are **85% the same program**. Write that part
+once, in a library of its own, and make a connector the small remainder: a
+schema, a query, a row mapping, and nothing else. Credentials, the vault, the
+SQL connection, creating the connection, registering the schema and polling to
+`Ready`, truncation, ACLs, the `PUT` with backoff, exit codes, logging,
+`--dry-run` and `--help` are the engine's, identical for every source.
+
+Adding a third source must be **one class and one configuration file**, with no
+file in the engine changed and no existing connector affected. Two mechanisms
+make that true rather than aspirational: a `Settings` bag on the shared options,
+so a value only one connector understands never becomes a field every connector
+carries; and per-connector defaults for the connection ID and source view, so a
+configuration file already deployed keeps working when the core gains a section.
+
+Put the Graph SDK **here**, not in the security library. That is what lets the
+credential, vault and SQL code be shared with the agent-hosted connector while
+section 2's boundary stays real.
+
+Discover connectors by reflection over **the entry assembly only** — never by
+scanning a directory for assemblies to load. A plugin folder means the set of
+things the tool can do is decided by whatever is sitting next to it on a server,
+which is not a property a reviewer should have to accept.
+
 ## 7. Deliverable B — direct push, flat
 
 `SqlGraphPush`. Reads `dbo.Tickets`, creates the connection and schema if
@@ -335,6 +360,7 @@ Written for someone who will be woken at 3am by this system.
 | `docs/ASSUMPTIONS.md` | Answered questions, assumptions, deviations, defects found, open questions |
 | `docs/TROUBLESHOOTING.md` | Agent-hosted path, stage by stage, a script per stage |
 | `docs/TROUBLESHOOTING-DIRECT-PUSH.md` | The direct path, which fails differently |
+| `docs/ADDING-A-PUSH-CONNECTOR.md` | The recipe for a new source: one class, one configuration file, and what the engine will not do for you |
 | `docs/HIERARCHY-TEST-CASE.md` | The design: why a flat index needs flattening, and the full property annotation table |
 | `docs/HIERARCHY-DEPLOYMENT.md` | Step-by-step deployment of the three level connector, **.NET 10 and .NET 9 at every step** |
 | `docs/architecture.svg` | The data flow — Search and Copilot as siblings |

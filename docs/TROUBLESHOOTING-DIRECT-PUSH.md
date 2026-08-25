@@ -42,7 +42,7 @@ defect; all four are things people assume are there:
 | Crawl incrementally | Every run reads and re-PUTs the whole table |
 | Delete anything, ever | See [the deletion problem](#the-deletion-problem) — this is the big one |
 | Run on a schedule | Nothing happens unless a person or a scheduled task runs it |
-| Retry or back off on throttling | A large push can lose items to 429 without failing loudly |
+| Crawl on a watermark | Nothing resumes; a failed run starts again from the top |
 
 If you find yourself running it on a timer to keep an index fresh, you have
 outgrown it. That is what the agent-hosted connector is for, and
@@ -321,10 +321,13 @@ rather than an implemented operation. Fetching known IDs is the only way.
 
 **`MISSING` rows, in order of likelihood:**
 
-1. **Throttling.** The push loop has no backoff. A large table meets 429 and
-   individual items are lost without the run failing. `Compare-SourceToIndex.ps1`
-   honours `Retry-After` itself and reports how often it was throttled — if it
-   was throttled reading, the push was throttled writing.
+1. **Throttling that outlasted the backoff.** The engine honours `Retry-After`
+   and retries an item five times before giving up, so a throttled write is
+   normally survived rather than lost — the run summary reports
+   `throttleWaits=`, and a number there is the tell. Five failures in a row
+   fails the run with exit code 4 rather than skipping the item silently.
+   `Compare-SourceToIndex.ps1` honours `Retry-After` itself and reports how
+   often it was throttled reading.
 2. **The run stopped partway.** Exit code 4. The log's last
    `Indexed ticketNNNN` line is the high-water mark, and because the query is
    `ORDER BY TicketId` everything above that ID is what is missing.
@@ -413,7 +416,7 @@ user in the ACL group:
 | The agent owns the connection ID | A bare 403, and the ID cannot be reused |
 | Deleting a "hung" draft connection | The same wait again, and every item lost |
 | The schema is append-only | A one-character property mistake costs the whole connection |
-| No backoff on 429 | An item count quietly lower than the row count |
+| `throttleWaits=` in the summary | A slow run read as a hung one |
 | Soft-deleted rows are excluded, not deleted | Deleted tickets cited by Copilot indefinitely |
 | Hard-deleted rows | Orphans that no client can find |
 | The ACL is written per item | Fixing the config changes nothing already pushed |

@@ -1,20 +1,28 @@
 // ---------------------------------------------------------------------------
-// HierarchyOptions.cs
-// Configuration for the three level push tool. Same shape and same rules as the
-// connector and SqlGraphPush: nothing sensitive in the file, and every problem
-// reported in one pass rather than one per run.
+// PushOptions.cs
+// The configuration every push connector shares, and a bag for the settings it
+// does not.
+//
+// Same rules as everywhere else in this solution: nothing sensitive in the
+// file, and every problem reported in one pass rather than one per run.
+//
+// The Settings bag is what keeps this file still. A new connector that needs a
+// value of its own puts it under Settings and reads it in ValidateOptions and
+// MapRow. It does not add a property here, which would mean editing the core
+// and rebuilding every other connector to carry a field none of them use.
 // ---------------------------------------------------------------------------
 
-namespace SqlHierarchyPush;
+namespace SqlPushCore;
 
+using System.Globalization;
 using System.Text.Json;
 using SqlTicketsConnector.Security.Configuration;
 
-/// <summary>Root of the hierarchy push tool's appsettings.json.</summary>
-public sealed class HierarchyOptions
+/// <summary>Root of a push connector's appsettings file.</summary>
+public sealed class PushOptions
 {
-    /// <summary>The file this configuration is read from.</summary>
-    public const string FileName = "appsettings.json";
+    /// <summary>The file read when a connector declares no key-specific one.</summary>
+    public const string DefaultFileName = "appsettings.json";
 
     /// <summary>Gets or sets the deployment environment, for example Production.</summary>
     public string Environment { get; set; } = "Production";
@@ -32,22 +40,25 @@ public sealed class HierarchyOptions
     public AclOptions Acl { get; set; } = new AclOptions();
 
     /// <summary>Gets or sets the Microsoft Graph external connection settings.</summary>
-    public HierarchyGraphSection Graph { get; set; } = new HierarchyGraphSection();
+    public GraphSection Graph { get; set; } = new GraphSection();
 
-    /// <summary>Gets or sets settings describing where the flattened items come from.</summary>
+    /// <summary>Gets or sets settings describing where the rows come from.</summary>
     public SourceSection Source { get; set; } = new SourceSection();
+
+    /// <summary>
+    /// Gets or sets connector-specific values, so a new connector never has to
+    /// add a property to this class. Keys are matched case insensitively.
+    /// </summary>
+    public Dictionary<string, string> Settings { get; set; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Gets the path the configuration was read from.</summary>
     public string SourcePath { get; private set; } = "(not loaded from a file)";
 
-    /// <summary>Reads appsettings.json from beside the executable.</summary>
-    public static HierarchyOptions Load()
-    {
-        return Load(Path.Combine(AppContext.BaseDirectory, FileName));
-    }
-
     /// <summary>Reads and deserializes the file.</summary>
-    public static HierarchyOptions Load(string path)
+    /// <param name="path">Full path to the appsettings file.</param>
+    /// <returns>The configuration, not yet validated.</returns>
+    public static PushOptions Load(string path)
     {
         if (!File.Exists(path))
         {
@@ -62,11 +73,11 @@ public sealed class HierarchyOptions
             AllowTrailingCommas = true,
         };
 
-        HierarchyOptions? options;
+        PushOptions? options;
 
         try
         {
-            options = JsonSerializer.Deserialize<HierarchyOptions>(File.ReadAllText(path), serializerOptions);
+            options = JsonSerializer.Deserialize<PushOptions>(File.ReadAllText(path), serializerOptions);
         }
         catch (JsonException ex)
         {
@@ -79,10 +90,70 @@ public sealed class HierarchyOptions
         }
 
         options.SourcePath = path;
+
+        // Deserialization replaces the dictionary, and the replacement does not
+        // inherit the comparer. Without this, Settings lookups become case
+        // sensitive as soon as the file actually contains a Settings section.
+        if (options.Settings is not null && !ReferenceEquals(options.Settings.Comparer, StringComparer.OrdinalIgnoreCase))
+        {
+            options.Settings = new Dictionary<string, string>(options.Settings, StringComparer.OrdinalIgnoreCase);
+        }
+
         return options;
     }
 
-    /// <summary>Validates every section and returns all problems at once.</summary>
+    /// <summary>
+    /// Resolves the configuration file for a connector: appsettings.{key}.json
+    /// when it exists, appsettings.json otherwise.
+    /// </summary>
+    /// <param name="directory">Where to look, normally beside the executable.</param>
+    /// <param name="key">The connector key.</param>
+    /// <returns>The path to read.</returns>
+    public static string ResolveFile(string directory, string key)
+    {
+        string specific = Path.Combine(directory, $"appsettings.{key}.json");
+
+        return File.Exists(specific) ? specific : Path.Combine(directory, DefaultFileName);
+    }
+
+    /// <summary>Reads a connector-specific setting, or a fallback when it is absent.</summary>
+    /// <param name="name">The key under Settings.</param>
+    /// <param name="fallback">Returned when the key is absent or empty.</param>
+    /// <returns>The configured value or the fallback.</returns>
+    public string Setting(string name, string fallback = "")
+    {
+        if (this.Settings is not null &&
+            this.Settings.TryGetValue(name, out string? value) &&
+            !string.IsNullOrWhiteSpace(value))
+        {
+            return value;
+        }
+
+        return fallback;
+    }
+
+    /// <summary>Reads a connector-specific setting as an integer.</summary>
+    /// <param name="name">The key under Settings.</param>
+    /// <param name="fallback">Returned when the key is absent or not a number.</param>
+    /// <returns>The configured value or the fallback.</returns>
+    public int Setting(string name, int fallback)
+    {
+        return int.TryParse(this.Setting(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
+            ? value
+            : fallback;
+    }
+
+    /// <summary>Reads a connector-specific setting as a flag.</summary>
+    /// <param name="name">The key under Settings.</param>
+    /// <param name="fallback">Returned when the key is absent or not a boolean.</param>
+    /// <returns>The configured value or the fallback.</returns>
+    public bool Setting(string name, bool fallback)
+    {
+        return bool.TryParse(this.Setting(name), out bool value) ? value : fallback;
+    }
+
+    /// <summary>Validates every shared section and returns all problems at once.</summary>
+    /// <returns>The accumulated errors, empty when the configuration is usable.</returns>
     public ValidationErrors Validate()
     {
         var errors = new ValidationErrors();
@@ -106,29 +177,24 @@ public sealed class HierarchyOptions
     }
 }
 
-/// <summary>The "Graph" section.</summary>
-public sealed class HierarchyGraphSection
+/// <summary>The "Graph" section: which external connection this connector owns.</summary>
+public sealed class GraphSection
 {
-    /// <summary>
-    /// Gets or sets the external connection ID: 3 to 32 alphanumeric characters.
-    ///
-    /// It must differ from the ticket test case's connection. The two are owned
-    /// by whichever app created them, they register different schemas, and a
-    /// schema cannot be changed once registered — so sharing an ID means one
-    /// tool silently cannot manage the connection the other made.
-    /// </summary>
-    public string ConnectionId { get; set; } = "consultingwork";
+    /// <summary>Gets or sets the external connection ID: 3 to 32 alphanumeric characters.</summary>
+    public string ConnectionId { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the display name shown in the admin centre.</summary>
-    public string ConnectionName { get; set; } = "Consulting work";
+    public string ConnectionName { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the connection description.</summary>
-    public string Description { get; set; } = "Customers, engagements and logged time";
+    public string Description { get; set; } = string.Empty;
 
     /// <summary>Gets or sets how long to wait for server side schema registration.</summary>
     public int SchemaReadyTimeoutMinutes { get; set; } = 30;
 
     /// <summary>Validates the section.</summary>
+    /// <param name="errors">Accumulator.</param>
+    /// <param name="path">Configuration path prefix, normally "Graph".</param>
     public void Validate(ValidationErrors errors, string path)
     {
         errors.RequireNonEmpty($"{path}:ConnectionId", this.ConnectionId);
@@ -150,26 +216,17 @@ public sealed class HierarchyGraphSection
         {
             errors.Add($"{path}:ConnectionId", "cannot start with 'Microsoft' and cannot be 'None'.");
         }
-
-        if (string.Equals(this.ConnectionId, "sqltickets", StringComparison.OrdinalIgnoreCase))
-        {
-            errors.Add(
-                $"{path}:ConnectionId",
-                "is the ticket test case's connection. The two test cases register different schemas and a " +
-                "registered schema cannot be changed, so they must not share a connection ID.");
-        }
     }
 }
 
-/// <summary>The "Source" section: where the flattened items are read from.</summary>
+/// <summary>The "Source" section: where the rows are read from.</summary>
 public sealed class SourceSection
 {
     /// <summary>
-    /// Gets or sets the view that returns one row per external item, already
-    /// flattened. Schema qualified. The default is created by
-    /// sql/12-timesheet-views.sql.
+    /// Gets or sets the table or view that returns one row per external item.
+    /// Schema qualified.
     /// </summary>
-    public string ItemView { get; set; } = "dbo.vwExternalItems";
+    public string ItemView { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets a cap on rows read, for a quick smoke test against a large
@@ -179,6 +236,8 @@ public sealed class SourceSection
     public int MaxItems { get; set; }
 
     /// <summary>Validates the section.</summary>
+    /// <param name="errors">Accumulator.</param>
+    /// <param name="path">Configuration path prefix, normally "Source".</param>
     public void Validate(ValidationErrors errors, string path)
     {
         errors.RequireNonEmpty($"{path}:ItemView", this.ItemView);
@@ -189,9 +248,9 @@ public sealed class SourceSection
             return;
         }
 
-        // The view name is concatenated into a query, so it cannot be a
-        // parameter. Restricting it to an identifier shape is what makes that
-        // safe: a value that is not [schema.]name is rejected before use.
+        // The name is concatenated into a query, so it cannot be a parameter.
+        // Restricting it to an identifier shape is what makes that safe: a value
+        // that is not [schema.]name is rejected before use.
         foreach (string part in this.ItemView.Split('.'))
         {
             if (part.Length == 0 || !part.All(c => char.IsLetterOrDigit(c) || c == '_'))

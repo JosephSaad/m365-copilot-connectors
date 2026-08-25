@@ -135,6 +135,36 @@ Found by the new tests, not by inspection:
   `childCount`) are correct as of the last push and not at query time, and the
   sample data alone is 1126 items against tenant item quota.
 
+- **The push path refactored onto one engine on 2026-08-25**, so that adding a
+  SQL source is a class and a configuration file rather than a copy of a 550
+  line program.
+
+  `SqlGraphPush` and `SqlHierarchyPush` were 85% the same file. That part is now
+  `SqlPushCore`: credentials, the vault, the SQL connection, creating the
+  connection, registering the schema and polling to Ready, truncation, ACLs, the
+  PUT with backoff, exit codes, logging, `--dry-run` and `--help`. A connector
+  is `IPushConnector` — a schema, a query and a row mapping. Each executable's
+  `Program.cs` is one line.
+
+  Two decisions worth recording. **The Graph SDK lives in the engine, not in
+  `SqlTicketsConnector.Security`** — that is what lets the credential, vault and
+  SQL code stay shared with the agent-hosted connector while that project keeps
+  no Graph dependency of any kind. And **connectors are discovered by reflection
+  over the entry assembly, never by scanning a folder for DLLs**: a plugin
+  directory would mean what the tool can do is decided by whatever is sitting
+  beside it on a server, which is not something a reviewer should have to accept.
+
+  Two behaviours changed rather than moved, both improvements, both documented:
+  `SqlGraphPush` now honours `Retry-After` with five attempts where it
+  previously had no backoff at all — a known way for a large push to lose items
+  quietly — and it gains `--dry-run`. Its `appsettings.json` gained a `Source`
+  section; a deployed file that lacks one still works, because the connector
+  declares `dbo.Tickets` as its default and the host fills it in.
+
+  The recipe is `docs/ADDING-A-PUSH-CONNECTOR.md`. `PushEngineTests` holds a
+  `SampleConnector` written exactly the way a new one would be, so if adding a
+  connector ever required editing the engine, that file would stop compiling.
+
 - **The push tools put under test on 2026-08-25.** Neither `SqlGraphPush` nor
   `SqlHierarchyPush` had a test. Everything they delegate to
   `SqlTicketsConnector.Security` was covered, which is most of the security
@@ -148,10 +178,11 @@ Found by the new tests, not by inspection:
   The two rules that cannot be recovered from now live in
   `ExternalSchemaRules` in the Security project — primitives in, exception out,
   referencing no Graph type, so the rule is shared without the connector
-  acquiring a Graph SDK dependency. The schemas moved into `HierarchySchema.cs`
-  and `TicketSchema.cs` so they can be asserted. For `SqlGraphPush` that is a
-  change in behaviour rather than a move: its six properties were object
-  initialisers with no guard at all.
+  acquiring a Graph SDK dependency. The schemas moved out of top level
+  statements so they can be asserted — into the connector classes, once the
+  refactor above landed later the same day. For `SqlGraphPush` that is a change
+  in behaviour rather than a move: its six properties were object initialisers
+  with no guard at all.
 
   50 tests became 82. Four of the new ones joined the `ControlEvidenceTests`
   tripwire. They were checked by mutation rather than by going green — dropping

@@ -28,12 +28,14 @@
     <ProjectReference Include="..\..\src\SqlTicketsConnector\SqlTicketsConnector.csproj" />
 
     <!--
-      The two push tools. Their schemas and configuration validation carry the
-      most expensive failure in the system - a registered schema cannot be
-      corrected, only deleted with every item in it - so they are tested here
-      rather than read carefully. Referencing an Exe project is what makes the
-      public types in it reachable; nothing internal is exposed.
+      The push engine and the two connectors that run on it. Their schemas and
+      configuration validation carry the most expensive failure in the system -
+      a registered schema cannot be corrected, only deleted with every item in
+      it - so they are tested here rather than read carefully. Referencing an
+      Exe project is what makes the public types in it reachable; nothing
+      internal is exposed.
     -->
+    <ProjectReference Include="..\..\src\SqlPushCore\SqlPushCore.csproj" />
     <ProjectReference Include="..\..\src\SqlGraphPush\SqlGraphPush.csproj" />
     <ProjectReference Include="..\..\src\SqlHierarchyPush\SqlHierarchyPush.csproj" />
     <ProjectReference Include="..\..\src\SqlTicketsConnector.Security\SqlTicketsConnector.Security.csproj" />

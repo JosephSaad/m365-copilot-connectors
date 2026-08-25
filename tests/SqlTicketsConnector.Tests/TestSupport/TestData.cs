@@ -13,8 +13,7 @@ namespace SqlTicketsConnector.Tests.TestSupport
     using Serilog;
     using Serilog.Core;
     using Serilog.Events;
-    using SqlGraphPush;
-    using SqlHierarchyPush;
+    using SqlPushCore;
     using SqlTicketsConnector.Connector;
     using SqlTicketsConnector.Logging;
     using SqlTicketsConnector.Security.Configuration;
@@ -105,39 +104,12 @@ namespace SqlTicketsConnector.Tests.TestSupport
             };
         }
 
-        /// <summary>Returns three level push configuration that passes validation.</summary>
-        public static HierarchyOptions ValidHierarchyOptions()
-        {
-            return new HierarchyOptions
-            {
-                Environment = "Production",
-                Auth = ValidAuth(),
-                KeyVault = new KeyVaultOptions
-                {
-                    Uri = "https://kv-connectors-test.vault.azure.net/",
-                    SecretCacheTtlMinutes = 60,
-                },
-                DataSource = ValidDataSource(),
-                Acl = new AclOptions
-                {
-                    GrantGroupObjectIds = new List<string> { GroupObjectId },
-                },
-                Graph = new HierarchyGraphSection
-                {
-                    ConnectionId = "consultingwork",
-                    ConnectionName = "Consulting work",
-                    SchemaReadyTimeoutMinutes = 30,
-                },
-                Source = new SourceSection
-                {
-                    ItemView = "dbo.vwExternalItems",
-                    MaxItems = 0,
-                },
-            };
-        }
-
-        /// <summary>Returns ticket push configuration that passes validation.</summary>
-        public static PushOptions ValidPushOptions()
+        /// <summary>Returns push configuration that passes validation.</summary>
+        /// <param name="connectionId">The external connection to target.</param>
+        /// <param name="itemView">The table or view to read.</param>
+        /// <returns>Configuration with no validation errors.</returns>
+        public static PushOptions ValidPushOptions(
+            string connectionId = "consultingwork", string itemView = "dbo.vwExternalItems")
         {
             return new PushOptions
             {
@@ -155,9 +127,15 @@ namespace SqlTicketsConnector.Tests.TestSupport
                 },
                 Graph = new GraphSection
                 {
-                    ConnectionId = "sqltickets",
-                    ConnectionName = "SQL Support Tickets",
+                    ConnectionId = connectionId,
+                    ConnectionName = "Consulting work",
+                    Description = "Customers, engagements and logged time",
                     SchemaReadyTimeoutMinutes = 30,
+                },
+                Source = new SourceSection
+                {
+                    ItemView = itemView,
+                    MaxItems = 0,
                 },
             };
         }

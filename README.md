@@ -18,7 +18,8 @@ byte and unmodified.
 | Project | Model | Runs where |
 |---|---|---|
 | `SqlTicketsConnector` | gRPC server behind the Graph connector agent. **Never calls Microsoft Graph.** | On-premises Windows Server with the agent installed |
-| `SqlTicketsConnector.Security` | Shared secrets, certificates, credentials, SQL connections, log redaction | Class library, referenced by all three |
+| `SqlTicketsConnector.Security` | Shared secrets, certificates, credentials, SQL connections, log redaction | Class library, referenced by everything |
+| `SqlPushCore` | The push engine: connection, schema, truncation, ACLs, throttling, exit codes | Class library, referenced by every push tool |
 | `SqlGraphPush` | Direct `PUT /external/connections/{id}/items/{itemId}` — one flat table | Operator workstation or jump box with outbound HTTPS to Graph |
 | `SqlHierarchyPush` | The same, for a three level hierarchy: Customer → Engagement → TimeEntry | Same |
 
@@ -28,6 +29,10 @@ Default port: `30303`
 **Before reviewing or deploying this, read [`docs/SECURITY.md`](docs/SECURITY.md)
 (control mapping), [`docs/RUNBOOK.md`](docs/RUNBOOK.md) (rotation and failure
 modes) and [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).**
+
+**Adding another SQL source** is one class and one configuration file, with no
+change to the engine and no effect on the connectors already there:
+[`docs/ADDING-A-PUSH-CONNECTOR.md`](docs/ADDING-A-PUSH-CONNECTOR.md).
 
 **Deploying the three level connector** (Customer → Engagement → TimeEntry) is a
 separate procedure with its own document:
@@ -113,6 +118,7 @@ docs/
   HIERARCHY-TEST-CASE.md               The three level test case: why a flat index needs flattening, and how
   HIERARCHY-DEPLOYMENT.md              Step-by-step deployment of the three level connector, net10 and net9
   ASSUMPTIONS.md                       Decisions, deviations, open questions
+  ADDING-A-PUSH-CONNECTOR.md           One class and one config file: the recipe and the reasoning
   GENESIS-PROMPT.md                    The prompt that produces this repository, and why it looks like this
   agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
   hierarchy-in-copilot.pptx            Deck: how to handle hierarchical data in a flat index
@@ -139,12 +145,17 @@ src/
     Logging/                           Scrubber, enricher, redacted exception
     Configuration/                     Shared options and validation
     Schema/                            The two Graph schema rules that cannot be undone once registered
+  SqlPushCore/
+    IPushConnector.cs                  The extension point: schema, query, row mapping, and nothing else
+    PushHost.cs                        The whole of a push tool's Main: config, credential, exit codes
+    PushEngine.cs                      Connection, schema, truncation, ACLs, the PUT with backoff
+    PushOptions.cs                     Shared configuration, plus a Settings bag for what is not shared
+    PushSchema.cs, PushItem.cs, SqlRead.cs, PushSummary.cs, GraphThrottling.cs
   SqlGraphPush/
-    Program.cs, PushOptions.cs         Six property schema in TicketSchema.cs
+    TicketsPushConnector.cs            Six properties, dbo.Tickets. Program.cs is one line
     appsettings.json
   SqlHierarchyPush/
-    Program.cs, HierarchyOptions.cs    Three level test case; same Security engine, its own schema
-    HierarchySchema.cs                 26 properties, each annotation explained
+    HierarchyPushConnector.cs          26 properties, three levels. Program.cs is one line
     appsettings.json
 tests/
   SqlTicketsConnector.Tests/           82 tests, no live tenant, vault or database
