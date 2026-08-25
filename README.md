@@ -168,7 +168,7 @@ src/
     HierarchyPushConnector.cs          26 properties, three levels. Program.cs is one line
     appsettings.json
 tests/
-  SqlTicketsConnector.Tests/           98 tests, no live tenant, vault or database
+  SqlTicketsConnector.Tests/           114 tests, no live tenant, vault or database
 ```
 
 ---
