@@ -349,6 +349,20 @@
   .edge-risk { stroke: var(--risk); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
   .tick      { stroke: var(--rule-strong); stroke-width: 1.25; fill: none; }
 
+  .axes {
+    background: var(--surface-alt);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1.1rem 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    font-size: 0.92rem;
+  }
+  .axes p { margin: 0; max-width: none; }
+  .axes ul { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.45rem; }
+  .axes li::marker { color: var(--accent); }
+
   /* ---------- split panels ---------- */
 
   .panels {
@@ -612,7 +626,7 @@
 
     <figure>
       <div class="figbox">
-        <svg viewBox="0 0 1000 812" role="img" aria-label="Decision tree: a question for Copilot routes first on whether the askers hold M365 licences, then on who owns the data. Owned content with group-shaped access must also clear a freshness and deletion-SLA gate before it is indexed by a Graph connector; everything else, including almost all vendor-licensed data, is fetched by a live tool call. Each leaf carries its build effort and running meter.">
+        <svg viewBox="0 0 1000 830" role="img" aria-label="Decision tree: a question for Copilot routes first on whether the askers hold M365 licences, then on who owns the data. Owned content with group-shaped access must also clear a freshness and deletion-SLA gate before it is indexed by a Graph connector; everything else, including almost all vendor-licensed data, is fetched by a live tool call. Each leaf carries its build effort and running meter.">
           <defs>
             <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
@@ -727,7 +741,8 @@
   <text class="t-cost" x="840" y="737" text-anchor="middle">run: per call, many clients</text>
   <text class="t-cost" x="840" y="754" text-anchor="middle">you own auth + audit</text>
 
-  <text class="t-cost" x="500" y="792" text-anchor="middle">Build effort assumes the source system and its API already exist. If they do not, that is the real project.</text>
+  <text class="t-cost" x="500" y="790" text-anchor="middle">Build effort assumes the source system and its API already exist. If they do not, that is the real project.</text>
+  <text class="t-cost" x="500" y="808" text-anchor="middle">The two CALL leaves are ways of exposing a tool, not deployables: an agent or a client still has to host and meter them.</text>
         </svg>
       </div>
       <figcaption><strong>Figure 1.</strong> Ownership routes the question before cost does, and the owned branch still has to clear an SLA gate: crawl-interval freshness and crawl-bound deletion are the two promises no index path can improve on. The dashed red path is the only route that puts licensed vendor content into an index &mdash; it exists, but it needs a rider your market-data team has to negotiate, and it re-imports every entitlement obligation into a system that counts seats by Entra group.</figcaption>
@@ -1160,6 +1175,15 @@
       <p class="eyebrow">Table 2 &middot; added</p>
       <h2>Delivery paths &mdash; how the data gets there</h2>
       <p class="lede">The layer your original matrix doesn't cover, and the one where the money and the licensing risk actually sit. These are not alternatives to the surfaces above; every surface consumes one or more of them.</p>
+      <div class="axes">
+        <p><strong>Read the columns carefully &mdash; only some of them are alternatives to each other.</strong> Three axes are in play, and a column is mutually exclusive only with its own neighbours on the same one:</p>
+        <ul>
+          <li><strong>How the data reaches the model:</strong> pre-indexed retrieval (gallery or custom connector) <em>versus</em> live invocation. This is the real fork, and it is what Figure&nbsp;1 turns on.</li>
+          <li><strong>How a live tool is exposed</strong>, once you have chosen invocation: an API action, or an MCP server. Same job, different wire protocol and different client reach.</li>
+          <li><strong>Where the whole thing runs:</strong> M365 surfaces, or an application you host. <strong>Foundry sits on this axis, not the other two</strong> &mdash; inside it you would still choose retrieval versus invocation, with your own index and your own tools. It is here because &ldquo;the askers are not M365 users&rdquo; is a real branch, not because it is a peer of a connector.</li>
+        </ul>
+        <p>What the columns genuinely share, and what the cost rows are really measuring, is <strong>reach per unit of build</strong>: a connector is picked up by every M365 surface with nothing told to it, an API action is wired to each agent by hand, and an MCP server is wired per client over a shared protocol.</p>
+      </div>
     </div>
 
     <div class="scroller">
@@ -1178,12 +1202,28 @@
         <tbody>
           <tr class="group-row"><th colspan="6" scope="colgroup">What it is</th></tr>
           <tr>
-            <th class="rowhead" scope="row">Layer</th>
+            <th class="rowhead" scope="row">Layer &mdash; which axis it sits on</th>
             <td class="val">retrieval</td>
             <td class="val">retrieval</td>
             <td class="val">invocation</td>
             <td class="val">invocation</td>
-            <td class="val">application</td>
+            <td class="val neg">hosting &mdash; a different axis</td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Can it stand alone?</th>
+            <td class="val pos">yes &mdash; every surface picks it up</td>
+            <td class="val pos">yes &mdash; every surface picks it up</td>
+            <td class="val neg">no &mdash; an agent has to host it</td>
+            <td class="val">yes as a process, but a client must be wired to it</td>
+            <td class="val pos">yes &mdash; it <em>is</em> the host</td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Wiring per new surface</th>
+            <td class="val pos">none &mdash; implicit</td>
+            <td class="val pos">none &mdash; implicit</td>
+            <td class="val neg">one per agent, by hand</td>
+            <td class="val">one per client, shared protocol</td>
+            <td class="val">n/a &mdash; you are the surface</td>
           </tr>
           <tr>
             <th class="rowhead" scope="row">Freshness of the answer</th>
@@ -1220,11 +1260,11 @@
             <td class="val neg">months</td>
           </tr>
           <tr>
-            <th class="rowhead" scope="row">Recurrent meter</th>
+            <th class="rowhead" scope="row">Recurrent meter<br><span class="note">read the last two as <em>additive</em></span></th>
             <td class="val">item quota</td>
             <td class="val">item quota + crawl compute</td>
-            <td class="val">per downstream call</td>
-            <td class="val">per downstream call</td>
+            <td class="val neg">per downstream call, <strong>on top of</strong> the host agent's own meter</td>
+            <td class="val neg">per downstream call, <strong>on top of</strong> each client's own meter</td>
             <td class="val neg">tokens + hosting + search</td>
           </tr>
           <tr>
