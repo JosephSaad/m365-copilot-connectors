@@ -267,6 +267,9 @@ Reject `sqltickets` as this tool's connection ID in validation.
   classification that distinguishes transient from permanent.
 - Log scrubbing: a destructuring policy, an enricher, and a redacted exception
   type.
+- The two external-schema rules from section 5, as a validator taking primitives
+  and throwing — no Graph type, so the boundary holds, and both push tools use
+  the one copy.
 
 It may hold more than "secrets, certificates, credential factory" — SQL
 construction, scrubbing, option binding, content truncation all belong here,
@@ -430,6 +433,11 @@ are silent.
 - `dotnet build` clean but for `NETSDK1206` and `CS8981`; `dotnet test` green on
   `windows-latest`, both frameworks. Tests require no live tenant, vault or
   database.
+- **The schema guards are tested, not just written.** They are the one piece of
+  code whose failure cannot be undone, and a guard inside top level statements
+  is unreachable from a test assembly — so the schema does not live there. Prove
+  the guards by mutation: break the rule on purpose and watch a test go red. A
+  test that has never failed has not been shown to test anything.
 - The four `.proto` files byte-identical to Microsoft's originals.
 - `grep -rE 'password|secret|pwd|apikey|connectionstring'` over every
   `appsettings.json` returns names and placeholders, never a value.

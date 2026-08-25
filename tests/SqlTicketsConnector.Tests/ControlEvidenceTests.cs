@@ -25,6 +25,14 @@ namespace SqlTicketsConnector.Tests
             new[] { "SqlTicketsConnector.Tests.WatermarkResumptionTests", "No_row_is_skipped_or_repeated_across_a_checkpoint_boundary" },
             new[] { "SqlTicketsConnector.Tests.ConfigurationTests", "Every_invalid_field_is_reported_in_one_pass" },
             new[] { "SqlTicketsConnector.Tests.ContentAndSchemaTests", "An_empty_acl_configuration_fails_loudly_instead_of_granting_everyone" },
+
+            // The push tools. A registered schema cannot be corrected, only
+            // deleted with every item in it, so these four are the guards whose
+            // removal is most expensive and least visible.
+            new[] { "SqlTicketsConnector.Tests.PushSchemaTests", "A_searchable_and_refinable_property_is_rejected_before_any_graph_call" },
+            new[] { "SqlTicketsConnector.Tests.PushSchemaTests", "A_property_name_the_platform_would_reject_is_caught_before_any_graph_call" },
+            new[] { "SqlTicketsConnector.Tests.PushConfigurationTests", "The_hierarchy_tool_refuses_the_ticket_test_cases_connection_id" },
+            new[] { "SqlTicketsConnector.Tests.PushConfigurationTests", "A_view_name_that_is_not_a_plain_identifier_is_rejected" },
         };
 
         [Fact]

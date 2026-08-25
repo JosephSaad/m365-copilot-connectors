@@ -174,54 +174,13 @@ async Task EnsureSchemaAsync()
         return;
     }
 
-    var schema = new Schema
-    {
-        BaseType = "microsoft.graph.externalItem",
-        Properties = new List<Property>
-        {
-            new()
-            {
-                Name = "ticketId", Type = PropertyType.String,
-                IsQueryable = true, IsRetrievable = true,
-            },
-            new()
-            {
-                Name = "title", Type = PropertyType.String,
-                IsSearchable = true, IsQueryable = true, IsRetrievable = true,
-                Labels = new List<Label?> { Label.Title },
-            },
-            new()
-            {
-                Name = "status", Type = PropertyType.String,
-                IsQueryable = true, IsRetrievable = true, IsRefinable = true,
-            },
-            new()
-            {
-                Name = "assignedTo", Type = PropertyType.String,
-                IsQueryable = true, IsRetrievable = true,
-            },
-            new()
-            {
-                Name = "lastModified", Type = PropertyType.DateTime,
-                IsQueryable = true, IsRetrievable = true,
-                Labels = new List<Label?> { Label.LastModifiedDateTime },
-            },
-            new()
-            {
-                Name = "url", Type = PropertyType.String,
-                IsRetrievable = true,
-                Labels = new List<Label?> { Label.Url },
-            },
-        },
-    };
+    Schema schema = TicketSchema.Build();
 
     await graph.External.Connections[options.Graph.ConnectionId].Schema.PatchAsync(schema);
 
     Log.Information(
         "Schema registration submitted. This runs server side and typically takes 5 to 15 minutes.");
 
-    // Title and Url semantic labels plus a content payload are what make items
-    // eligible for the semantic index that Copilot reads.
     DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(options.Graph.SchemaReadyTimeoutMinutes);
 
     while (true)

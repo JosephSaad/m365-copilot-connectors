@@ -144,13 +144,16 @@ src/
     Sql/                               Connection string rules, error classification, factory
     Logging/                           Scrubber, enricher, redacted exception
     Configuration/                     Shared options and validation
+    Schema/                            The two Graph schema rules that cannot be undone once registered
   SqlGraphPush/
-    Program.cs, PushOptions.cs, appsettings.json
+    Program.cs, PushOptions.cs         Six property schema in TicketSchema.cs
+    appsettings.json
   SqlHierarchyPush/
     Program.cs, HierarchyOptions.cs    Three level test case; same Security engine, its own schema
+    HierarchySchema.cs                 26 properties, each annotation explained
     appsettings.json
 tests/
-  SqlTicketsConnector.Tests/           50 tests, no live tenant, vault or database
+  SqlTicketsConnector.Tests/           82 tests, no live tenant, vault or database
 ```
 
 ---

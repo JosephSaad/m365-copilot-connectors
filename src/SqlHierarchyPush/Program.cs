@@ -210,16 +210,10 @@ async Task EnsureConnectionAsync()
 // ---------------------------------------------------------------------------
 // 2. Register the schema (async server side operation, poll until Ready)
 //
-// One flat schema serves all three levels. A time entry leaves the engagement
-// and customer columns populated; a customer leaves the descendant columns
-// unset. That is what "flat" costs, and it is cheaper than three connections,
-// which could not be searched as one thing.
-//
-// Two platform rules shape every line below:
-//   * isSearchable and isRefinable are mutually exclusive. Anything a person
-//     types goes in the searchable column; anything they filter or facet by
-//     goes in the refinable one.
-//   * property names are 32 alphanumeric characters at most.
+// The 26 properties and the reasoning behind each annotation are in
+// HierarchySchema.cs. They sit in a class of their own so a test can assert the
+// shape on every build: a registered schema cannot be corrected, so getting it
+// wrong costs the connection and every item in it.
 // ---------------------------------------------------------------------------
 async Task EnsureSchemaAsync()
 {
@@ -231,71 +225,13 @@ async Task EnsureSchemaAsync()
         return;
     }
 
-    var schema = new Schema
-    {
-        BaseType = "microsoft.graph.externalItem",
-        Properties = new List<Property>
-        {
-            // --- which level this item is, and where it sits ----------------
-            // Refinable, not searchable: you facet by it, you do not type it.
-            Prop("itemType", PropertyType.String, queryable: true, retrievable: true, refinable: true),
-
-            Prop("title", PropertyType.String, searchable: true, queryable: true, retrievable: true,
-                label: Label.Title),
-            Prop("url", PropertyType.String, retrievable: true, label: Label.Url),
-            Prop("lastModified", PropertyType.DateTime, queryable: true, retrievable: true,
-                label: Label.LastModifiedDateTime),
-
-            // containerName and containerUrl are how the platform expresses
-            // "this item sits inside that one" — an engagement's container is
-            // its customer, a time entry's is its engagement. It is the closest
-            // a flat index gets to the hierarchy, and result surfaces show it.
-            Prop("containerName", PropertyType.String, searchable: true, queryable: true, retrievable: true,
-                label: Label.ContainerName),
-            Prop("containerUrl", PropertyType.String, retrievable: true, label: Label.ContainerUrl),
-
-            // The breadcrumb as one searchable string: "Contoso > Data Platform
-            // Migration > 2026-08-14 Priya Raman". Matches a query that names
-            // two levels at once, which neither level alone would.
-            Prop("hierarchyPath", PropertyType.String, searchable: true, queryable: true, retrievable: true),
-
-            // --- level 1, present on ALL THREE levels -----------------------
-            // This block is the requirement. customerName is searchable on the
-            // time entry as well as on the customer, which is the only reason a
-            // search for the customer reaches the time entry at all.
-            Prop("customerName", PropertyType.String, searchable: true, queryable: true, retrievable: true),
-            Prop("customerCode", PropertyType.String, searchable: true, queryable: true, retrievable: true),
-            Prop("accountManager", PropertyType.String, searchable: true, queryable: true, retrievable: true),
-            Prop("industry", PropertyType.String, queryable: true, retrievable: true, refinable: true),
-            Prop("region", PropertyType.String, queryable: true, retrievable: true, refinable: true),
-
-            // --- level 2, present on engagements and time entries -----------
-            Prop("engagementName", PropertyType.String, searchable: true, queryable: true, retrievable: true),
-            Prop("engagementCode", PropertyType.String, searchable: true, queryable: true, retrievable: true),
-            Prop("projectManager", PropertyType.String, searchable: true, queryable: true, retrievable: true),
-            Prop("practice", PropertyType.String, queryable: true, retrievable: true, refinable: true),
-            Prop("status", PropertyType.String, queryable: true, retrievable: true, refinable: true),
-
-            // --- level 3 ----------------------------------------------------
-            Prop("consultantName", PropertyType.String, searchable: true, queryable: true, retrievable: true),
-            Prop("consultantEmail", PropertyType.String, queryable: true, retrievable: true),
-            Prop("workType", PropertyType.String, queryable: true, retrievable: true, refinable: true),
-            Prop("workDate", PropertyType.DateTime, queryable: true, retrievable: true),
-            Prop("hours", PropertyType.Double, queryable: true, retrievable: true),
-            Prop("billable", PropertyType.Boolean, queryable: true, retrievable: true),
-
-            // --- roll ups, so an answer can cite a number without arithmetic -
-            Prop("contractValue", PropertyType.Double, queryable: true, retrievable: true),
-            Prop("totalHours", PropertyType.Double, queryable: true, retrievable: true),
-            Prop("childCount", PropertyType.Int64, queryable: true, retrievable: true),
-        },
-    };
+    Schema schema = HierarchySchema.Build();
 
     await graph.External.Connections[options.Graph.ConnectionId].Schema.PatchAsync(schema);
 
     Log.Information(
         "Schema registration submitted: {Count} properties. This runs server side and typically takes 5 to 15 minutes.",
-        schema.Properties.Count);
+        schema.Properties!.Count);
     Log.Information(
         "It cannot be changed afterwards except by adding properties. Run deploy/Watch-SchemaRegistration.ps1 " +
         "to watch, and read the schema it prints before pushing anything.");
@@ -586,49 +522,6 @@ static bool? Flag(SqlDataReader reader, string column)
 {
     int ordinal = reader.GetOrdinal(column);
     return reader.IsDBNull(ordinal) ? null : reader.GetBoolean(ordinal);
-}
-
-static Property Prop(
-    string name,
-    PropertyType type,
-    bool searchable = false,
-    bool queryable = false,
-    bool retrievable = false,
-    bool refinable = false,
-    Label? label = null)
-{
-    // The platform rejects searchable + refinable together. Catching it here
-    // turns a schema registration failure fifteen minutes into the wait — with
-    // a connection left in draft that cannot be corrected without deleting it —
-    // into an exception before the first Graph call.
-    if (searchable && refinable)
-    {
-        throw new InvalidOperationException(
-            $"Property {name} is both searchable and refinable. Microsoft Graph rejects that combination.");
-    }
-
-    if (name.Length > 32 || !name.All(char.IsLetterOrDigit))
-    {
-        throw new InvalidOperationException(
-            $"Property name {name} must be 32 alphanumeric characters or fewer.");
-    }
-
-    var property = new Property
-    {
-        Name = name,
-        Type = type,
-        IsSearchable = searchable,
-        IsQueryable = queryable,
-        IsRetrievable = retrievable,
-        IsRefinable = refinable,
-    };
-
-    if (label is not null)
-    {
-        property.Labels = new List<Label?> { label };
-    }
-
-    return property;
 }
 
 /// <summary>Counts by level, so the summary line says what was actually written.</summary>
