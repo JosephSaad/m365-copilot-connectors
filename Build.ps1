@@ -161,6 +161,11 @@ Copy-Item (Join-Path $PSScriptRoot 'docs\*.md') (Join-Path $OutputRoot 'docs') -
 # path, so a package with the markdown and not the SVGs has broken images in the
 # one copy an operator actually reads.
 Copy-Item (Join-Path $PSScriptRoot 'docs\*.svg') (Join-Path $OutputRoot 'docs') -Force
+# COPILOT-ROUTING.md links a self-contained HTML tool and a raster of the same
+# drawing. Same rule as the SVGs: docs\ ships whole, or the copy an operator
+# reads has links that go nowhere.
+Copy-Item (Join-Path $PSScriptRoot 'docs\*.html') (Join-Path $OutputRoot 'docs') -Force
+Copy-Item (Join-Path $PSScriptRoot 'docs\*.png') (Join-Path $OutputRoot 'docs') -Force
 
 Write-Host '== Staging source ==' -ForegroundColor Cyan
 # The package carries a buildable copy of the tree under source\, so one

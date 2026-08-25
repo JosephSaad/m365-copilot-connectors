@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 812" width="1000" height="812" role="img" aria-label="Decision tree for routing a Copilot question. Gate one: do the askers hold M365 licences — if not, Azure AI Foundry. Gate two: who owns the data. Owned data passes a content-and-group-access gate and then a freshness-and-deletion-SLA gate before being indexed by a Graph connector. Vendor-licensed data goes to a live tool call unless a signed AI rider permits indexing. Each leaf carries build effort and running meter.">
+  <title>Routing a Copilot question by ownership, then by cost</title>
+  <desc>Four gates decide between indexing content in a Graph connector and fetching it live with a tool call. Ownership routes first; freshness and deletion SLA decide the owned branch; licensed vendor data goes live by default.</desc>
+
+  <style>
+    :root, svg {
+      --ground:  #FBFCFC;
+      --surface: #FBFCFC;
+      --alt:     #E9EEEC;
+      --ink:     #111819;
+      --muted:   #55656A;
+      --rule:    #B6C2BF;
+      --accent:  #12514E;
+      --asoft:   #E0EAE8;
+      --risk:    #A0392F;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root, svg {
+        --ground:  #0C1214;
+        --surface: #141C1E;
+        --alt:     #1B2427;
+        --ink:     #E4EBEA;
+        --muted:   #94A3A6;
+        --rule:    #354245;
+        --accent:  #58C4AF;
+        --asoft:   #16302E;
+        --risk:    #E38175;
+      }
+    }
+    .bg      { fill: var(--ground); }
+    .n-box   { fill: var(--surface); stroke: var(--rule); stroke-width: 1.25; }
+    .n-gate  { fill: var(--alt); stroke: var(--muted); stroke-width: 1.25; }
+    .n-start { fill: var(--asoft); stroke: var(--accent); stroke-width: 1.5; }
+    .n-index { fill: var(--asoft); stroke: var(--accent); stroke-width: 1.75; }
+    .n-call  { fill: var(--alt);   stroke: var(--ink);   stroke-width: 1.75; }
+    .n-esc   { fill: var(--alt);   stroke: var(--rule);  stroke-width: 1.25; stroke-dasharray: 3 3; }
+
+    text { font-family: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif; }
+    .t-title { fill: var(--ink);   font-size: 13px; font-weight: 600; }
+    .t-body  { fill: var(--ink);   font-size: 12.5px; }
+    .t-cost  { fill: var(--muted); font-size: 10.5px; font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+    .t-edge  { fill: var(--muted); font-size: 10.5px; font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+    .t-accent{ fill: var(--accent); font-size: 13.5px; font-weight: 600; letter-spacing: .05em; }
+    .t-risk  { fill: var(--risk);  font-size: 10.5px; font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+
+    .edge      { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+    .edge-risk { stroke: var(--risk);  stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+    .tick      { stroke: var(--rule);  stroke-width: 1.25; fill: none; }
+    .head      { fill: var(--muted); }
+    .head-risk { fill: var(--risk); }
+  </style>
+
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" class="head"/>
+    </marker>
+    <marker id="ar-risk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" class="head-risk"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1000" height="812"/>
+
+  <!-- START -->
+  <rect class="n-start" x="400" y="18" width="200" height="44" rx="3"/>
+  <text class="t-title" x="500" y="45" text-anchor="middle">A question for Copilot</text>
+  <path class="edge" d="M500,62 L500,94" marker-end="url(#ar)"/>
+
+  <!-- GATE 1 -->
+  <rect class="n-gate" x="368" y="96" width="264" height="48" rx="3"/>
+  <text class="t-body" x="500" y="125" text-anchor="middle">Do the askers hold M365 licences?</text>
+
+  <path class="edge" d="M632,120 L754,120" marker-end="url(#ar)"/>
+  <text class="t-edge" x="693" y="111" text-anchor="middle">no</text>
+  <rect class="n-esc" x="756" y="88" width="230" height="64" rx="3"/>
+  <text class="t-title" x="871" y="112" text-anchor="middle">Azure AI Foundry</text>
+  <text class="t-cost" x="871" y="130" text-anchor="middle">months to build</text>
+  <text class="t-cost" x="871" y="144" text-anchor="middle">tokens + hosting + headcount</text>
+
+  <path class="edge" d="M500,144 L500,178" marker-end="url(#ar)"/>
+  <text class="t-edge" x="512" y="167">yes</text>
+
+  <!-- GATE 2 -->
+  <rect class="n-gate" x="368" y="180" width="264" height="48" rx="3"/>
+  <text class="t-body" x="500" y="209" text-anchor="middle">Who owns the data?</text>
+
+  <path class="edge" d="M500,228 L500,256 L265,256 L265,288" marker-end="url(#ar)"/>
+  <path class="edge" d="M500,256 L735,256 L735,288" marker-end="url(#ar)"/>
+  <text class="t-edge" x="352" y="248" text-anchor="middle">we own it</text>
+  <text class="t-edge" x="655" y="248" text-anchor="middle">licensed from a vendor</text>
+
+  <!-- GATE 3 : owned -->
+  <rect class="n-gate" x="110" y="290" width="310" height="74" rx="3"/>
+  <text class="t-body" x="265" y="317" text-anchor="middle">Is it content &#8212; and is access</text>
+  <text class="t-body" x="265" y="336" text-anchor="middle">expressible as Entra groups?</text>
+  <text class="t-cost" x="265" y="353" text-anchor="middle">no RLS, no MNPI, no dynamic barriers</text>
+
+  <!-- GATE 4 : licensed -->
+  <rect class="n-gate" x="580" y="290" width="310" height="74" rx="3"/>
+  <text class="t-body" x="735" y="317" text-anchor="middle">Does the licence permit indexing</text>
+  <text class="t-body" x="735" y="336" text-anchor="middle">and AI grounding?</text>
+  <text class="t-cost" x="735" y="353" text-anchor="middle">redistribution + derived data + AI rider</text>
+
+  <!-- GATE 3 outputs -->
+  <path class="edge" d="M180,364 L180,398" marker-end="url(#ar)"/>
+  <text class="t-edge" x="190" y="386">both yes</text>
+  <path class="edge" d="M390,364 L390,505"/>
+  <text class="t-edge" x="400" y="400">either one is no</text>
+
+  <!-- GATE 3b : the SLA gate -->
+  <rect class="n-gate" x="60" y="400" width="280" height="76" rx="3"/>
+  <text class="t-body" x="200" y="427" text-anchor="middle">Can you live with crawl-interval</text>
+  <text class="t-body" x="200" y="446" text-anchor="middle">freshness and crawl-bound deletion?</text>
+  <text class="t-cost" x="200" y="464" text-anchor="middle">a direct push never deletes at all</text>
+
+  <path class="edge" d="M140,476 L140,598" marker-end="url(#ar)"/>
+  <text class="t-edge" x="150" y="520">yes</text>
+  <path class="edge" d="M300,476 L300,505"/>
+  <text class="t-edge" x="310" y="496">no</text>
+
+  <!-- shared trunk to CALL -->
+  <path class="edge" d="M300,505 L660,505 L660,598" marker-end="url(#ar)"/>
+
+  <!-- GATE 4 outputs -->
+  <path class="edge" d="M820,364 L820,598" marker-end="url(#ar)"/>
+  <text class="t-edge" x="830" y="430">no &#8212; the usual answer</text>
+
+  <path class="edge-risk" d="M620,364 L620,565 L250,565 L250,598" marker-end="url(#ar-risk)"/>
+  <text class="t-risk" x="435" y="557" text-anchor="middle">yes, with a signed AI rider &#8212; rare, and audited</text>
+
+  <!-- OUTCOME BANDS -->
+  <rect class="n-index" x="60" y="600" width="410" height="52" rx="3"/>
+  <text class="t-accent" x="265" y="624" text-anchor="middle">INDEX IT</text>
+  <text class="t-cost" x="265" y="641" text-anchor="middle">Graph connector &#183; one copy, security-trimmed, M365-wide</text>
+
+  <rect class="n-call" x="530" y="600" width="410" height="52" rx="3"/>
+  <text class="t-title" x="735" y="624" text-anchor="middle">CALL IT</text>
+  <text class="t-cost" x="735" y="641" text-anchor="middle">live tool call &#183; no copy, entitled at the source</text>
+
+  <!-- leaves -->
+  <path class="tick" d="M160,652 L160,676"/>
+  <path class="tick" d="M370,652 L370,676"/>
+  <path class="tick" d="M630,652 L630,676"/>
+  <path class="tick" d="M840,652 L840,676"/>
+
+  <rect class="n-box" x="60" y="678" width="200" height="86" rx="3"/>
+  <text class="t-title" x="160" y="702" text-anchor="middle">Gallery connector</text>
+  <text class="t-cost" x="160" y="722" text-anchor="middle">build: hours&#8211;days</text>
+  <text class="t-cost" x="160" y="737" text-anchor="middle">run: item quota</text>
+  <text class="t-cost" x="160" y="754" text-anchor="middle">check this list first</text>
+
+  <rect class="n-box" x="270" y="678" width="200" height="86" rx="3"/>
+  <text class="t-title" x="370" y="702" text-anchor="middle">Custom connector</text>
+  <text class="t-cost" x="370" y="722" text-anchor="middle">build: weeks; then days</text>
+  <text class="t-cost" x="370" y="737" text-anchor="middle">run: item quota + crawl</text>
+  <text class="t-cost" x="370" y="754" text-anchor="middle">schema is append-only</text>
+
+  <rect class="n-box" x="530" y="678" width="200" height="86" rx="3"/>
+  <text class="t-title" x="630" y="702" text-anchor="middle">API action</text>
+  <text class="t-cost" x="630" y="722" text-anchor="middle">build: days&#8211;2 weeks</text>
+  <text class="t-cost" x="630" y="737" text-anchor="middle">run: per downstream call</text>
+  <text class="t-cost" x="630" y="754" text-anchor="middle">watch LLM fan-out</text>
+
+  <rect class="n-box" x="740" y="678" width="200" height="86" rx="3"/>
+  <text class="t-title" x="840" y="702" text-anchor="middle">MCP server</text>
+  <text class="t-cost" x="840" y="722" text-anchor="middle">build: days&#8211;2 weeks</text>
+  <text class="t-cost" x="840" y="737" text-anchor="middle">run: per call, many clients</text>
+  <text class="t-cost" x="840" y="754" text-anchor="middle">you own auth + audit</text>
+
+  <text class="t-cost" x="500" y="792" text-anchor="middle">Build effort assumes the source system and its API already exist. If they do not, that is the real project.</text>
+</svg>
