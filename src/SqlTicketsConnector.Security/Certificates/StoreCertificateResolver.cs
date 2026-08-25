@@ -158,7 +158,7 @@ namespace SqlTicketsConnector.Security.Certificates
             }
             catch (CertificateResolutionException ex)
             {
-                this.logger.Error(ex, "Daily certificate check failed.");
+                this.logger.Error(Logging.RedactedException.Wrap(ex), "Daily certificate check failed.");
             }
         }
 

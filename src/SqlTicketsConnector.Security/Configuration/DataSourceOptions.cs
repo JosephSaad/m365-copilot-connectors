@@ -82,6 +82,15 @@ namespace SqlTicketsConnector.Security.Configuration
         public int ConnectTimeoutSeconds { get; set; } = 30;
 
         /// <summary>
+        /// Gets or sets the timeout for query execution, in seconds. Zero means
+        /// unlimited. Separate from ConnectTimeoutSeconds deliberately: connecting
+        /// should fail fast, but a full-corpus read of a large view legitimately
+        /// runs long, and reusing the connect timeout as the command timeout kills
+        /// such a read mid-stream.
+        /// </summary>
+        public int CommandTimeoutSeconds { get; set; } = 600;
+
+        /// <summary>
         /// Gets or sets a value indicating whether dbo.Tickets carries the IsDeleted
         /// column. When false the incremental crawl cannot report deletes and they
         /// are only picked up by the next periodic full crawl.
@@ -139,6 +148,7 @@ namespace SqlTicketsConnector.Security.Configuration
             errors.RequireRange(path + ":ConnectRetryCount", this.ConnectRetryCount, 0, 255);
             errors.RequireRange(path + ":ConnectRetryIntervalSeconds", this.ConnectRetryIntervalSeconds, 1, 60);
             errors.RequireRange(path + ":ConnectTimeoutSeconds", this.ConnectTimeoutSeconds, 5, 300);
+            errors.RequireRange(path + ":CommandTimeoutSeconds", this.CommandTimeoutSeconds, 0, 86400);
 
             if (this.ParsedSqlAuthMode == Configuration.SqlAuthMode.SqlLogin)
             {

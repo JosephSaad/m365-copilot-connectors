@@ -20,7 +20,9 @@ namespace SqlPushCore;
 
 using System.Reflection;
 using Azure.Core;
+using Azure.Identity;
 using Microsoft.Graph;
+using Microsoft.Graph.Models.ODataErrors;
 using Serilog;
 using Serilog.Events;
 using SqlTicketsConnector.Security.Certificates;
@@ -38,9 +40,40 @@ public static class PushHost
     /// <summary>Runs whichever connector the arguments select.</summary>
     /// <param name="args">Command line: --connector, --dry-run, --help.</param>
     /// <returns>The process exit code.</returns>
-    public static Task<int> RunAsync(string[] args)
+    public static async Task<int> RunAsync(string[] args)
     {
-        return RunAsync(PushConnectorRegistry.Discover(Assembly.GetEntryAssembly()!), args);
+        IReadOnlyList<IPushConnector> connectors;
+
+        try
+        {
+            connectors = PushConnectorRegistry.Discover(Assembly.GetEntryAssembly()!);
+        }
+        catch (Exception ex)
+        {
+            // Discovery loads every type in the executable, so a stale or
+            // mismatched DLL beside it throws here - before any logger exists.
+            // Without this guard that is a bare CLR crash dump and an exit code
+            // outside the documented contract; a broken deployment is a
+            // configuration fault, so it reports as one.
+            Console.Error.WriteLine($"FATAL: {Flatten(ex)}");
+            return 2;
+        }
+
+        return await RunAsync(connectors, args);
+    }
+
+    private static string Flatten(Exception ex)
+    {
+        // ReflectionTypeLoadException buries the useful message in
+        // LoaderExceptions; everything else is fine as-is.
+        if (ex is ReflectionTypeLoadException loadEx && loadEx.LoaderExceptions is { Length: > 0 })
+        {
+            return ex.Message + " " + string.Join(
+                " | ",
+                loadEx.LoaderExceptions.Where(e => e is not null).Select(e => e!.Message).Distinct());
+        }
+
+        return ex.ToString();
     }
 
     /// <summary>Runs whichever of the supplied connectors the arguments select.</summary>
@@ -82,25 +115,51 @@ public static class PushHost
 
         string executable = Assembly.GetEntryAssembly()?.GetName().Name ?? "SqlPush";
 
-        using var logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
-            .Enrich.With(new ScrubbingEnricher())
-            .WriteTo.Console(outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .WriteTo.File(
-                Path.Combine(AppContext.BaseDirectory, "Logs", executable + ".log"),
-                fileSizeLimitBytes: 10L * 1024 * 1024,
-                rollOnFileSizeLimit: true,
-                retainedFileCountLimit: 30,
-                restrictedToMinimumLevel: LogEventLevel.Information)
-            .CreateLogger();
+        // The file sink opens its file lazily and swallows open failures into
+        // Serilog's SelfLog, which is off by default - so an unwritable Logs
+        // directory would silently produce no log file at all. Route SelfLog to
+        // stderr, and probe the directory up front so the operator is told at
+        // startup rather than discovering an empty directory during an incident.
+        Serilog.Debugging.SelfLog.Enable(Console.Error);
+
+        string logsDirectory = Path.Combine(AppContext.BaseDirectory, "Logs");
+
+        try
+        {
+            Directory.CreateDirectory(logsDirectory);
+            string probe = Path.Combine(logsDirectory, ".writable");
+            File.WriteAllText(probe, string.Empty);
+            File.Delete(probe);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"WARNING: the log directory {logsDirectory} is not writable ({ex.Message}). " +
+                "This run will log to the console only.");
+        }
+
+        using var logger = CreateLogger(executable);
 
         Log.Logger = logger;
 
-        ApplyDefaults(options, connector);
+        ValidationErrors errors;
 
-        ValidationErrors errors = options.Validate();
-        connector.ValidateOptions(options, errors);
-        RejectNeighboursConnection(options, connector, connectors, errors);
+        try
+        {
+            ApplyDefaults(options, connector);
+
+            errors = options.Validate();
+            connector.ValidateOptions(options, errors);
+            RejectNeighboursConnection(options, connector, connectors, errors);
+        }
+        catch (Exception ex)
+        {
+            // ValidateOptions is connector-authored code; a throw there is a
+            // configuration-stage fault and must not escape Main unhandled.
+            Log.Fatal(RedactedException.Wrap(ex), "Configuration validation threw.");
+            Log.CloseAndFlush();
+            return 2;
+        }
 
         if (errors.HasErrors)
         {
@@ -169,7 +228,18 @@ public static class PushHost
 
             var engine = new PushEngine(connector, options, graph, connections, Log.Logger, dryRun);
 
-            PushSummary summary = await engine.RunAsync();
+            // Ctrl+C cancels cleanly: the token reaches every Graph call and
+            // every poll delay, so a two-hour schema wait does not have to be
+            // killed from Task Manager.
+            using var cancellation = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                Log.Warning("Ctrl+C received. Stopping after the current item.");
+                cancellation.Cancel();
+            };
+
+            PushSummary summary = await engine.RunAsync(cancellation.Token);
 
             Log.Information(
                 "{Verb} complete. {Total} item(s) ({Breakdown}) for connection {ConnectionId}. " +
@@ -184,6 +254,31 @@ public static class PushHost
 
             return 0;
         }
+        catch (AuthenticationFailedException ex)
+        {
+            // TokenCredentialFactory.Create only CONSTRUCTS the credential; Entra
+            // is first contacted on the first Graph call, inside this try. An
+            // expired secret or revoked certificate lands here, and the contract
+            // says that is exit 3, not 4 - a monitoring rule keyed to 3 must fire
+            // for credential rotation, not send the operator into the data path.
+            Log.Fatal(RedactedException.Wrap(ex), "The credential was rejected by Entra ID.");
+            return 3;
+        }
+        catch (ODataError ex) when (ex.ResponseStatusCode is 401 or 403)
+        {
+            Log.Fatal(
+                RedactedException.Wrap(ex),
+                "Graph rejected the caller ({Status}). Check admin consent for the application " +
+                "permissions and that this app registration owns connection {ConnectionId}.",
+                ex.ResponseStatusCode,
+                options.Graph.ConnectionId);
+            return 3;
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Warning("Cancelled. The index holds what was written before the stop; re-run to complete.");
+            return 4;
+        }
         catch (Exception ex)
         {
             Log.Fatal(RedactedException.Wrap(ex), "Ingestion failed.");
@@ -194,6 +289,48 @@ public static class PushHost
             secretCache?.Dispose();
             Log.CloseAndFlush();
         }
+    }
+
+    /// <summary>
+    /// Builds the logger every push executable uses. Public so a test can drive
+    /// the exact production pipeline: the redaction canaries prove content never
+    /// reaches a sink against THIS configuration, not a lookalike.
+    /// </summary>
+    /// <param name="executable">Names the log file, so an existing deployment's log path never moves.</param>
+    /// <returns>The configured logger.</returns>
+    public static Serilog.Core.Logger CreateLogger(string executable)
+    {
+        return ConfigurePushPipeline(new LoggerConfiguration())
+            .WriteTo.Console(outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+            .WriteTo.File(
+                Path.Combine(AppContext.BaseDirectory, "Logs", executable + ".log"),
+                fileSizeLimitBytes: 10L * 1024 * 1024,
+                rollOnFileSizeLimit: true,
+                retainedFileCountLimit: 30,
+                restrictedToMinimumLevel: LogEventLevel.Information)
+            .CreateLogger();
+    }
+
+    /// <summary>
+    /// The redaction half of the pipeline, separated from the sinks so the
+    /// canary tests can attach a collecting sink to the exact configuration the
+    /// executables run - not a lookalike.
+    /// </summary>
+    /// <param name="configuration">The configuration to extend.</param>
+    /// <returns>The same configuration, for chaining.</returns>
+    public static LoggerConfiguration ConfigurePushPipeline(LoggerConfiguration configuration)
+    {
+        return configuration
+            .MinimumLevel.Information()
+            .Enrich.With(new ScrubbingEnricher())
+
+            // The engine logs item IDs and counts, never objects - but that is a
+            // convention, and conventions drift. These registrations make the
+            // risky Graph types render as their type name if one is ever logged,
+            // instead of being destructured into full JSON including content.
+            .Destructure.AsScalar<Microsoft.Graph.Models.ExternalConnectors.ExternalItem>()
+            .Destructure.AsScalar<Microsoft.Graph.Models.ExternalConnectors.Properties>()
+            .Destructure.AsScalar<Microsoft.Graph.Models.ExternalConnectors.ExternalItemContent>();
     }
 
     /// <summary>

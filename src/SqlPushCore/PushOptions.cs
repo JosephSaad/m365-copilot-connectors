@@ -81,7 +81,18 @@ public sealed class PushOptions
         }
         catch (JsonException ex)
         {
-            throw new InvalidOperationException($"Configuration file {path} is not valid JSON: {ex.Message}", ex);
+            // A type mismatch (a quoted number, a bare number where a string is
+            // expected) surfaces as JsonException too, and calling that "not
+            // valid JSON" sends the operator hunting for a syntax error that is
+            // not there. Path present = the shape parsed but a value did not.
+            bool wrongType = ex.Path is not null &&
+                ex.Message.Contains("could not be converted", StringComparison.OrdinalIgnoreCase);
+
+            string message = wrongType
+                ? $"Configuration file {path} has a value of the wrong type at {ex.Path}: {ex.Message}"
+                : $"Configuration file {path} is not valid JSON: {ex.Message}";
+
+            throw new InvalidOperationException(message, ex);
         }
 
         if (options is null)
@@ -206,9 +217,12 @@ public sealed class GraphSection
             return;
         }
 
-        if (this.ConnectionId.Length is < 3 or > 32 || !this.ConnectionId.All(char.IsLetterOrDigit))
+        if (this.ConnectionId.Length is < 3 or > 32 || !this.ConnectionId.All(char.IsAsciiLetterOrDigit))
         {
-            errors.Add($"{path}:ConnectionId", "must be 3 to 32 alphanumeric characters.");
+            // ASCII deliberately: char.IsLetterOrDigit admits non-ASCII letters
+            // that Graph rejects at creation time, and the pre-flight script
+            // checks the same field with an ASCII regex.
+            errors.Add($"{path}:ConnectionId", "must be 3 to 32 ASCII letters or digits.");
         }
 
         if (this.ConnectionId.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase) ||
@@ -253,11 +267,17 @@ public sealed class SourceSection
         // that is not [schema.]name is rejected before use.
         foreach (string part in this.ItemView.Split('.'))
         {
-            if (part.Length == 0 || !part.All(c => char.IsLetterOrDigit(c) || c == '_'))
+            if (part.Length == 0 ||
+                !(char.IsLetter(part[0]) || part[0] == '_') ||
+                !part.All(c => char.IsLetterOrDigit(c) || c == '_'))
             {
+                // The first character rule matters: SQL Server rejects an
+                // identifier starting with a digit, and catching that here is
+                // exit 2 with a named key instead of a SQL syntax error at exit 4.
                 errors.Add(
                     $"{path}:ItemView",
-                    "must be a plain [schema.]name identifier, letters, digits and underscores only.");
+                    "must be a plain [schema.]name identifier: letters, digits and underscores, " +
+                    "not starting with a digit.");
                 return;
             }
         }

@@ -108,7 +108,16 @@ while ($true) {
             Write-Host "$stamp  $($_.Exception.Message)" -ForegroundColor Red
         }
 
-        if ((Get-Date) -gt $deadline) { break }
+        if ((Get-Date) -gt $deadline) {
+            # A watch that never saw the connection reach 'ready' is a failed
+            # watch. Breaking out silently here would end the script with exit 0
+            # - a failed watch reporting success to anything gating on it.
+            Write-Host ''
+            Write-Host ("Gave up after $TimeoutMinutes minute(s). Last error: $($_.Exception.Message)") -ForegroundColor Red
+            Write-Host 'If the connection was never created, run the push tool first; it creates it.' -ForegroundColor Yellow
+            exit 1
+        }
+
         Start-Sleep -Seconds $IntervalSeconds
         continue
     }

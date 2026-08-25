@@ -85,6 +85,15 @@ else {
 }
 
 $connectionId = $config.Graph.ConnectionId
+
+if ([string]::IsNullOrWhiteSpace($connectionId)) {
+    # PushHost.ApplyDefaults fills an omitted ConnectionId from the connector
+    # ('sqltickets' for the tickets tool), so an omitted value is a valid
+    # configuration - the pre-flight must not fail what the tool accepts.
+    $connectionId = 'sqltickets'
+    Note "Graph:ConnectionId is not set; the tool defaults it to '$connectionId'."
+}
+
 if ($connectionId.Length -lt 3 -or $connectionId.Length -gt 32 -or $connectionId -notmatch '^[a-zA-Z0-9]+$') {
     Fail "Graph:ConnectionId '$connectionId' must be 3 to 32 alphanumeric characters"
 }
@@ -198,6 +207,7 @@ if ($certificate -or $ClientSecret) {
     }
     else {
         Fail "token request failed: $($auth.Error)"
+        if ($auth.Detail) { Note "response body: $($auth.Detail)" }
         if ($auth.Aadsts) { Note "AADSTS$($auth.Aadsts)" }
         if ($auth.Advice) { Note $auth.Advice }
     }
@@ -262,6 +272,7 @@ if ($auth -and $auth.Token) {
     }
     catch {
         Fail "GET /external/connections -> $($_.Exception.Message)"
+        if ($_.ErrorDetails.Message) { Note "response body: $($_.ErrorDetails.Message)" }
         Note 'A 403 here while the roles above are present means consent was granted after this token was issued. Re-run.'
     }
 }

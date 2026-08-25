@@ -96,6 +96,12 @@ Write-Host '== Dependency audit ==' -ForegroundColor Cyan
 # header-leak advisory out of a release package.
 $vulnerable = dotnet list $solution package --vulnerable --include-transitive 2>&1 | Out-String
 Write-Host $vulnerable
+if ($LASTEXITCODE -ne 0) {
+    # Without this check an erroring 'dotnet list' - offline machine, corrupt
+    # assets file - would print its error, match nothing, and the gate would
+    # pass without having run. A gate that fails open is not a gate.
+    throw 'dotnet list package --vulnerable failed; the audit did not run.'
+}
 if ($vulnerable -match 'has the following vulnerable packages') {
     throw 'Vulnerable packages found. Raise the version, or pin the transitive dependency with a comment naming the advisory.'
 }
@@ -157,15 +163,19 @@ Copy-Item (Join-Path $PSScriptRoot 'sql\*.sql') (Join-Path $OutputRoot 'sql') -F
 
 New-Item -ItemType Directory -Path (Join-Path $OutputRoot 'docs') -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'docs\*.md') (Join-Path $OutputRoot 'docs') -Force
-# The drawings too: README.md and HIERARCHY-TEST-CASE.md embed them by relative
-# path, so a package with the markdown and not the SVGs has broken images in the
-# one copy an operator actually reads.
+# The drawings too: README.md and HIERARCHY-TEST-CASE.md embed the PNGs by
+# relative path, so a package with the markdown and not the images has broken
+# pictures in the one copy an operator actually reads. The SVGs travel as the
+# editable sources.
 Copy-Item (Join-Path $PSScriptRoot 'docs\*.svg') (Join-Path $OutputRoot 'docs') -Force
 # COPILOT-ROUTING.md links a self-contained HTML tool and a raster of the same
 # drawing. Same rule as the SVGs: docs\ ships whole, or the copy an operator
 # reads has links that go nowhere.
 Copy-Item (Join-Path $PSScriptRoot 'docs\*.html') (Join-Path $OutputRoot 'docs') -Force
 Copy-Item (Join-Path $PSScriptRoot 'docs\*.png') (Join-Path $OutputRoot 'docs') -Force
+# The decks too - HIERARCHY-TEST-CASE.md and README link them, and docs\ ships
+# whole or the shipped copy has links that go nowhere.
+Copy-Item (Join-Path $PSScriptRoot 'docs\*.pptx') (Join-Path $OutputRoot 'docs') -Force
 
 Write-Host '== Staging source ==' -ForegroundColor Cyan
 # The package carries a buildable copy of the tree under source\, so one

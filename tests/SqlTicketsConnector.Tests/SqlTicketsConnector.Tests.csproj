@@ -41,4 +41,6 @@
     <ProjectReference Include="..\..\src\SqlTicketsConnector.Security\SqlTicketsConnector.Security.csproj" />
   </ItemGroup>
 
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
 </Project>

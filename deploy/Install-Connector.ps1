@@ -206,11 +206,42 @@ if (-not (Test-Path $AgentPath)) {
     throw "Graph connector agent not found at: $AgentPath. Install it from https://aka.ms/gca first."
 }
 
+# From Step 1 onward the script mutates the host: the existing service may be
+# stopped and its binaries overwritten. A throw after that must not exit with a
+# bare error and no statement of state - the operator needs to know the service
+# was left stopped, and whether the old binaries are still in place.
+$script:ServiceWasStopped = $false
+$script:BinariesReplaced = $false
+
+trap {
+    Write-Host ''
+    Write-Host 'INSTALL FAILED - host state:' -ForegroundColor Red
+
+    if ($script:ServiceWasStopped) {
+        if ($script:BinariesReplaced) {
+            Write-Host ("  Service '$ServiceName' is STOPPED and its binaries were replaced with the new " +
+                'build. Fix the error above and re-run this script; do not start the service by hand until ' +
+                'it completes.') -ForegroundColor Yellow
+        }
+        else {
+            Write-Host ("  Service '$ServiceName' is STOPPED; its binaries were NOT yet replaced. " +
+                "'Start-Service $ServiceName' restores the previous deployment.") -ForegroundColor Yellow
+        }
+    }
+    else {
+        Write-Host '  Nothing was changed on this host.' -ForegroundColor Yellow
+    }
+
+    Write-Host "  Error: $_" -ForegroundColor Red
+    exit 1
+}
+
 Write-Host '== Step 1: Stop existing service if present ==' -ForegroundColor Cyan
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existing) {
     if ($existing.Status -ne 'Stopped') {
         Stop-Service -Name $ServiceName -Force
+        $script:ServiceWasStopped = $true
         Write-Host "Stopped $ServiceName."
     }
 }
@@ -236,6 +267,8 @@ if ($config.Logging.Directory) { $logPath = $config.Logging.Directory }
 if ($config.Connector.Port) { $Port = [int]$config.Connector.Port }
 if ($config.Connector.Id) { $ConnectorId = $config.Connector.Id }
 if ($config.Logging.EventLogSource) { $EventLogSource = $config.Logging.EventLogSource }
+
+$script:BinariesReplaced = $true
 
 Write-Host '== Step 3: Create the event log source ==' -ForegroundColor Cyan
 # Created here, never at runtime: registering a source needs administrative
@@ -271,7 +304,11 @@ elseif ($config.Auth.Mode -eq 'ClientSecret') {
         # was very likely stored under the wrong profile.
         $listing = & cmdkey.exe "/list:$target" 2>&1 | Out-String
 
-        if ($listing -match [regex]::Escape($target)) {
+        # cmdkey echoes the requested target in its header even when nothing
+        # matches, so matching on the target name would warn unconditionally.
+        # The absence marker is what distinguishes the two states - the same
+        # probe Test-ConnectorHost.ps1 uses.
+        if ($listing -notmatch 'NONE' -and $listing -notmatch 'not found') {
             Write-Warning ("Credential Manager entry '$target' exists for $env:USERNAME, which is NOT the account the " +
                 'service runs as. Credential Manager is per account, so the service will still fail to read it. ' +
                 "Store it as $ServiceAccount instead, and remove this copy with: cmdkey /delete:$target")
@@ -319,18 +356,31 @@ if (-not (Test-Path $exePath)) {
     throw "Executable not found at $exePath. Did you publish the project?"
 }
 
+# sc.exe reports failure through its exit code and puts the actual error text on
+# stdout. Piping to Out-Null without checking $LASTEXITCODE would discard both
+# and print a success message over a failed create - the worst kind of installer.
+function Invoke-Sc {
+    param([string]$What, [string[]]$ScArgs)
+
+    $output = & sc.exe @ScArgs 2>&1 | Out-String
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "sc.exe $What failed with exit code ${LASTEXITCODE}: $($output.Trim())"
+    }
+}
+
 if ($existing) {
-    sc.exe config $ServiceName binPath= "`"$exePath`"" start= auto obj= "$ServiceAccount" | Out-Null
+    Invoke-Sc -What 'config' -ScArgs @('config', $ServiceName, 'binPath=', "`"$exePath`"", 'start=', 'auto', 'obj=', "$ServiceAccount")
     Write-Host "Reconfigured service $ServiceName."
 }
 else {
-    sc.exe create $ServiceName binPath= "`"$exePath`"" start= auto obj= "$ServiceAccount" DisplayName= 'SQL Tickets Copilot Connector' | Out-Null
-    sc.exe description $ServiceName 'Custom Copilot connector indexing dbo.Tickets from SQL Server.' | Out-Null
+    Invoke-Sc -What 'create' -ScArgs @('create', $ServiceName, 'binPath=', "`"$exePath`"", 'start=', 'auto', 'obj=', "$ServiceAccount", 'DisplayName=', 'SQL Tickets Copilot Connector')
+    Invoke-Sc -What 'description' -ScArgs @('description', $ServiceName, 'Custom Copilot connector indexing dbo.Tickets from SQL Server.')
     Write-Host "Created service $ServiceName."
 }
 
 # Restart the connector on failure rather than leaving crawls to time out.
-sc.exe failure $ServiceName reset= 86400 actions= restart/60000/restart/60000/restart/60000 | Out-Null
+Invoke-Sc -What 'failure' -ScArgs @('failure', $ServiceName, 'reset=', '86400', 'actions=', 'restart/60000/restart/60000/restart/60000')
 
 Write-Host '== Step 7: Grant the service account access to the install folder ==' -ForegroundColor Cyan
 $acl = Get-Acl $InstallPath

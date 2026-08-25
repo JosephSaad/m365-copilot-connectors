@@ -200,8 +200,11 @@ namespace SqlTicketsConnector.Tests
 
             Assert.Contains(overLimit, thrown.Message, StringComparison.Ordinal);
 
+            // Non-ASCII letters pass char.IsLetterOrDigit but Graph rejects
+            // them, which is why the validator is ASCII-only - and why these two
+            // are in the list.
             foreach (string bad in new[]
-                     { "customer_name", "customer-name", "customer name", "customer.name", string.Empty })
+                     { "customer_name", "customer-name", "customer name", "customer.name", "pr\u00e9nom", "customer\u00e9", string.Empty })
             {
                 Assert.Throws<InvalidOperationException>(() => ExternalSchemaRules.ValidatePropertyName(bad));
             }
@@ -221,7 +224,7 @@ namespace SqlTicketsConnector.Tests
                 ExternalSchemaRules.ValidateItemId(id);
             }
 
-            foreach (string id in new[] { "cust-12", "cust 12", "customer/12", "", null })
+            foreach (string id in new[] { "cust-12", "cust 12", "customer/12", "cust\u00e912", "", null })
             {
                 Assert.False(ExternalSchemaRules.IsValidItemId(id));
                 Assert.Throws<InvalidOperationException>(() => ExternalSchemaRules.ValidateItemId(id));

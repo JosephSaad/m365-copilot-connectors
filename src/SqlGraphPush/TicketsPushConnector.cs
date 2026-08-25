@@ -22,6 +22,7 @@ using System.Globalization;
 using Microsoft.Data.SqlClient;
 using Microsoft.Graph.Models.ExternalConnectors;
 using SqlPushCore;
+using SqlTicketsConnector.Security.Configuration;
 
 /// <summary>Support tickets, one item per row of dbo.Tickets.</summary>
 public sealed class TicketsPushConnector : IPushConnector
@@ -89,10 +90,56 @@ public sealed class TicketsPushConnector : IPushConnector
             : select + " ORDER BY TicketId;";
     }
 
+    /// <summary>
+    /// Proves the URL template can format before any row is read. A template
+    /// without {0} gives every ticket the same URL silently; a malformed one
+    /// throws on the first row as exit 4. Both are configuration mistakes and
+    /// report as exit 2 with the key named.
+    /// </summary>
+    /// <param name="options">The configuration as loaded.</param>
+    /// <param name="errors">Accumulator.</param>
+    public void ValidateOptions(PushOptions options, ValidationErrors errors)
+    {
+        string template = options.DataSource.ItemUrlTemplate;
+
+        if (string.IsNullOrWhiteSpace(template))
+        {
+            errors.Add("DataSource:ItemUrlTemplate", "is required: every item carries a URL back to its ticket.");
+            return;
+        }
+
+        if (!template.Contains("{0}", StringComparison.Ordinal))
+        {
+            errors.Add(
+                "DataSource:ItemUrlTemplate",
+                "must contain {0}, the placeholder the ticket ID is formatted into.");
+            return;
+        }
+
+        try
+        {
+            string _ = string.Format(CultureInfo.InvariantCulture, template, 0);
+        }
+        catch (FormatException)
+        {
+            errors.Add("DataSource:ItemUrlTemplate", "is not a valid composite format string.");
+        }
+    }
+
     /// <inheritdoc/>
     public PushItem? MapRow(SqlDataReader reader, PushOptions options)
     {
-        int ticketId = SqlRead.Integer(reader, "TicketId") ?? 0;
+        int? key = SqlRead.Integer(reader, "TicketId");
+
+        if (key is null)
+        {
+            // A NULL key coalesced to anything would give every such row the
+            // same item ID, and the PUT upsert would silently collapse them into
+            // one item. Skip instead - the engine counts and reports skips.
+            return null;
+        }
+
+        int ticketId = key.Value;
 
         // Alphanumeric, 128 character maximum. Composed rather than reusing the
         // key directly so the rule holds whatever the key turns out to look like.

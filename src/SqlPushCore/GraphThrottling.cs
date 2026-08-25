@@ -43,6 +43,22 @@ public static class GraphThrottling
                 {
                     return TimeSpan.FromSeconds(Math.Min(seconds, MaxRetryAfterSeconds));
                 }
+
+                // RFC 9110 also allows an HTTP-date. Falling back to the guess on
+                // a date the service actually sent is guessing low on purpose.
+                if (DateTimeOffset.TryParse(
+                        value,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                        out DateTimeOffset when))
+                {
+                    double delta = (when - DateTimeOffset.UtcNow).TotalSeconds;
+
+                    if (delta > 0)
+                    {
+                        return TimeSpan.FromSeconds(Math.Min(delta, MaxRetryAfterSeconds));
+                    }
+                }
             }
         }
 

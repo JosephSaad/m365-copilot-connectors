@@ -128,8 +128,14 @@ namespace SqlTicketsConnector.Tests.TestSupport
                 Graph = new GraphSection
                 {
                     ConnectionId = connectionId,
-                    ConnectionName = "Consulting work",
-                    Description = "Customers, engagements and logged time",
+
+                    // The display identity follows the connection: a tickets
+                    // fixture labelled as the hierarchy connection would be the
+                    // same cross-contamination the source review hunts for.
+                    ConnectionName = connectionId == "sqltickets" ? "SQL Support Tickets" : "Consulting work",
+                    Description = connectionId == "sqltickets"
+                        ? "Support tickets ingested from SQL Server"
+                        : "Customers, engagements and logged time",
                     SchemaReadyTimeoutMinutes = 30,
                 },
                 Source = new SourceSection

@@ -69,9 +69,11 @@ namespace SqlTicketsConnector.Security.Secrets
             catch (RequestFailedException ex)
             {
                 // The exception message from Key Vault carries the request URI and
-                // status, never the value, so it is safe to log with the name.
+                // status, never the value - but the convention is uniform: every
+                // exception goes through Wrap, so no call site needs a safety
+                // argument and the tripwire test has no exceptions to memorise.
                 this.logger.Error(
-                    ex,
+                    Logging.RedactedException.Wrap(ex),
                     "Key Vault refused to return secret {SecretName} from {VaultUri}. Status {Status}.",
                     name,
                     this.vaultDescription,

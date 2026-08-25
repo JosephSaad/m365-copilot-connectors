@@ -43,7 +43,23 @@ namespace SqlTicketsConnector
                 return 2;
             }
 
-            using (Logger logger = LoggingSetup.Create(options))
+            Logger logger;
+
+            try
+            {
+                logger = LoggingSetup.Create(options);
+            }
+            catch (Exception ex)
+            {
+                // A bad Logging section (unwritable directory, invalid event log
+                // source) is a configuration fault. Without this guard it would
+                // escape Main as an unhandled exception: CLR crash dump, no FATAL
+                // line, and an exit code outside the documented contract.
+                Console.Error.WriteLine("FATAL: could not initialise logging: " + ex);
+                return 2;
+            }
+
+            using (logger)
             {
                 Log.Logger = logger;
 

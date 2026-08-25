@@ -261,6 +261,14 @@ SELECT SYSUTCDATETIME() AS utc_now,
 FROM   $Table;
 "@).Rows[0]
 
+    if ([int]$counts.total -eq 0 -or $clock.in_future -eq [DBNull]::Value) {
+        # Aggregates over an empty table return NULL, and [int]DBNull is a
+        # terminating cast error that would kill the diagnostic mid-run - before
+        # the watermark, item-size and summary sections it exists to print.
+        Warn 'the table is empty; skipping the timestamp checks'
+    }
+    else {
+
     Pass "oldest $($clock.oldest), newest $($clock.newest)"
     Note "server clock: $($clock.utc_now) UTC / $($clock.local_now) local"
 
@@ -309,6 +317,7 @@ WHERE  (LastModified > @w OR (LastModified = @w AND TicketId > @id));
             Fail "could not parse -Watermark '$Watermark': $($_.Exception.Message)"
             Note 'Copy it from a log line: watermarkOut=v2|2026-08-13T09:35:12.4410000Z|1187'
         }
+    }
     }
 
     Step 'Item size'

@@ -4,6 +4,21 @@
 -- 02-soft-delete.sql against their existing table instead of this script.
 -- ===========================================================================
 
+USE [Ops];
+GO
+
+-- Refuse to run against an existing table. Without this guard the CREATE batch
+-- would fail but the INSERT batch would still run - planting three Contoso
+-- sample tickets into a real production table, which is precisely the scenario
+-- the header warns about.
+IF OBJECT_ID(N'dbo.Tickets', N'U') IS NOT NULL
+BEGIN
+    THROW 50000, N'dbo.Tickets already exists. This script is for a fresh test database only; run 02-soft-delete.sql against an existing table instead.', 1;
+END
+
+-- No GO above: guard, CREATE, INSERT and INDEX are ONE batch, so the THROW
+-- stops all of them. Split into separate batches, the INSERT would still run
+-- after a failed CREATE and plant sample rows in a real table.
 CREATE TABLE dbo.Tickets
 (
     TicketId     INT            NOT NULL PRIMARY KEY,
@@ -17,7 +32,6 @@ CREATE TABLE dbo.Tickets
     -- deletions; full crawls skip them. See 02-soft-delete.sql.
     IsDeleted    BIT            NOT NULL CONSTRAINT DF_Tickets_IsDeleted DEFAULT (0)
 );
-GO
 
 INSERT INTO dbo.Tickets (TicketId, Title, Status, AssignedTo, Body)
 VALUES
@@ -27,7 +41,6 @@ VALUES
         N'Search results for the Policies library were up to six hours behind. Continuous crawl had stalled on the content source. Restarting the SharePoint Search Host Controller service and resetting the index resolved it.'),
  (1003, N'Purview DLP policy blocking legitimate email', N'In Progress', N'mlee@contoso.com',
         N'The Financial Data DLP policy is matching internal cost centre codes as credit card numbers. Need to tighten the confidence level and add a supporting keyword dictionary before re-enabling enforcement.');
-GO
 
 -- The crawl orders by (LastModified, TicketId) and resumes from a composite
 -- watermark, so the index covers both columns.

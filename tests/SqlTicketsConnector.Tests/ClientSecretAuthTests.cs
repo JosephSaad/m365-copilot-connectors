@@ -120,6 +120,52 @@ namespace SqlTicketsConnector.Tests
 
         [WindowsOnlyFact]
         [SupportedOSPlatform("windows")]
+        public void An_odd_length_blob_is_decoded_as_utf8_not_truncated_utf16()
+        {
+            // cmdkey and .NET write UTF-16 (always even length); other tools
+            // write UTF-8. The odd length is how the store tells them apart, and
+            // only a raw-byte write can produce one.
+            string target = "SqlTicketsConnectorTests/utf8-" + Guid.NewGuid().ToString("N");
+            const string Secret = "utf8-secret-with-ü";
+
+            CredentialManagerTestStore.Write(target, "client-id", System.Text.Encoding.UTF8.GetBytes(Secret));
+
+            try
+            {
+                Assert.Equal(Secret, WindowsCredentialStore.Read(target));
+            }
+            finally
+            {
+                CredentialManagerTestStore.Delete(target);
+            }
+        }
+
+        [WindowsOnlyFact]
+        [SupportedOSPlatform("windows")]
+        public void An_entry_with_an_empty_blob_reports_it_holds_no_value()
+        {
+            // An entry that exists but is empty is a different operator mistake
+            // from a missing entry, and the message has to say which one it was.
+            string target = "SqlTicketsConnectorTests/empty-" + Guid.NewGuid().ToString("N");
+
+            CredentialManagerTestStore.Write(target, "client-id", Array.Empty<byte>());
+
+            try
+            {
+                SecretResolutionException ex = Assert.Throws<SecretResolutionException>(
+                    () => WindowsCredentialStore.Read(target));
+
+                Assert.Contains("holds no value", ex.Message);
+                Assert.Contains(target, ex.Message);
+            }
+            finally
+            {
+                CredentialManagerTestStore.Delete(target);
+            }
+        }
+
+        [WindowsOnlyFact]
+        [SupportedOSPlatform("windows")]
         public void A_missing_credential_names_the_target_and_the_account_that_looked()
         {
             string target = "SqlTicketsConnectorTests/missing-" + Guid.NewGuid().ToString("N");

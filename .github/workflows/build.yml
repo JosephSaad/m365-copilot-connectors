@@ -134,6 +134,7 @@ jobs:
       - name: Build with the optional OTLP exporter
         run: |
           dotnet restore SqlTicketsConnector.sln -p:EnableOtlpExporter=true
+          if ($LASTEXITCODE -ne 0) { throw 'OTLP restore failed.' }
           dotnet build SqlTicketsConnector.sln -c Release --no-restore -warnaserror -p:EnableOtlpExporter=true
 
       # Has to follow that restore: the exporter's packages are only in the
@@ -167,6 +168,16 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: "9.0.x"
+
+      # setup-dotnet ADDS an SDK; it does not remove the runner's newer ones,
+      # and without a global.json the CLI picks the newest on the machine. The
+      # pin is what makes this job's claim true: net9.0 built by the .NET 9 SDK
+      # itself - the toolchain a VS 2022 shop actually has - not by .NET 10
+      # targeting downwards. release/net9 carries the same pin in the repo.
+      - name: Pin the SDK to 9.x
+        run: |
+          Set-Content -Path global.json -Value '{"sdk":{"version":"9.0.100","rollForward":"latestFeature"}}'
+          dotnet --version
 
       - name: Restore
         run: dotnet restore SqlTicketsConnector.sln -p:ConnectorTargetFramework=net9.0
@@ -256,6 +267,7 @@ jobs:
               'deploy/Test-SqlSource.ps1',
               'deploy/Get-CrawlHistory.ps1',
               'deploy/Verify-GraphConnection.ps1',
+              'deploy/Watch-SchemaRegistration.ps1',
               'deploy/GraphPushAuth.ps1',
               'deploy/Test-GraphPushPrereqs.ps1',
               'deploy/Compare-SourceToIndex.ps1',
@@ -264,6 +276,7 @@ jobs:
               'sql/01-least-privilege.sql',
               'sql/02-soft-delete.sql',
               'sql/10-timesheet-source.sql',              # three level test case
+              'sql/00-sample-source.sql',               # tickets test case source script
               'sql/11-timesheet-sample-data.sql',
               'sql/12-timesheet-views.sql',               # the flattening layer
               'sql/13-timesheet-least-privilege.sql',
@@ -274,13 +287,18 @@ jobs:
               'docs/TROUBLESHOOTING-DIRECT-PUSH.md',
               'docs/HIERARCHY-TEST-CASE.md',
               'docs/HIERARCHY-DEPLOYMENT.md',
+              'docs/APP-REGISTRATION.md',
               'docs/GENESIS-PROMPT.md',
               'docs/ADDING-A-PUSH-CONNECTOR.md',
               'docs/COPILOT-ROUTING.md',
               'docs/copilot-decision-matrix.html',        # linked by COPILOT-ROUTING.md
               'docs/copilot-route-decision-tree.svg',     # embedded by it
               'docs/copilot-route-decision-tree.png',
-              'docs/architecture.svg',                    # embedded by README.md
+              'docs/agent-bypass-tradeoffs.pptx',         # linked from README
+              'docs/hierarchy-in-copilot.pptx',
+              'docs/architecture.png',                    # embedded by README.md
+              'docs/architecture.svg',                    # its editable source
+              'docs/hierarchy-flow.png',
               'docs/hierarchy-flow.svg',
 
               # A buildable source tree, so one download serves deployment and
@@ -292,7 +310,9 @@ jobs:
               'source/src/SqlTicketsConnector/SqlTicketsConnector.csproj',
               'source/src/SqlPushCore/SqlPushCore.csproj',            # the shared push engine
               'source/src/SqlPushCore/IPushConnector.cs',             # the extension point itself
+              'source/src/SqlGraphPush/SqlGraphPush.csproj',
               'source/src/SqlHierarchyPush/SqlHierarchyPush.csproj',
+              'source/src/SqlTicketsConnector.Security/SqlTicketsConnector.Security.csproj',
               'source/src/SqlTicketsConnector/Contracts/CommonModels.proto',
               'source/tests/SqlTicketsConnector.Tests/SqlTicketsConnector.Tests.csproj'
           )
@@ -303,7 +323,10 @@ jobs:
           }
 
           if ($missing) {
-              $missing | ForEach-Object { Write-Error "Missing from the package: $_" }
+              # Write-Host, not Write-Error: under the wrapper's
+              # ErrorActionPreference=Stop a Write-Error terminates on the FIRST
+              # missing file, hiding the rest of the list.
+              $missing | ForEach-Object { Write-Host "Missing from the package: $_" -ForegroundColor Red }
               throw 'The deployment package is incomplete.'
           }
 
@@ -313,7 +336,7 @@ jobs:
               Where-Object { $_.Name -in @('bin', 'obj', '.git', '.vs') }
 
           if ($leaked) {
-              $leaked | ForEach-Object { Write-Error "Build output or repository state leaked into source/: $($_.FullName)" }
+              $leaked | ForEach-Object { Write-Host "Build output or repository state leaked into source/: $($_.FullName)" -ForegroundColor Red }
               throw 'The staged source tree is not clean.'
           }
 

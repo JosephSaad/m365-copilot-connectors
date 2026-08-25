@@ -96,7 +96,7 @@ SELECT
     CAST(NULL AS BIT)            AS Billable,
     CAST(NULL AS NVARCHAR(50))   AS WorkType,
 
-    CAST(roll.ContractValue AS DECIMAL(18, 2)) AS ContractValue,
+    CAST(ISNULL(roll.ContractValue, 0) AS DECIMAL(18, 2)) AS ContractValue,
     CAST(ISNULL(roll.TotalHours, 0) AS DECIMAL(10, 2)) AS TotalHours,
     CAST(ISNULL(roll.EngagementCount, 0) AS INT)       AS ChildCount,
 
@@ -119,8 +119,12 @@ OUTER APPLY (
     SELECT  COUNT(*)                 AS EngagementCount,
             SUM(e.ContractValue)     AS ContractValue,
             SUM(h.EngagementHours)   AS TotalHours,
+            -- CAST to MAX inside the aggregate: with non-MAX inputs STRING_AGG
+            -- returns NVARCHAR(4000) and raises error 9829 the moment one
+            -- customer's list passes 8000 bytes - killing every read of the
+            -- view, and with it the whole push run.
             STRING_AGG(
-                CONCAT(e.EngagementName, ' (', e.EngagementCode, ', ', e.Status, ')'),
+                CAST(CONCAT(e.EngagementName, ' (', e.EngagementCode, ', ', e.Status, ')') AS NVARCHAR(MAX)),
                 '; ') WITHIN GROUP (ORDER BY e.EngagementCode) AS EngagementList
     FROM    dbo.Engagements AS e
     OUTER APPLY (
@@ -208,7 +212,7 @@ OUTER APPLY (
     -- Kept separate from the counts above: STRING_AGG has no DISTINCT, so the
     -- distinct list has to be formed first, and mixing that derived table with
     -- the plain aggregates in one APPLY would need a GROUP BY to no purpose.
-    SELECT  STRING_AGG(names.ConsultantName, ', ')
+    SELECT  STRING_AGG(CAST(names.ConsultantName AS NVARCHAR(MAX)), ', ')
                 WITHIN GROUP (ORDER BY names.ConsultantName) AS Consultants
     FROM   (SELECT DISTINCT te.ConsultantName
             FROM   dbo.TimeEntries AS te

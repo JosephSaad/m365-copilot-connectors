@@ -26,12 +26,24 @@ namespace SqlTicketsConnector.Tests.TestSupport
         /// <summary>Stores a generic credential for the current account.</summary>
         public static void Write(string target, string userName, string secret)
         {
-            byte[] blob = Encoding.Unicode.GetBytes(secret);
-            IntPtr blobPtr = Marshal.AllocHGlobal(blob.Length);
+            Write(target, userName, Encoding.Unicode.GetBytes(secret));
+        }
+
+        /// <summary>
+        /// Stores a raw blob. Encoding.Unicode always yields an even byte count,
+        /// so the UTF-8 odd-length fallback and the empty-blob error in the real
+        /// store are only reachable through this overload.
+        /// </summary>
+        public static void Write(string target, string userName, byte[] blob)
+        {
+            IntPtr blobPtr = blob.Length == 0 ? IntPtr.Zero : Marshal.AllocHGlobal(blob.Length);
 
             try
             {
-                Marshal.Copy(blob, 0, blobPtr, blob.Length);
+                if (blob.Length > 0)
+                {
+                    Marshal.Copy(blob, 0, blobPtr, blob.Length);
+                }
 
                 var credential = new Credential
                 {
@@ -50,7 +62,10 @@ namespace SqlTicketsConnector.Tests.TestSupport
             }
             finally
             {
-                Marshal.FreeHGlobal(blobPtr);
+                if (blobPtr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(blobPtr);
+                }
             }
         }
 

@@ -30,15 +30,17 @@ attributed, timestamped, and never stored.
 
 ## The tree
 
-![Decision tree: a question for Copilot routes first on whether the askers hold M365 licences, then on who owns the data. Owned content with group-shaped access must also clear a freshness and deletion-SLA gate before it is indexed by a Graph connector; everything else, including almost all vendor-licensed data, is fetched by a live tool call. Each leaf carries its build effort and running meter.](copilot-route-decision-tree.svg)
+![Decision tree: a question for Copilot routes first on whether the askers hold M365 licences, then on who owns the data. Owned content with group-shaped access must also clear a freshness and deletion-SLA gate before it is indexed by a Graph connector; everything else, including almost all vendor-licensed data, is fetched by a live tool call. Each leaf carries its build effort and running meter.](copilot-route-decision-tree.png)
 
 Four gates. The first is about reach, the second about ownership, and the last
 two are the ones that actually decide. The dashed path is the only route that
 puts licensed content into an index — it exists, but it needs a rider your
 market-data team has to negotiate.
 
-A print-ready raster of the same drawing is
-[`copilot-route-decision-tree.png`](copilot-route-decision-tree.png), 2000×1660.
+The editable source of the drawing is
+[`copilot-route-decision-tree.svg`](copilot-route-decision-tree.svg); the PNG
+above (2000×1660) is what the markdown embeds, so the picture renders
+identically everywhere — including viewers that do not rasterise SVG.
 
 **Read the two `CALL IT` leaves as wire protocols, not deployables.** An API
 action is an OpenAPI spec and a manifest that a declarative agent or a Copilot

@@ -331,7 +331,7 @@ returning all three.
   Whoever downloads the zip needs nothing else except the agent (Microsoft's,
   tenant-tied) and the client certificate (the customer's PKI). A CI step fails
   the build if the executable, the runtime, the install script, the SQL scripts,
-  the deploy scripts, the docs **or the SVGs** are missing from the archive.
+  the deploy scripts, the docs **or the drawings** are missing from the archive.
 - An offline package path for a build machine with no route to
   `api.nuget.org`, and a CI check that the offline list still matches the real
   restore graph. It will go stale on the first Dependabot bump; make it fail
@@ -363,13 +363,14 @@ Written for someone who will be woken at 3am by this system.
 | `docs/ADDING-A-PUSH-CONNECTOR.md` | The recipe for a new source: one class, one configuration file, and what the engine will not do for you |
 | `docs/HIERARCHY-TEST-CASE.md` | The design: why a flat index needs flattening, and the full property annotation table |
 | `docs/HIERARCHY-DEPLOYMENT.md` | Step-by-step deployment of the three level connector, **.NET 10 and .NET 9 at every step** |
-| `docs/architecture.svg` | The data flow — Search and Copilot as siblings |
-| `docs/hierarchy-flow.svg` | Source hierarchy → views → flat items, ancestor-carried fields highlighted |
+| `docs/architecture.svg` + `.png` | The data flow — Search and Copilot as siblings. Markdown embeds the PNG; the SVG is the editable source |
+| `docs/hierarchy-flow.svg` + `.png` | Source hierarchy → views → flat items, ancestor-carried fields highlighted |
 
 Two rules that are easy to get wrong. **Real numbers in drawings** — if the
 diagram says 95 items, 95 must be what the sample data actually produces.
-And **the SVGs must be in the release zip**; a README that renders its diagrams
-on GitHub but not in the package is broken for the one reader who matters.
+And **the drawings must be in the release zip** — markdown embeds the PNGs, the
+SVGs travel as editable sources; a README that renders its diagrams on GitHub
+but not in the package is broken for the one reader who matters.
 
 ## 13. Diagnostics
 

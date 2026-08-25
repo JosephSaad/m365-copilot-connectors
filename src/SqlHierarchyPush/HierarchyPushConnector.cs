@@ -145,7 +145,7 @@ public sealed class HierarchyPushConnector : IPushConnector
 
         return
             $"SELECT {top}ItemId, ItemType, Title, Url, LastModified, HierarchyPath, ContainerName, ContainerUrl, " +
-            "CustomerId, CustomerName, CustomerCode, Industry, Region, AccountManager, AccountManagerEmail, " +
+            "CustomerId, CustomerName, CustomerCode, Industry, Region, AccountManager, " +
             "EngagementId, EngagementName, EngagementCode, Practice, Status, ProjectManager, " +
             "ConsultantName, ConsultantEmail, WorkDate, Hours, Billable, WorkType, " +
             "ContractValue, TotalHours, ChildCount, Content " +
@@ -193,7 +193,19 @@ public sealed class HierarchyPushConnector : IPushConnector
         item.AddIfPresent("totalHours", SqlRead.Number(reader, "TotalHours"));
 
         double? childCount = SqlRead.Number(reader, "ChildCount");
-        item.AddIfPresent("childCount", childCount.HasValue ? (long?)childCount.Value : null);
+
+        if (childCount.HasValue)
+        {
+            if (childCount.Value != Math.Floor(childCount.Value))
+            {
+                // The shipped view CASTs this to INT; a repointed view might not,
+                // and a silent truncation would put a wrong count in the index.
+                throw new InvalidOperationException(
+                    $"ChildCount for item {item.Id} is not a whole number. The view must produce an integer.");
+            }
+
+            item.AddIfPresent("childCount", (long?)childCount.Value);
+        }
 
         return item;
     }

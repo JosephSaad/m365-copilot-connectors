@@ -13,7 +13,7 @@ Generated against the contracts extracted from `GraphConnectorsTemplate.vsix`
 `src/SqlTicketsConnector/Contracts/` are Microsoft's originals, copied byte for
 byte and unmodified.
 
-![Data flow from SQL Server through the connector and agent to Microsoft Graph, the semantic index, and Copilot](docs/architecture.svg)
+![Data flow from SQL Server through the connector and agent to Microsoft Graph, the semantic index, and Copilot](docs/architecture.png)
 
 | Project | Model | Runs where |
 |---|---|---|
@@ -121,8 +121,8 @@ deploy/
   Manifest.json                        Uploaded in the admin center wizard
   ConnectionInfo.json                  TestApp input, no credentials
 docs/
-  architecture.svg                     The data flow drawing embedded above
-  hierarchy-flow.svg                   How the three level source is flattened into flat index items
+  architecture.png / .svg              The data flow drawing embedded above (PNG embedded; SVG is the editable source)
+  hierarchy-flow.png / .svg            How the three level source is flattened into flat index items
   SECURITY.md                          Control mapping for the security reviewer
   APP-REGISTRATION.md                  Entra apps, permission by permission, cert and secret
   RUNBOOK.md                           Rotation, log locations, five failure modes
@@ -134,8 +134,7 @@ docs/
   ADDING-A-PUSH-CONNECTOR.md           One class and one config file: the recipe and the reasoning
   COPILOT-ROUTING.md                   Connector, action, MCP or Foundry - the decision upstream of this repository
   copilot-decision-matrix.html         Self-contained tool: the matrices, the tree, and an 11 question router
-  copilot-route-decision-tree.svg      The routing drawing embedded by COPILOT-ROUTING.md
-  copilot-route-decision-tree.png      The same drawing, 2000x1624, for a deck
+  copilot-route-decision-tree.png / .svg  The routing drawing embedded by COPILOT-ROUTING.md
   GENESIS-PROMPT.md                    The prompt that produces this repository, and why it looks like this
   agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
   hierarchy-in-copilot.pptx            Deck: how to handle hierarchical data in a flat index
@@ -607,7 +606,7 @@ The answer is to flatten deliberately, in both directions, in SQL views: every
 descendant physically carries its ancestors' searchable text, and every ancestor
 carries a roll-up of its descendants.
 
-![How the Customer, Engagement and TimeEntry hierarchy is flattened by SQL views into flat external items, each carrying its ancestors' text, so one customer search matches all three levels](docs/hierarchy-flow.svg)
+![How the Customer, Engagement and TimeEntry hierarchy is flattened by SQL views into flat external items, each carrying its ancestors' text, so one customer search matches all three levels](docs/hierarchy-flow.png)
 
 **To deploy it, follow [`docs/HIERARCHY-DEPLOYMENT.md`](docs/HIERARCHY-DEPLOYMENT.md)** —
 step by step, .NET 10 and .NET 9, from the SQL scripts to a Copilot answer. It is
