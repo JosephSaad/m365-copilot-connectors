@@ -281,7 +281,7 @@ identity must never be granted.
 ## 5. Running the evidence
 
 ```powershell
-dotnet test SqlTicketsConnector.sln                                  # 82 tests, no live dependencies
+dotnet test SqlTicketsConnector.sln                                  # 98 tests, no live dependencies
 dotnet build build\SecretHygiene.proj -t:ScanAppSettingsForSecrets    # configuration hygiene
 gitleaks detect --config .gitleaks.toml --redact                      # repository history
 pre-commit run --all-files                                            # the same checks a developer gets
