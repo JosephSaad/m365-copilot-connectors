@@ -135,6 +135,29 @@ Found by the new tests, not by inspection:
   `childCount`) are correct as of the last push and not at query time, and the
   sample data alone is 1126 items against tenant item quota.
 
+- **The push tools put under test on 2026-08-25.** Neither `SqlGraphPush` nor
+  `SqlHierarchyPush` had a test. Everything they delegate to
+  `SqlTicketsConnector.Security` was covered, which is most of the security
+  surface, but the parts unique to them were not — and those carry the most
+  expensive failure here. A Graph schema is append-only once registered, so a
+  wrong annotation is corrected only by deleting the connection and every item
+  in it, 1126 of them for the three level test case. The guard against that was
+  one unexecuted helper inside a top level statement file, which no test
+  assembly can reach.
+
+  The two rules that cannot be recovered from now live in
+  `ExternalSchemaRules` in the Security project — primitives in, exception out,
+  referencing no Graph type, so the rule is shared without the connector
+  acquiring a Graph SDK dependency. The schemas moved into `HierarchySchema.cs`
+  and `TicketSchema.cs` so they can be asserted. For `SqlGraphPush` that is a
+  change in behaviour rather than a move: its six properties were object
+  initialisers with no guard at all.
+
+  50 tests became 82. Four of the new ones joined the `ControlEvidenceTests`
+  tripwire. They were checked by mutation rather than by going green — dropping
+  `searchable` from `customerName` fails one test, and making `region` both
+  searchable and refinable fails six.
+
 - **Retargeted from net8.0 to net10.0** (current LTS) on 2026-08-14, at the
   customer's request. No source change was needed; the CI build on
   windows-latest and all 40 tests pass on net10.0. The target server therefore
