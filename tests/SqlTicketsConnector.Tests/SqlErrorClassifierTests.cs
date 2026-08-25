@@ -66,29 +66,29 @@ namespace SqlTicketsConnector.Tests
         {
             Assembly assembly = typeof(SqlException).Assembly;
 
-            Type errorType = assembly.GetType("Microsoft.Data.SqlClient.SqlError", throwOnError: true)!;
-            Type collectionType = assembly.GetType("Microsoft.Data.SqlClient.SqlErrorCollection", throwOnError: true)!;
+            Type errorType = assembly.GetType("Microsoft.Data.SqlClient.SqlError", throwOnError: true);
+            Type collectionType = assembly.GetType("Microsoft.Data.SqlClient.SqlErrorCollection", throwOnError: true);
 
             // SqlError's internal constructor takes the number first; later
             // parameters vary by package version, so fill them by type.
             ConstructorInfo errorCtor = errorType
                 .GetConstructors(BindingFlags.NonPublic | BindingFlags.Instance)
                 .OrderBy(c => c.GetParameters().Length)
-                .First(c => c.GetParameters().FirstOrDefault()?.ParameterType == typeof(int));
+                .First(c => c.GetParameters().Select(p => p.ParameterType).FirstOrDefault() == typeof(int));
 
-            object?[] errorArgs = errorCtor.GetParameters().Select((parameter, index) => index == 0
-                ? (object?)number
+            object[] errorArgs = errorCtor.GetParameters().Select((parameter, index) => index == 0
+                ? (object)number
                 : parameter.ParameterType == typeof(string) ? string.Empty
-                : parameter.ParameterType == typeof(byte) ? (object?)(byte)1
-                : parameter.ParameterType == typeof(int) ? (object?)0
-                : parameter.ParameterType == typeof(uint) ? (object?)0u
-                : parameter.ParameterType == typeof(bool) ? (object?)false
+                : parameter.ParameterType == typeof(byte) ? (object)(byte)1
+                : parameter.ParameterType == typeof(int) ? (object)0
+                : parameter.ParameterType == typeof(uint) ? (object)0u
+                : parameter.ParameterType == typeof(bool) ? (object)false
                 : null).ToArray();
 
             object error = errorCtor.Invoke(errorArgs);
 
-            object collection = Activator.CreateInstance(collectionType, nonPublic: true)!;
-            MethodInfo add = collectionType.GetMethod("Add", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            object collection = Activator.CreateInstance(collectionType, nonPublic: true);
+            MethodInfo add = collectionType.GetMethod("Add", BindingFlags.NonPublic | BindingFlags.Instance);
             add.Invoke(collection, new[] { error });
 
             MethodInfo create = typeof(SqlException)
@@ -97,7 +97,7 @@ namespace SqlTicketsConnector.Tests
                             m.GetParameters().Length == 2 &&
                             m.GetParameters()[1].ParameterType == typeof(string));
 
-            return (SqlException)create.Invoke(null, new[] { collection, (object)"11.0.0" })!;
+            return (SqlException)create.Invoke(null, new[] { collection, (object)"11.0.0" });
         }
     }
 }
