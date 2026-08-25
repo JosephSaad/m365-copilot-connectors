@@ -119,6 +119,7 @@ docs/
   HIERARCHY-TEST-CASE.md               The three level test case: why a flat index needs flattening, and how
   HIERARCHY-DEPLOYMENT.md              Step-by-step deployment of the three level connector, net10 and net9
   ASSUMPTIONS.md                       Decisions, deviations, open questions
+  GENESIS-PROMPT.md                    The prompt that produces this repository, and why it looks like this
   agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
   hierarchy-in-copilot.pptx            Deck: how to handle hierarchical data in a flat index
 sql/

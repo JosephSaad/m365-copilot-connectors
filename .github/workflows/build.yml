@@ -272,6 +272,7 @@ jobs:
               'docs/TROUBLESHOOTING-DIRECT-PUSH.md',
               'docs/HIERARCHY-TEST-CASE.md',
               'docs/HIERARCHY-DEPLOYMENT.md',
+              'docs/GENESIS-PROMPT.md',
               'docs/architecture.svg',                    # embedded by README.md
               'docs/hierarchy-flow.svg',
 

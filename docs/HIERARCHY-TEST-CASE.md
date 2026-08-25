@@ -265,7 +265,7 @@ hoping.
 |---|---|---|
 | Source | One table, `dbo.Tickets` | Three tables, through four views |
 | Items | One per ticket | One per customer, engagement and time entry |
-| Schema | 6 properties | 25 properties |
+| Schema | 6 properties | 26 properties |
 | Connection ID | `sqltickets` | `consultingwork` |
 | Throttling | No backoff | Honours `Retry-After`, five attempts |
 | Dry run | No | `--dry-run` |
