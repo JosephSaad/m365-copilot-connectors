@@ -55,7 +55,21 @@ namespace SqlTicketsConnector.Security.Logging
 
             foreach (KeyValuePair<string, LogEventPropertyValue> property in logEvent.Properties)
             {
-                LogEventPropertyValue scrubbed = this.Scrub(property.Value);
+                LogEventPropertyValue scrubbed;
+
+                try
+                {
+                    scrubbed = this.Scrub(property.Value);
+                }
+                catch (Exception)
+                {
+                    // Serilog swallows enricher exceptions and still emits the
+                    // event, so a throw here would fail OPEN: the event would be
+                    // written with this property unscrubbed. Fail closed instead -
+                    // a property the scrubber could not process is replaced, never
+                    // passed through.
+                    scrubbed = new ScalarValue(LogScrubber.Replacement);
+                }
 
                 if (!ReferenceEquals(scrubbed, property.Value))
                 {

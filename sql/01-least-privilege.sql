@@ -42,8 +42,11 @@ GRANT SELECT ON OBJECT::dbo.Tickets TO [svc_gca_reader];
 GO
 
 -- Explicitly deny the rest of the surface, so a future ALTER ROLE cannot widen
--- access by accident.
-DENY INSERT, UPDATE, DELETE, ALTER, CONTROL ON OBJECT::dbo.Tickets TO [svc_gca_reader];
+-- access by accident. CONTROL is deliberately NOT in this list: DENY CONTROL on
+-- an object denies every permission it implies - including the SELECT granted
+-- above - so it would silently block every crawl while the GRANT row suggests
+-- access is configured.
+DENY INSERT, UPDATE, DELETE, ALTER ON OBJECT::dbo.Tickets TO [svc_gca_reader];
 GO
 
 
@@ -61,7 +64,7 @@ GO
 -- GO
 -- GRANT SELECT ON OBJECT::dbo.Tickets TO [sql-tickets-connector];
 -- GO
--- DENY INSERT, UPDATE, DELETE, ALTER, CONTROL ON OBJECT::dbo.Tickets TO [sql-tickets-connector];
+-- DENY INSERT, UPDATE, DELETE, ALTER ON OBJECT::dbo.Tickets TO [sql-tickets-connector];
 -- GO
 
 
@@ -85,13 +88,15 @@ GO
 -- GO
 -- GRANT SELECT ON OBJECT::dbo.Tickets TO [svc_gca_reader];
 -- GO
--- DENY INSERT, UPDATE, DELETE, ALTER, CONTROL ON OBJECT::dbo.Tickets TO [svc_gca_reader];
+-- DENY INSERT, UPDATE, DELETE, ALTER ON OBJECT::dbo.Tickets TO [svc_gca_reader];
 -- GO
 
 
 /* ---------------------------------------------------------------------------
-   Verification. Run after whichever variant you used. The result should list
-   exactly one SELECT grant on dbo.Tickets and nothing else.
+   Verification. Run after whichever variant you used. Expect: one GRANT row
+   (SELECT on dbo.Tickets), the DENY rows created above (four verbs), and the
+   database-level CONNECT that CREATE USER granted implicitly. Any OTHER grant
+   row is the finding to investigate.
 --------------------------------------------------------------------------- */
 
 USE [Ops];

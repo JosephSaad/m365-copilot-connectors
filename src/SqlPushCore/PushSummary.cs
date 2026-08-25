@@ -22,6 +22,12 @@ public sealed class PushSummary
     /// <summary>Gets the number of rows the connector chose to skip.</summary>
     public int Skipped { get; internal set; }
 
+    /// <summary>
+    /// Gets the number of rows whose item ID repeated an earlier row's. The later
+    /// row overwrote the earlier item; the source should return one row per item.
+    /// </summary>
+    public int Duplicates { get; internal set; }
+
     /// <summary>Gets the total number of items written.</summary>
     public int Total { get; private set; }
 

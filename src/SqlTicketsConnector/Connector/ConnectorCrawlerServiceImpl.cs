@@ -73,6 +73,14 @@ namespace SqlTicketsConnector.Connector
                 Watermark start = ResolveWatermark(request.CrawlProgressMarker, null, this.logger);
                 Watermark position = start;
 
+                // Advanced only AFTER a row's bit is successfully written. The
+                // failure and cancellation handlers checkpoint THIS marker, never
+                // `position`: `position` moves to the current row before the row
+                // is built or written, so checkpointing it on failure would skip
+                // the undelivered row forever on resume - a watermark advance on
+                // failure, which is this connector's one unbreakable rule.
+                Watermark delivered = start;
+
                 this.logger.Information(
                     "Full crawl {CrawlId} started against {DataSource}. Watermark in: {WatermarkIn}.",
                     crawlId,
@@ -124,6 +132,7 @@ namespace SqlTicketsConnector.Connector
                                     },
                                     ct).ConfigureAwait(false);
 
+                                delivered = position;
                                 continue;
                             }
 
@@ -145,6 +154,7 @@ namespace SqlTicketsConnector.Connector
                                 },
                                 ct).ConfigureAwait(false);
 
+                            delivered = position;
                             metrics.RecordItem(built.ContentBytes);
                         }
                     }
@@ -160,9 +170,9 @@ namespace SqlTicketsConnector.Connector
                         "Watermark out: {WatermarkOut}.",
                         crawlId,
                         metrics.ItemsStreamed,
-                        position.ToMarker());
+                        delivered.ToMarker());
 
-                    await this.WriteCancellationAsync(responseStream, position).ConfigureAwait(false);
+                    await this.WriteCancellationAsync(responseStream, delivered).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -170,7 +180,7 @@ namespace SqlTicketsConnector.Connector
 
                     await this.WriteFinalAsync(
                         responseStream,
-                        new CrawlStreamBit { Status = status, CrawlProgressMarker = Checkpoint(position) })
+                        new CrawlStreamBit { Status = status, CrawlProgressMarker = Checkpoint(delivered) })
                         .ConfigureAwait(false);
                 }
             }
@@ -199,6 +209,10 @@ namespace SqlTicketsConnector.Connector
 
                 Watermark start = ResolveWatermark(request.CrawlProgressMarker, previousCrawlStart, this.logger);
                 Watermark position = start;
+
+                // Same rule as the full crawl: advanced only after a successful
+                // write, and it is what the failure handlers checkpoint.
+                Watermark delivered = start;
 
                 // Watermark drift is the most common cause of missing items, so both
                 // ends of it are visible without attaching a debugger.
@@ -264,6 +278,7 @@ namespace SqlTicketsConnector.Connector
                                     },
                                     ct).ConfigureAwait(false);
 
+                                delivered = position;
                                 metrics.RecordDeleted();
                                 continue;
                             }
@@ -283,6 +298,7 @@ namespace SqlTicketsConnector.Connector
                                     },
                                     ct).ConfigureAwait(false);
 
+                                delivered = position;
                                 continue;
                             }
 
@@ -303,6 +319,7 @@ namespace SqlTicketsConnector.Connector
                                 },
                                 ct).ConfigureAwait(false);
 
+                            delivered = position;
                             metrics.RecordItem(built.ContentBytes);
                         }
                     }
@@ -322,9 +339,9 @@ namespace SqlTicketsConnector.Connector
                         "Incremental crawl {CrawlId} cancelled after {Items} item(s). Watermark out: {WatermarkOut}.",
                         crawlId,
                         metrics.ItemsStreamed,
-                        position.ToMarker());
+                        delivered.ToMarker());
 
-                    await this.WriteCancellationAsync(responseStream, position).ConfigureAwait(false);
+                    await this.WriteCancellationAsync(responseStream, delivered).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -332,7 +349,7 @@ namespace SqlTicketsConnector.Connector
 
                     await this.WriteFinalAsync(
                         responseStream,
-                        new IncrementalCrawlStreamBit { Status = status, CrawlProgressMarker = Checkpoint(position) })
+                        new IncrementalCrawlStreamBit { Status = status, CrawlProgressMarker = Checkpoint(delivered) })
                         .ConfigureAwait(false);
                 }
             }

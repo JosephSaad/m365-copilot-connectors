@@ -80,6 +80,7 @@ Each of these is also recorded in `docs/SECURITY.md` §4.
    `Connector:TlsCertificateThumbprint`, `DataSource:ItemUrlTemplate`,
    `DataSource:SoftDeleteEnabled`, `DataSource:SqlUserId`,
    `DataSource:ExtraConnectionOptions`, `DataSource:ConnectRetry*`,
+   `DataSource:CommandTimeoutSeconds`,
    `Logging:EventLogSource`, `Logging:FileSizeLimitBytes`,
    `Logging:RetainedFileCountLimit`, `Logging:Otlp`.
 6. **`appsettings.json` ships with `REPLACE-WITH-…` placeholders** rather than
@@ -134,6 +135,32 @@ Found by the new tests, not by inspection:
   Two consequences a reviewer should know: the roll-up figures (`totalHours`,
   `childCount`) are correct as of the last push and not at query time, and the
   sample data alone is 1126 items against tenant item quota.
+
+- **A two-sweep adversarial audit fixed 71 confirmed findings on 2026-08-25**,
+  run at the customer's request after the engine refactor. Eleven parallel
+  reviewers over disjoint dimensions (exception handling, cross-contamination,
+  correctness, the build system, SQL, CI, and the test suite itself), then one
+  adversarial verifier per finding whose brief was to refute it; 6 of 77 were
+  refuted, and only what survived was fixed.
+
+  The ones that mattered most: the crawl failure handlers checkpointed a
+  watermark advanced *before* the failing row was delivered — an advance on
+  failure, this connector's one unbreakable rule; `DENY CONTROL` in
+  `sql/01-least-privilege.sql` implicitly denied the SELECT granted two lines
+  above it, blocking every crawl while the verification query looked correct; a
+  rejected credential exited 4 (ingestion) instead of the documented 3, because
+  no code path could produce 3 for rejection; the hierarchy tool's shipped
+  `appsettings.json` carried the tickets certificate subject; and the secret
+  scanner matched only leaf key names, so `"ConnectionStrings": { "Default":
+  "...Password=..." }` — the canonical .NET idiom — passed the gate.
+
+  Two behaviours are new configuration surface: `DataSource:CommandTimeoutSeconds`
+  (default 600, 0 = unlimited) separates query timeout from connect timeout so a
+  long view read is not killed at 30 seconds, and schema/connection-ID/item-ID
+  validation is now ASCII-only, matching what Graph accepts and what the
+  pre-flight scripts already enforced. A new source-scan tripwire asserts every
+  logged exception goes through `RedactedException.Wrap` — it caught two drifted
+  call sites on its first run, before it ever reached CI.
 
 - **The push path refactored onto one engine on 2026-08-25**, so that adding a
   SQL source is a class and a configuration file rather than a copy of a 550

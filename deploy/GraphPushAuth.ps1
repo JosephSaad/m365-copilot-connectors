@@ -48,7 +48,9 @@ function Get-PushConfig {
 
     $config = Get-Content $Path -Raw | ConvertFrom-Json
 
-    foreach ($required in @('Auth', 'Graph', 'DataSource')) {
+    # Graph is not in this list: PushHost.ApplyDefaults fills an omitted Graph
+    # section from the connector's own defaults, so its absence is valid.
+    foreach ($required in @('Auth', 'DataSource')) {
         if (-not $config.$required) {
             throw "$Path has no '$required' section. Is this the connector's appsettings.json rather than SqlGraphPush's?"
         }
@@ -63,13 +65,16 @@ function Get-PushCertificate {
         Finds the first configured thumbprint that is present with a usable
         private key, looking in the configured store location.
     .DESCRIPTION
-        Returns $null when none is usable. SqlGraphPush reads CurrentUser\My by
-        default because it runs as a person; a certificate imported into
-        LocalMachine\My is invisible to it, which is a common first-run failure.
+        Returns $null when none is usable. The store location comes from
+        Auth:CertificateStoreLocation; when the key is omitted the fallback is
+        LocalMachine, because that is what the C# AuthOptions defaults to - this
+        pre-flight must prove the store the tool will actually read, not a
+        different one. The shipped appsettings set CurrentUser explicitly, since
+        the push tools run as a person.
     #>
     param([Parameter(Mandatory)]$Config)
 
-    $location = if ($Config.Auth.CertificateStoreLocation) { $Config.Auth.CertificateStoreLocation } else { 'CurrentUser' }
+    $location = if ($Config.Auth.CertificateStoreLocation) { $Config.Auth.CertificateStoreLocation } else { 'LocalMachine' }
 
     foreach ($thumbprint in @($Config.Auth.CertificateThumbprints)) {
         if (-not $thumbprint -or $thumbprint -match 'REPLACE') { continue }
@@ -109,7 +114,7 @@ function Get-PushToken {
     $clientId = $Config.Auth.ClientId
     $tokenUri = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token"
 
-    $result = @{ Token = $null; Claims = $null; Roles = @(); Error = $null; Aadsts = $null; Advice = $null }
+    $result = @{ Token = $null; Claims = $null; Roles = @(); Error = $null; Detail = $null; Aadsts = $null; Advice = $null }
 
     $body = @{
         grant_type = 'client_credentials'
@@ -173,6 +178,12 @@ function Get-PushToken {
     catch {
         $result.Error = $_.Exception.Message
         $detail = "$($_.ErrorDetails.Message)"
+
+        # The response body is the actual diagnosis. Mining it only for an
+        # AADSTS number and then discarding it left non-AADSTS failures (proxy
+        # errors, malformed requests) with a bare status line and nothing else.
+        if ($detail) { $result.Detail = $detail }
+
         if ($detail -match 'AADSTS(\d+)') {
             $result.Aadsts = $Matches[1]
             $result.Advice = switch ($result.Aadsts) {

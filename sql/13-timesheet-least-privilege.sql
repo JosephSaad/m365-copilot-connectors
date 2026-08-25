@@ -84,6 +84,12 @@ GO
 -- GRANT SELECT ON OBJECT::dbo.vwEngagementItems TO [sql-hierarchy-push];
 -- GRANT SELECT ON OBJECT::dbo.vwTimeEntryItems  TO [sql-hierarchy-push];
 -- GO
+-- -- The same widening guard Variant A carries. Safe here: ownership chaining
+-- -- means a DENY on the tables does not affect access through the views.
+-- DENY SELECT, INSERT, UPDATE, DELETE, ALTER, CONTROL ON OBJECT::dbo.Customers   TO [sql-hierarchy-push];
+-- DENY SELECT, INSERT, UPDATE, DELETE, ALTER, CONTROL ON OBJECT::dbo.Engagements TO [sql-hierarchy-push];
+-- DENY SELECT, INSERT, UPDATE, DELETE, ALTER, CONTROL ON OBJECT::dbo.TimeEntries TO [sql-hierarchy-push];
+-- GO
 
 
 /* ---------------------------------------------------------------------------
@@ -106,11 +112,18 @@ GO
 -- GRANT SELECT ON OBJECT::dbo.vwEngagementItems TO [hierarchy_reader];
 -- GRANT SELECT ON OBJECT::dbo.vwTimeEntryItems  TO [hierarchy_reader];
 -- GO
+-- DENY SELECT, INSERT, UPDATE, DELETE, ALTER, CONTROL ON OBJECT::dbo.Customers   TO [hierarchy_reader];
+-- DENY SELECT, INSERT, UPDATE, DELETE, ALTER, CONTROL ON OBJECT::dbo.Engagements TO [hierarchy_reader];
+-- DENY SELECT, INSERT, UPDATE, DELETE, ALTER, CONTROL ON OBJECT::dbo.TimeEntries TO [hierarchy_reader];
+-- GO
 
 
 -- ---------------------------------------------------------------------------
--- Verification. Expect exactly four rows, all SELECT, all on views, and no row
--- naming a base table.
+-- Verification. Expect: four GRANT rows, all SELECT, all on views - plus, for
+-- Variant A, the eighteen DENY rows on the three base tables that the widening
+-- guard above creates, and the implicit database-level CONNECT from CREATE
+-- USER. The finding to investigate is any OTHER grant, or a grant row naming a
+-- base table.
 -- ---------------------------------------------------------------------------
 SELECT  pr.name          AS principal_name,
         o.name           AS object_name,

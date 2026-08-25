@@ -71,28 +71,37 @@ public sealed class PushEngine
     {
         if (this.dryRun)
         {
+            // A dry run still builds the schema: the searchable-and-refinable and
+            // name-length guards throw here, at the desk, rather than on the real
+            // run against the tenant.
+            Schema schema = this.connector.BuildSchema();
+
             this.log.Information(
-                "Dry run: reading and mapping {DisplayName}, writing nothing to Graph.",
+                "Dry run: schema builds cleanly ({Count} properties). Reading and mapping {DisplayName}, " +
+                "writing nothing to Graph.",
+                schema.Properties?.Count ?? 0,
                 this.connector.DisplayName);
         }
         else
         {
-            await this.EnsureConnectionAsync();
-            await this.EnsureSchemaAsync();
+            await this.EnsureConnectionAsync(cancellationToken);
+            await this.EnsureSchemaAsync(cancellationToken);
         }
 
         return await this.PushItemsAsync(cancellationToken);
     }
 
     /// <summary>Creates the external connection. Idempotent.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>A task for the operation.</returns>
-    public async Task EnsureConnectionAsync()
+    public async Task EnsureConnectionAsync(CancellationToken cancellationToken = default)
     {
         string connectionId = this.options.Graph.ConnectionId;
 
         try
         {
-            ExternalConnection? existing = await this.graph.External.Connections[connectionId].GetAsync();
+            ExternalConnection? existing = await this.graph.External.Connections[connectionId]
+                .GetAsync(cancellationToken: cancellationToken);
 
             this.log.Information(
                 "Connection {ConnectionId} already exists. State {State}.", connectionId, existing?.State);
@@ -103,23 +112,27 @@ public sealed class PushEngine
             // Not found, fall through to create.
         }
 
-        await this.graph.External.Connections.PostAsync(new ExternalConnection
-        {
-            Id = connectionId,
-            Name = this.options.Graph.ConnectionName,
-            Description = this.options.Graph.Description,
-        });
+        await this.graph.External.Connections.PostAsync(
+            new ExternalConnection
+            {
+                Id = connectionId,
+                Name = this.options.Graph.ConnectionName,
+                Description = this.options.Graph.Description,
+            },
+            cancellationToken: cancellationToken);
 
         this.log.Information("Connection {ConnectionId} created.", connectionId);
     }
 
     /// <summary>Registers the schema and polls until the connection is Ready.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>A task for the operation.</returns>
-    public async Task EnsureSchemaAsync()
+    public async Task EnsureSchemaAsync(CancellationToken cancellationToken = default)
     {
         string connectionId = this.options.Graph.ConnectionId;
 
-        ExternalConnection? connection = await this.graph.External.Connections[connectionId].GetAsync();
+        ExternalConnection? connection = await this.graph.External.Connections[connectionId]
+            .GetAsync(cancellationToken: cancellationToken);
 
         if (connection?.State == ConnectionState.Ready)
         {
@@ -129,7 +142,8 @@ public sealed class PushEngine
 
         Schema schema = this.connector.BuildSchema();
 
-        await this.graph.External.Connections[connectionId].Schema.PatchAsync(schema);
+        await this.graph.External.Connections[connectionId].Schema
+            .PatchAsync(schema, cancellationToken: cancellationToken);
 
         this.log.Information(
             "Schema registration submitted: {Count} properties. This runs server side and typically takes " +
@@ -143,10 +157,38 @@ public sealed class PushEngine
 
         while (true)
         {
-            await Task.Delay(TimeSpan.FromSeconds(30));
+            await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
 
-            ConnectionState? state = (await this.graph.External.Connections[connectionId].GetAsync())?.State;
-            this.log.Information("Connection state {State}.", state);
+            ConnectionState? state;
+
+            try
+            {
+                state = (await this.graph.External.Connections[connectionId]
+                    .GetAsync(cancellationToken: cancellationToken))?.State;
+            }
+            catch (ODataError ex) when (ex.ResponseStatusCode is 429 or 502 or 503 or 504)
+            {
+                // Registration runs server side for 5 to 15 minutes; one throttled
+                // or transiently failing status poll must not abort a wait the
+                // operation itself is surviving. The deadline still bounds it.
+                TimeSpan wait = GraphThrottling.RetryAfter(ex) ?? TimeSpan.FromSeconds(30);
+                this.log.Warning(
+                    "Status poll returned {Status}; polling again in {Seconds}s.",
+                    ex.ResponseStatusCode,
+                    (int)wait.TotalSeconds);
+                await Task.Delay(wait, cancellationToken);
+                state = null;
+            }
+            catch (HttpRequestException ex)
+            {
+                this.log.Warning("Status poll failed ({Message}); polling again.", ex.Message);
+                state = null;
+            }
+
+            if (state is not null)
+            {
+                this.log.Information("Connection state {State}.", state);
+            }
 
             if (state == ConnectionState.Ready)
             {
@@ -181,24 +223,59 @@ public sealed class PushEngine
         List<Acl> acl = BuildAcl(this.options);
 
         var summary = new PushSummary();
+        var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string lastItemId = "(none)";
+        int rowOrdinal = 0;
 
         await using SqlConnection connection = await this.connections.OpenAsync(cancellationToken);
         await using var command = new SqlCommand(query, connection);
-        command.CommandTimeout = this.options.DataSource.ConnectTimeoutSeconds;
+        // Query timeout, not connect timeout: a full-corpus read of a large view
+        // legitimately outlives the 30 seconds a connection attempt gets.
+        command.CommandTimeout = this.options.DataSource.CommandTimeoutSeconds;
 
         await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 
         while (await reader.ReadAsync(cancellationToken))
         {
-            PushItem? mapped = this.connector.MapRow(reader, this.options);
+            rowOrdinal++;
 
-            if (mapped is null)
+            PushItem? mapped;
+            ExternalItem item;
+
+            try
             {
-                summary.Skipped++;
-                continue;
+                mapped = this.connector.MapRow(reader, this.options);
+
+                if (mapped is null)
+                {
+                    summary.Skipped++;
+                    continue;
+                }
+
+                item = this.BuildItem(mapped, acl, summary);
+            }
+            catch (Exception ex)
+            {
+                // Locate the failure without logging row content: ordinal and the
+                // neighbouring item ID are policy-safe and turn "which row killed
+                // the run" from bisection into a lookup.
+                throw new InvalidOperationException(
+                    $"Row {rowOrdinal} could not be mapped (the item before it was {lastItemId}). " +
+                    "The row's content is deliberately not logged; find it in the source by ordinal.",
+                    ex);
             }
 
-            ExternalItem item = this.BuildItem(mapped, acl, summary);
+            if (!written.Add(mapped.Id))
+            {
+                // The PUT is an upsert, so a duplicate ID silently overwrites the
+                // earlier item while the count claims both. The source is expected
+                // to return one row per item; say so out loud and count it.
+                summary.Duplicates++;
+                this.log.Warning(
+                    "Item {ItemId} appeared more than once (row {RowOrdinal}); the later row overwrote the earlier item.",
+                    mapped.Id,
+                    rowOrdinal);
+            }
 
             if (this.dryRun)
             {
@@ -213,12 +290,14 @@ public sealed class PushEngine
                     item.Content?.Value?.Length ?? 0,
                     acl.Count);
 
+                lastItemId = mapped.Id;
                 summary.Count(mapped.ItemType);
                 continue;
             }
 
             await this.WriteWithRetryAsync(mapped.Id, item, summary, cancellationToken);
 
+            lastItemId = mapped.Id;
             summary.Count(mapped.ItemType);
             this.log.Information("Indexed {ItemId} ({ItemType}).", mapped.Id, mapped.ItemType);
         }
@@ -244,7 +323,11 @@ public sealed class PushEngine
             .Select(id => new Acl
             {
                 Type = AclType.Group,
-                Value = id.Trim(),
+
+                // Validation accepts every GUID spelling ({B}, (P), 32 hex digits);
+                // Graph wants the canonical one. Normalise rather than forward
+                // whatever shape the operator pasted.
+                Value = Guid.Parse(id.Trim()).ToString("D"),
                 AccessType = AccessType.Grant,
             })
             .ToList();
@@ -292,19 +375,53 @@ public sealed class PushEngine
                     .Items[itemId].PutAsync(item, cancellationToken: cancellationToken);
                 return;
             }
-            catch (ODataError ex) when (ex.ResponseStatusCode == 429 && attempt < MaxWriteAttempts)
+            catch (ODataError ex) when (
+                ex.ResponseStatusCode is 429 or 502 or 503 or 504 && attempt < MaxWriteAttempts)
             {
+                // 429 honours Retry-After; a transient 5xx gets the same bounded
+                // backoff rather than aborting a thousand-item run for one blip.
                 TimeSpan wait = GraphThrottling.RetryAfter(ex) ?? GraphThrottling.Backoff(attempt);
-                summary.ThrottleWaits++;
+
+                if (ex.ResponseStatusCode == 429)
+                {
+                    summary.ThrottleWaits++;
+                }
 
                 this.log.Warning(
-                    "Throttled writing {ItemId}. Waiting {Seconds}s before attempt {Next} of {Max}.",
+                    "Write of {ItemId} returned {Status}. Waiting {Seconds}s before attempt {Next} of {Max}.",
                     itemId,
+                    ex.ResponseStatusCode,
                     (int)wait.TotalSeconds,
                     attempt + 1,
                     MaxWriteAttempts);
 
                 await Task.Delay(wait, cancellationToken);
+            }
+            catch (HttpRequestException ex) when (attempt < MaxWriteAttempts)
+            {
+                TimeSpan wait = GraphThrottling.Backoff(attempt);
+
+                this.log.Warning(
+                    "Write of {ItemId} failed in transit ({Message}). Waiting {Seconds}s before attempt " +
+                    "{Next} of {Max}.",
+                    itemId,
+                    ex.Message,
+                    (int)wait.TotalSeconds,
+                    attempt + 1,
+                    MaxWriteAttempts);
+
+                await Task.Delay(wait, cancellationToken);
+            }
+            catch (ODataError ex)
+            {
+                // Terminal: name the item and the status before the exception
+                // climbs to the run-level handler, so "which row killed the run"
+                // is one log line, not an inference. Item ID and status only.
+                this.log.Error(
+                    "Write failed for {ItemId} with status {Status}. Giving up on this run.",
+                    itemId,
+                    ex.ResponseStatusCode);
+                throw;
             }
         }
     }

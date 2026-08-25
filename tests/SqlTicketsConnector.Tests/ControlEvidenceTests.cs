@@ -55,10 +55,23 @@ namespace SqlTicketsConnector.Tests
                     "Control evidence test " + required[0] + "." + required[1] +
                     " is missing. See docs/SECURITY.md before removing it.");
 
+                object[] attributes = method.GetCustomAttributes(typeof(FactAttribute), false);
+
                 Assert.True(
-                    method.GetCustomAttributes(typeof(FactAttribute), false).Any(),
+                    attributes.Any(),
                     "Control evidence test " + required[0] + "." + required[1] +
                     " is no longer a [Fact] and would not run.");
+
+                // [Fact(Skip = "...")] is still a FactAttribute, so without this
+                // check control evidence could be switched off without the build
+                // noticing - the exact quiet removal this tripwire exists for.
+                foreach (FactAttribute fact in attributes.Cast<FactAttribute>())
+                {
+                    Assert.True(
+                        fact.Skip == null,
+                        "Control evidence test " + required[0] + "." + required[1] +
+                        " is marked Skip and would not run. See docs/SECURITY.md before disabling it.");
+                }
             }
         }
     }

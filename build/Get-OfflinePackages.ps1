@@ -225,10 +225,18 @@ foreach ($package in $packages) {
 
     try {
         Write-Host ("[{0,3}/{1}] {2} {3}" -f $i, $packages.Count, $package.Id, $package.Version)
-        Invoke-WebRequest -Uri $url -OutFile $file -UseBasicParsing
+
+        # Download to a temp name and rename only on success. An interrupted
+        # Invoke-WebRequest leaves a partial file, and the 'already present'
+        # check above would count that fragment as a completed download on the
+        # next run - a corrupt package set reported as complete.
+        $tmp = "$file.download"
+        Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing
+        Move-Item -Path $tmp -Destination $file -Force
     }
     catch {
-        Write-Warning "  failed: $url"
+        Remove-Item -Path "$file.download" -ErrorAction SilentlyContinue
+        Write-Warning "  failed: $url ($($_.Exception.Message))"
         $failed += "$($package.Id) $($package.Version)"
     }
 }

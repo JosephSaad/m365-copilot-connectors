@@ -80,6 +80,7 @@ namespace SqlTicketsConnector.Tests
         [InlineData("ab")]                                   // shorter than three
         [InlineData("sql_tickets")]                          // underscore is not alphanumeric
         [InlineData("consulting work")]                      // space
+        [InlineData("fa\u00e7ade01")]                        // non-ASCII letter; Graph rejects it
         [InlineData("MicrosoftWork")]                        // reserved prefix
         [InlineData("None")]                                 // reserved value
         public void A_connection_id_graph_would_reject_is_caught_in_configuration(string connectionId)
@@ -104,6 +105,8 @@ namespace SqlTicketsConnector.Tests
         [InlineData("dbo.vw-External-Items")]
         [InlineData("dbo..vwExternalItems")]
         [InlineData("server.dbo.vwExternalItems")]
+        [InlineData("dbo.2026Snapshot")]
+        [InlineData("123")]
         public void A_view_name_that_is_not_a_plain_identifier_is_rejected(string view)
         {
             // Control evidence. The view name is concatenated into the query

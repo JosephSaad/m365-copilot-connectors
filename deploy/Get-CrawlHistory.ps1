@@ -64,7 +64,8 @@ $ErrorActionPreference = 'Stop'
 
 function Head([string]$name) { Write-Host "`n== $name ==" -ForegroundColor Cyan }
 function Pass([string]$msg) { Write-Host "  PASS  $msg" -ForegroundColor Green }
-function Fail([string]$msg) { Write-Host "  FAIL  $msg" -ForegroundColor Red }
+$script:failures = 0
+function Fail([string]$msg) { $script:failures++; Write-Host "  FAIL  $msg" -ForegroundColor Red }
 function Warn([string]$msg) { Write-Host "  WARN  $msg" -ForegroundColor Yellow }
 function Note([string]$msg) { Write-Host "  note  $msg" -ForegroundColor DarkGray }
 
@@ -87,9 +88,21 @@ Write-Host "Oldest: $($files[0].LastWriteTime); newest: $($files[-1].LastWriteTi
 # {Timestamp:yyyy-MM-dd HH:mm:ss.fffzzz} [{Level:u3}] [{ConnectorId}] [{CrawlId}] {Message}
 $linePattern = '^(?<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}) \[(?<lvl>\w{3})\] \[(?<cid>[^\]]*)\] \[(?<crawl>[^\]]*)\] (?<msg>.*)$'
 
+$script:unmatched = 0
+$script:firstUnmatchedFile = $null
+
 $lines = foreach ($f in $files) {
     foreach ($raw in [System.IO.File]::ReadLines($f.FullName)) {
         $m = [regex]::Match($raw, $linePattern)
+
+        # Exception stack traces continue on lines without a timestamp; those are
+        # expected. A timestamped line that fails the pattern means template
+        # drift, and dropping it silently would under-count crawls and failures.
+        if (-not $m.Success -and $raw -match '^\d{4}-\d{2}-\d{2} ') {
+            $script:unmatched++
+            if (-not $script:firstUnmatchedFile) { $script:firstUnmatchedFile = $f.Name }
+        }
+
         if ($m.Success) {
             [pscustomobject]@{
                 Time    = [datetimeoffset]::Parse($m.Groups['ts'].Value)
@@ -105,6 +118,11 @@ $lines = foreach ($f in $files) {
 $lines = @($lines)
 if ($lines.Count -eq 0) {
     throw 'No lines matched the expected log format. Was the output template changed in LoggingSetup.cs?'
+}
+
+if ($script:unmatched -gt 0) {
+    Warn ("$($script:unmatched) timestamped line(s) did not match the expected format (first in " +
+        "$($script:firstUnmatchedFile)). Counts below may be low; check the output template in LoggingSetup.cs.")
 }
 
 # --- one crawl in full -----------------------------------------------------
@@ -294,3 +312,7 @@ Write-Host ''
 Write-Host 'This covers stages 2 and 5 of docs/TROUBLESHOOTING.md: what the connector'
 Write-Host 'sent, and whether it was asked. What Graph did with it is stage 5 onward —'
 Write-Host 'deploy\Verify-GraphConnection.ps1.'
+
+# Like every sibling diagnostic: red findings are a non-zero exit, so anything
+# scripted around this learns the result without parsing colours.
+if ($script:failures -gt 0) { exit 1 }

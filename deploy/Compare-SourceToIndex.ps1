@@ -185,7 +185,17 @@ foreach ($row in $examined) {
             else {
                 $indexed = Get-PropertyValue $item.properties 'lastModified'
                 if ($indexed) {
-                    $drift = ([datetime]$row.LastModified - [datetime]$indexed).TotalSeconds
+                    # Both sides normalised to UTC explicitly. On Windows
+                    # PowerShell 5.1 a bare [datetime] cast converts the indexed
+                    # 'Z' string to LOCAL time while the SQL value stays raw, so
+                    # every comparison would be skewed by the UTC offset - false
+                    # STALE west of UTC, masked staleness east of it.
+                    $indexedUtc = [DateTime]::Parse(
+                        "$indexed",
+                        [Globalization.CultureInfo]::InvariantCulture,
+                        [Globalization.DateTimeStyles]::AdjustToUniversal)
+                    $sourceUtc = [DateTime]::SpecifyKind([datetime]$row.LastModified, [DateTimeKind]::Utc)
+                    $drift = ($sourceUtc - $indexedUtc).TotalSeconds
                     if ($drift -gt 2) {
                         $state = 'STALE'
                         $detail = "source is $([Math]::Round($drift / 60, 1)) minute(s) newer than the indexed copy"
@@ -310,6 +320,7 @@ if ($Detail) {
 
 $orphans = @($results | Where-Object { $_.State -eq 'ORPHAN' })
 $missing = @($results | Where-Object { $_.State -eq 'MISSING' -or $_.State -eq 'STALE' })
+$errors  = @($results | Where-Object { $_.State -eq 'ERROR' })
 
 Write-Host ''
 Write-Host '== What to do ==' -ForegroundColor Cyan
@@ -335,6 +346,16 @@ if ($orphans.Count -gt 0) {
     Note 'would delete from a connection you did not mean. Connect with ExternalItem.ReadWrite.OwnedBy as the owning app.'
     Note 'If this list is long or keeps growing, the direct push path is being used as a synchroniser, which it is not.'
     Note 'The agent-hosted connector removes deletions incrementally and needs none of this.'
+}
+
+if ($errors.Count -gt 0) {
+    # A row that could not be read is a row about which nothing is known. An
+    # all-clear over unread rows would be the reconciliation equivalent of a
+    # green build with skipped tests.
+    Write-Host ''
+    Write-Host "  $($errors.Count) row(s) could not be checked - the comparison is incomplete." -ForegroundColor Red
+    Write-Host '  Fix the errors above (throttling, expiry, network) and re-run before trusting any verdict.'
+    exit 1
 }
 
 if ($orphans.Count -eq 0 -and $missing.Count -eq 0) {

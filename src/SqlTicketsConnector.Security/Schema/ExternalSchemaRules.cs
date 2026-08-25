@@ -66,7 +66,7 @@ namespace SqlTicketsConnector.Security.Schema
                 throw new InvalidOperationException("An external schema property must have a name.");
             }
 
-            if (name.Length > MaxPropertyNameLength || !name.All(char.IsLetterOrDigit))
+            if (name.Length > MaxPropertyNameLength || !name.All(IsAsciiLetterOrDigit))
             {
                 throw new InvalidOperationException(
                     "Property name " + name + " must be " + MaxPropertyNameLength +
@@ -86,13 +86,23 @@ namespace SqlTicketsConnector.Security.Schema
                 throw new InvalidOperationException("An external item must have an ID.");
             }
 
-            if (itemId.Length > MaxItemIdLength || !itemId.All(char.IsLetterOrDigit))
+            if (itemId.Length > MaxItemIdLength || !itemId.All(IsAsciiLetterOrDigit))
             {
                 throw new InvalidOperationException(
                     "Item ID " + itemId + " must be " + MaxItemIdLength +
                     " alphanumeric characters or fewer. Compose IDs rather than reusing a natural key that " +
                     "may contain punctuation.");
             }
+        }
+
+        /// <summary>
+        /// ASCII deliberately: char.IsLetterOrDigit is Unicode-aware and admits
+        /// letters Graph rejects at registration - the one moment no mistake can
+        /// be corrected.
+        /// </summary>
+        private static bool IsAsciiLetterOrDigit(char c)
+        {
+            return c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9';
         }
 
         /// <summary>Reports whether an item ID would be accepted, without throwing.</summary>
@@ -102,7 +112,7 @@ namespace SqlTicketsConnector.Security.Schema
         {
             return !string.IsNullOrEmpty(itemId)
                 && itemId.Length <= MaxItemIdLength
-                && itemId.All(char.IsLetterOrDigit);
+                && itemId.All(IsAsciiLetterOrDigit);
         }
     }
 }

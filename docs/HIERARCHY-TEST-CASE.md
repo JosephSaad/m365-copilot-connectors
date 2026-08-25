@@ -16,7 +16,7 @@ connection ID, a different schema and a different executable. `SqlGraphPush` and
 The requirement it exists to demonstrate: **a search for a customer in Copilot
 must return that customer's engagements and time entries too.**
 
-![How the Customer, Engagement and TimeEntry hierarchy is flattened by SQL views into flat external items, each carrying its ancestors' text, so one customer search matches all three levels](hierarchy-flow.svg)
+![How the Customer, Engagement and TimeEntry hierarchy is flattened by SQL views into flat external items, each carrying its ancestors' text, so one customer search matches all three levels](hierarchy-flow.png)
 
 **To deploy it**, follow [`HIERARCHY-DEPLOYMENT.md`](HIERARCHY-DEPLOYMENT.md).
 This document is the design behind it.

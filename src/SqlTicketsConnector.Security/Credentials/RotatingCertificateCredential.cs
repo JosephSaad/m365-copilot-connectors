@@ -130,7 +130,12 @@ namespace SqlTicketsConnector.Security.Credentials
                     lastFailure = ex;
                     failures.Add(attempt.Candidate.Thumbprint + ": " + ex.Message);
 
+                    // The exception carries the AADSTS code that says WHY this
+                    // certificate was rejected. When a later candidate succeeds
+                    // this warning is the only record of it, so the exception goes
+                    // with it - message and stack, no key material.
                     this.logger.Warning(
+                        Logging.RedactedException.Wrap(ex),
                         "Certificate {Thumbprint} ({Subject}) did not authenticate. Trying the next candidate.",
                         attempt.Candidate.Thumbprint,
                         attempt.Candidate.Subject);

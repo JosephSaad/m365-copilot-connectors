@@ -306,7 +306,11 @@ if ($config -and $config.Auth.Mode -eq 'Certificate') {
             # The most common post-rebuild failure: the key is present, the
             # service account simply cannot read it.
             try {
-                $null = $cert.PrivateKey
+                # GetRSAPrivateKey rather than the legacy .PrivateKey property:
+                # on Windows PowerShell 5.1 the latter throws 'Invalid provider
+                # type specified' for CNG/KSP-stored keys, failing a perfectly
+                # healthy certificate.
+                $null = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($cert)
                 Pass "$($t.Substring(0, 8))… private key is readable by this session"
                 Note 'Readable by YOU is not readable by the service account. If the log says PrivateKeyUnreadable,'
                 Note 'grant that account Read on the key: certlm.msc -> the certificate -> All Tasks -> Manage Private Keys.'
