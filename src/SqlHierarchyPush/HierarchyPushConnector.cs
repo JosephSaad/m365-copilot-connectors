@@ -25,14 +25,10 @@ namespace SqlHierarchyPush;
 using Microsoft.Data.SqlClient;
 using Microsoft.Graph.Models.ExternalConnectors;
 using SqlPushCore;
-using SqlConnector.Security.Configuration;
 
 /// <summary>Customers, engagements and logged time, flattened by SQL views.</summary>
 public sealed class HierarchyPushConnector : IPushConnector
 {
-    /// <summary>The ticket test case's connection, which this must never be pointed at.</summary>
-    private const string TicketConnectionId = "sqltickets";
-
     /// <inheritdoc/>
     public string Key => "consultingwork";
 
@@ -210,24 +206,4 @@ public sealed class HierarchyPushConnector : IPushConnector
         return item;
     }
 
-    /// <summary>
-    /// Reserves the ticket test case's connection ID.
-    ///
-    /// The host already refuses a connection belonging to another connector in
-    /// the same executable, which covers anything added here later. It cannot
-    /// see across executables, and SqlGraphPush is a separate one, so that
-    /// single ID is named explicitly.
-    /// </summary>
-    /// <param name="options">The configuration as loaded.</param>
-    /// <param name="errors">Accumulator.</param>
-    public void ValidateOptions(PushOptions options, ValidationErrors errors)
-    {
-        if (string.Equals(options.Graph.ConnectionId, TicketConnectionId, StringComparison.OrdinalIgnoreCase))
-        {
-            errors.Add(
-                "Graph:ConnectionId",
-                "is the ticket test case's connection. The two test cases register different schemas and a " +
-                "registered schema cannot be changed, so they must not share a connection ID.");
-        }
-    }
 }

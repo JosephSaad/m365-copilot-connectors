@@ -273,7 +273,13 @@ which is the entire requirement. Say that too.
 Schema: 26 properties. Guard the two rules in code, not in review — the property
 helper must **throw** on searchable-and-refinable together and on a name over 32
 characters. Honour `Retry-After` with bounded retries. Provide `--dry-run`.
-Reject `sqltickets` as this tool's connection ID in validation.
+Do NOT protect connections by connector-naming each other's IDs - a guard
+list goes stale the day a connector is added, and it plants one connector's
+name in another's code. Protect them in the engine, agnostically: before
+pushing into a Ready connection, fetch its registered schema and refuse if it
+carries any property this connector does not build. Append-only evolution stays
+legal (a missing expected property is a warning); a foreign property is fatal
+with the property named.
 
 ## 9. The shared security engine
 

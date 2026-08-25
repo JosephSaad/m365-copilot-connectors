@@ -278,8 +278,12 @@ with only the entry's name in configuration, and is set up in
 
 **The connection IDs must differ.** `OwnedBy` means whichever app created a
 connection is the only one that can manage it, the two register different
-schemas, and a registered schema cannot be changed. `HierarchyGraphSection`
-rejects `sqltickets` at startup for that reason.
+schemas, and a registered schema cannot be changed. The engine enforces this
+without either connector naming the other: before pushing, it compares the
+schema registered on the connection against the one this connector builds, and
+any foreign property fails the run with that property named. A guard list of
+other connectors' IDs would go stale the day a connector is added; the schema
+comparison cannot.
 
 Everything security-related is shared, not duplicated:
 `SqlConnector.Security` resolves the certificate, builds the credential,

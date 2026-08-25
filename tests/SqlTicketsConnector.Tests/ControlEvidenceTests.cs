@@ -31,7 +31,7 @@ namespace SqlTicketsConnector.Tests
             // removal is most expensive and least visible.
             new[] { "SqlTicketsConnector.Tests.PushSchemaTests", "A_searchable_and_refinable_property_is_rejected_before_any_graph_call" },
             new[] { "SqlTicketsConnector.Tests.PushSchemaTests", "A_property_name_the_platform_would_reject_is_caught_before_any_graph_call" },
-            new[] { "SqlTicketsConnector.Tests.PushConfigurationTests", "The_hierarchy_tool_refuses_the_ticket_test_cases_connection_id" },
+            new[] { "SqlTicketsConnector.Tests.PushEngineTests", "A_connection_carrying_a_foreign_schema_is_refused_before_any_write" },
             new[] { "SqlTicketsConnector.Tests.PushConfigurationTests", "A_view_name_that_is_not_a_plain_identifier_is_rejected" },
         };
 

@@ -10,7 +10,7 @@
     is a schema, a query and a row mapping, and that is all a new connector has
     to write.
 
-    Nothing in this project knows about tickets or timesheets. Adding a
+    Nothing in this project knows about any particular source. Adding a
     connector does not change a file in here. That is the point: this is the
     part that stays still.
 

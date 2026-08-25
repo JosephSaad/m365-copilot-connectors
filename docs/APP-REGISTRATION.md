@@ -318,8 +318,10 @@ app registration creates a connection is the only one that can ever manage it.
 Three consequences follow, and the first two are how this goes wrong:
 
 1. **The two tools must not share a connection ID.** They register different
-   schemas, and a registered schema cannot be changed. `SqlHierarchyPush`
-   rejects `sqltickets` at startup for exactly this reason.
+   schemas, and a registered schema cannot be changed. The engine enforces this
+   for every push connector at once: a connection whose registered schema
+   carries properties the running connector does not build is refused, with the
+   foreign properties named.
 2. **The Graph connector agent's connections are not yours to push to.** If the
    agent created a connection, a push tool gets a bare 403 on every call against
    it — and cannot create its own, because the ID is taken.
