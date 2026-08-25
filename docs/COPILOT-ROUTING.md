@@ -38,7 +38,28 @@ puts licensed content into an index — it exists, but it needs a rider your
 market-data team has to negotiate.
 
 A print-ready raster of the same drawing is
-[`copilot-route-decision-tree.png`](copilot-route-decision-tree.png), 2000×1624.
+[`copilot-route-decision-tree.png`](copilot-route-decision-tree.png), 2000×1660.
+
+**Read the two `CALL IT` leaves as wire protocols, not deployables.** An API
+action is an OpenAPI spec and a manifest that a declarative agent or a Copilot
+Studio agent hosts; you never deploy one on its own, and its cost is *on top of*
+whatever the host agent already meters. An MCP server is a process, but a client
+still has to be wired to it. A Graph connector is the odd one out and that is
+its main advantage: publish once, and every M365 surface picks it up with
+nothing told to it.
+
+Three axes are in play, and only same-axis choices are alternatives:
+
+| Axis | Choices |
+|---|---|
+| How the data reaches the model | pre-indexed retrieval · live invocation |
+| How a live tool is exposed | API action · MCP server |
+| Where the whole thing runs | M365 surfaces · an application you host |
+
+**Azure AI Foundry sits on the third axis, not the first two.** Inside it you
+would still choose retrieval versus invocation, with your own index and your own
+tools. It appears in the drawing because "the askers are not M365 users" is a
+real branch, not because it is a peer of a connector.
 
 ---
 
