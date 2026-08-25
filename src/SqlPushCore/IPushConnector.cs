@@ -22,7 +22,7 @@ namespace SqlPushCore;
 
 using Microsoft.Data.SqlClient;
 using Microsoft.Graph.Models.ExternalConnectors;
-using SqlTicketsConnector.Security.Configuration;
+using SqlConnector.Security.Configuration;
 
 /// <summary>One SQL source, described well enough for the engine to index it.</summary>
 public interface IPushConnector

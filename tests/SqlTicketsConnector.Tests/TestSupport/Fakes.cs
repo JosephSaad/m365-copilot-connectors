@@ -17,7 +17,7 @@ namespace SqlTicketsConnector.Tests.TestSupport
     using Serilog.Events;
     using SqlTicketsConnector.Connector;
     using SqlTicketsConnector.Logging;
-    using SqlTicketsConnector.Security.Secrets;
+    using SqlConnector.Security.Secrets;
 
     /// <summary>A clock the test advances by hand, so TTL tests never sleep.</summary>
     public sealed class ManualTimeProvider : TimeProvider

@@ -10,7 +10,7 @@
 
   <ItemGroup>
     <!--
-      The engine, and through it SqlTicketsConnector.Security and the Graph
+      The engine, and through it SqlConnector.Security and the Graph
       SDK. Package versions and their advisory pins live in SqlPushCore so
       there is one place to change them and the offline restore graph
       cannot drift between the push tools.

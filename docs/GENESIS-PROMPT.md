@@ -63,7 +63,7 @@ Four projects in one Visual Studio solution:
 | Project | Model | Runs where |
 |---|---|---|
 | `SqlTicketsConnector` | gRPC server behind the Microsoft Graph connector agent | On-premises Windows Server |
-| `SqlTicketsConnector.Security` | Shared secrets, certificates, credentials, SQL, redaction | Class library, referenced by the other three |
+| `SqlConnector.Security` | Shared secrets, certificates, credentials, SQL, redaction | Class library, referenced by the other three |
 | `SqlGraphPush` | Direct `PUT /external/connections/{id}/items/{itemId}` — one flat table | Operator workstation |
 | `SqlHierarchyPush` | The same, for a three level hierarchy | Operator workstation |
 
@@ -277,7 +277,7 @@ Reject `sqltickets` as this tool's connection ID in validation.
 
 ## 9. The shared security engine
 
-`SqlTicketsConnector.Security`, referenced by all three executables.
+`SqlConnector.Security`, referenced by all three executables.
 
 - `ISecretProvider` with Key Vault, environment and Windows Credential Manager
   implementations, a caching decorator, and a refresh retry policy.

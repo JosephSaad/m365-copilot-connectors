@@ -9,8 +9,8 @@ namespace SqlTicketsConnector.Tests
     using System.Collections.Generic;
     using System.Linq;
     using Microsoft.Data.SqlClient;
-    using SqlTicketsConnector.Security.Configuration;
-    using SqlTicketsConnector.Security.Sql;
+    using SqlConnector.Security.Configuration;
+    using SqlConnector.Security.Sql;
     using SqlTicketsConnector.Server;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;

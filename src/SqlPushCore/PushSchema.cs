@@ -14,7 +14,7 @@
 namespace SqlPushCore;
 
 using Microsoft.Graph.Models.ExternalConnectors;
-using SqlTicketsConnector.Security.Schema;
+using SqlConnector.Security.Schema;
 
 /// <summary>Builds schema properties, refusing the ones Graph will not accept.</summary>
 public static class PushSchema

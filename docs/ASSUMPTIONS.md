@@ -136,6 +136,25 @@ Found by the new tests, not by inspection:
   `childCount`) are correct as of the last push and not at query time, and the
   sample data alone is 1126 items against tenant item quota.
 
+- **The shared library renamed to `SqlConnector.Security` on 2026-08-25**, at
+  the customer's direction: nothing shared by more than one connector may carry
+  one connector's name. The library began life serving only the tickets
+  connector and kept its name as consumers accumulated - by the time the
+  hierarchy tool shipped, it was importing `SqlTicketsConnector.Security.*`
+  namespaces, deploying `SqlTicketsConnector.Security.dll` beside its own exe,
+  stamping `Application Name=SqlTicketsConnector` on its SQL sessions, and
+  writing "truncated by SqlTicketsConnector" into hierarchy item content.
+
+  All four are fixed, and the last two were behaviour rather than naming: the
+  SQL Application Name is now the entry executable's own name, so a DBA sees
+  which connector a session belongs to, and the truncation marker is
+  connector-neutral. The shared `ItemUrlTemplate` also lost its tickets-URL
+  default - the agent connector now requires the value in its own validation,
+  where the need actually lives. Connector-specific names survive only where
+  they are the point: `TicketsPushConnector` is the tickets connector, and the
+  hierarchy tool's guard names `sqltickets` because rejecting it is the guard's
+  job.
+
 - **A two-sweep adversarial audit fixed 71 confirmed findings on 2026-08-25**,
   run at the customer's request after the engine refactor. Eleven parallel
   reviewers over disjoint dimensions (exception handling, cross-contamination,
@@ -174,7 +193,7 @@ Found by the new tests, not by inspection:
   `Program.cs` is one line.
 
   Two decisions worth recording. **The Graph SDK lives in the engine, not in
-  `SqlTicketsConnector.Security`** — that is what lets the credential, vault and
+  `SqlConnector.Security`** — that is what lets the credential, vault and
   SQL code stay shared with the agent-hosted connector while that project keeps
   no Graph dependency of any kind. And **connectors are discovered by reflection
   over the entry assembly, never by scanning a folder for DLLs**: a plugin
@@ -194,7 +213,7 @@ Found by the new tests, not by inspection:
 
 - **The push tools put under test on 2026-08-25.** Neither `SqlGraphPush` nor
   `SqlHierarchyPush` had a test. Everything they delegate to
-  `SqlTicketsConnector.Security` was covered, which is most of the security
+  `SqlConnector.Security` was covered, which is most of the security
   surface, but the parts unique to them were not — and those carry the most
   expensive failure here. A Graph schema is append-only once registered, so a
   wrong annotation is corrected only by deleting the connection and every item

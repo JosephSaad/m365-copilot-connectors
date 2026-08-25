@@ -11,7 +11,7 @@ namespace SqlTicketsConnector.Tests
     using Microsoft.Graph.Connectors.Contracts.Grpc;
     using Serilog.Core;
     using SqlTicketsConnector.Connector;
-    using SqlTicketsConnector.Security.Content;
+    using SqlConnector.Security.Content;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;
 

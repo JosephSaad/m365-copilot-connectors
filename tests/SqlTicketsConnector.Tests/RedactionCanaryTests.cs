@@ -24,7 +24,7 @@ namespace SqlTicketsConnector.Tests
     using Serilog.Core;
     using Serilog.Events;
     using SqlTicketsConnector.Connector;
-    using SqlTicketsConnector.Security.Logging;
+    using SqlConnector.Security.Logging;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;
 

@@ -25,7 +25,7 @@ namespace SqlHierarchyPush;
 using Microsoft.Data.SqlClient;
 using Microsoft.Graph.Models.ExternalConnectors;
 using SqlPushCore;
-using SqlTicketsConnector.Security.Configuration;
+using SqlConnector.Security.Configuration;
 
 /// <summary>Customers, engagements and logged time, flattened by SQL views.</summary>
 public sealed class HierarchyPushConnector : IPushConnector

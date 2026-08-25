@@ -17,8 +17,8 @@ namespace SqlTicketsConnector
     using Serilog;
     using Serilog.Core;
     using SqlTicketsConnector.Logging;
-    using SqlTicketsConnector.Security.Configuration;
-    using SqlTicketsConnector.Security.Logging;
+    using SqlConnector.Security.Configuration;
+    using SqlConnector.Security.Logging;
     using SqlTicketsConnector.Server;
 
     /// <summary>Process entry point.</summary>

@@ -16,7 +16,7 @@ namespace SqlTicketsConnector.Tests
     using SqlGraphPush;
     using SqlHierarchyPush;
     using SqlPushCore;
-    using SqlTicketsConnector.Security.Configuration;
+    using SqlConnector.Security.Configuration;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;
 

@@ -18,7 +18,7 @@ byte and unmodified.
 | Project | Model | Runs where |
 |---|---|---|
 | `SqlTicketsConnector` | gRPC server behind the Graph connector agent. **Never calls Microsoft Graph.** | On-premises Windows Server with the agent installed |
-| `SqlTicketsConnector.Security` | Shared secrets, certificates, credentials, SQL connections, log redaction | Class library, referenced by everything |
+| `SqlConnector.Security` | Shared secrets, certificates, credentials, SQL connections, log redaction | Class library, referenced by everything |
 | `SqlPushCore` | The push engine: connection, schema, truncation, ACLs, throttling, exit codes | Class library, referenced by every push tool |
 | `SqlGraphPush` | Direct `PUT /external/connections/{id}/items/{itemId}` — one flat table | Operator workstation or jump box with outbound HTTPS to Graph |
 | `SqlHierarchyPush` | The same, for a three level hierarchy: Customer → Engagement → TimeEntry | Same |
@@ -147,7 +147,7 @@ src/
     Logging/                           Redaction policy, interceptor, metrics, sink setup
     Server/                            Options, validation, host
     appsettings.json                   Non-sensitive configuration only
-  SqlTicketsConnector.Security/
+  SqlConnector.Security/
     Secrets/                           ISecretProvider, Key Vault, environment, cache, retry
     Certificates/                      Store resolver, selection rules, expiry, process identity
     Credentials/                       TokenCredential factory, rotating certificate credential

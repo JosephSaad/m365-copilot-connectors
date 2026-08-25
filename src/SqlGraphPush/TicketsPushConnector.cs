@@ -22,7 +22,7 @@ using System.Globalization;
 using Microsoft.Data.SqlClient;
 using Microsoft.Graph.Models.ExternalConnectors;
 using SqlPushCore;
-using SqlTicketsConnector.Security.Configuration;
+using SqlConnector.Security.Configuration;
 
 /// <summary>Support tickets, one item per row of dbo.Tickets.</summary>
 public sealed class TicketsPushConnector : IPushConnector
