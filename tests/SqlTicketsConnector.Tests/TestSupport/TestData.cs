@@ -90,6 +90,10 @@ namespace SqlTicketsConnector.Tests.TestSupport
                     SqlAuthMode = "WindowsIntegrated",
                     MaxContentBytes = 3670016,
                     SoftDeleteEnabled = true,
+
+                    // Required by the connector's own validation now that the
+                    // shared library no longer defaults it.
+                    ItemUrlTemplate = "https://tickets.contoso.com/ticket/{0}",
                 },
                 Acl = new AclOptions
                 {
