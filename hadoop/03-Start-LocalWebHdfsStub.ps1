@@ -312,7 +312,10 @@ function Resolve-StubPermission([string]$relative, [bool]$isDirectory) {
 # ---------------------------------------------------------------------------
 
 function New-FileStatusJson([System.IO.FileSystemInfo]$item, [string]$relative, [bool]$includeName) {
-    $isDirectory = $item.PSIsContainer
+    # -is rather than PSIsContainer: a typed parameter drops the provider's
+    # added properties, and a directory silently reported as a FILE would send
+    # the crawl looking for content that is not there.
+    $isDirectory = $item -is [System.IO.DirectoryInfo]
     $acl = Resolve-StubPermission -relative $relative -isDirectory $isDirectory
     $name = if ($includeName) { $item.Name } else { '' }
     $length = if ($isDirectory) { 0 } else { $item.Length }
@@ -327,7 +330,7 @@ function New-FileStatusJson([System.IO.FileSystemInfo]$item, [string]$relative, 
 }
 
 function New-AclStatusJson([System.IO.FileSystemInfo]$item, [string]$relative) {
-    $isDirectory = $item.PSIsContainer
+    $isDirectory = $item -is [System.IO.DirectoryInfo]
     $acl = Resolve-StubPermission -relative $relative -isDirectory $isDirectory
 
     $entries = New-Object System.Collections.ArrayList
@@ -448,7 +451,7 @@ if ($Prefix -notmatch '^(?i)(https?)://([^/:]+)(?::(\d+))?/$') {
 
 $prefixHost = $Matches[2]
 
-if ($prefixHost -notin @('localhost', '127.0.0.1', '[::1]')) {
+if ($prefixHost -notin @('localhost', '127.0.0.1')) {
     # Fail closed. This stub answers every request without asking who is
     # asking, so a prefix bound to +, * or a routable name is an anonymous read
     # of -Root offered to the whole network. There is no legitimate reason for
@@ -460,7 +463,9 @@ if ($prefixHost -notin @('localhost', '127.0.0.1', '[::1]')) {
 
 Pass "prefix $Prefix"
 
-$script:rules = ConvertTo-PermissionRules $PermissionMap
+# Wrapped in @() because a function returning a list unrolls it: one rule would
+# otherwise arrive as a bare object and no rules as $null.
+$script:rules = @(ConvertTo-PermissionRules $PermissionMap)
 
 if ($script:rules.Count -eq 0) {
     Note "no -PermissionMap: every entry reports $script:DefaultGroup and mode 640 or 755"
@@ -481,7 +486,7 @@ else {
 }
 
 if ($RangerStub) {
-    Pass 'Ranger policy endpoint answers [] so the connector s mandatory Ranger read succeeds'
+    Pass "Ranger policy endpoint answers [] so the connector's mandatory Ranger read succeeds"
     Note 'An empty policy list means no row filter, no column mask and no deny is declared here,'
     Note 'so nothing in this session exercises the routing rules. Only a real Ranger does that.'
 }
@@ -608,9 +613,11 @@ try {
                 continue
             }
 
+            $isDirectory = $item -is [System.IO.DirectoryInfo]
+
             switch ($op) {
                 'LISTSTATUS' {
-                    if (-not $item.PSIsContainer) {
+                    if (-not $isDirectory) {
                         $body = [System.Text.Encoding]::UTF8.GetBytes(
                             (New-RemoteExceptionJson 'FileNotFoundException' 'not a directory'))
                         Send-StubResponse -Response $response -Status 404 -Body $body
@@ -633,7 +640,7 @@ try {
                 }
 
                 'GETACLSTATUS' {
-                    $acl = Resolve-StubPermission -relative $relative -isDirectory $item.PSIsContainer
+                    $acl = Resolve-StubPermission -relative $relative -isDirectory $isDirectory
                     $json = New-AclStatusJson -item $item -relative $relative
                     $body = [System.Text.Encoding]::UTF8.GetBytes($json)
                     Send-StubResponse -Response $response -Status 200 -Body $body
@@ -641,7 +648,7 @@ try {
                 }
 
                 'GETCONTENTSUMMARY' {
-                    if (-not $item.PSIsContainer) {
+                    if (-not $isDirectory) {
                         $body = [System.Text.Encoding]::UTF8.GetBytes(
                             (New-RemoteExceptionJson 'FileNotFoundException' 'not a directory'))
                         Send-StubResponse -Response $response -Status 404 -Body $body
@@ -655,7 +662,7 @@ try {
                 }
 
                 'OPEN' {
-                    if ($item.PSIsContainer) {
+                    if ($isDirectory) {
                         $body = [System.Text.Encoding]::UTF8.GetBytes(
                             (New-RemoteExceptionJson 'FileNotFoundException' 'not a file'))
                         Send-StubResponse -Response $response -Status 404 -Body $body

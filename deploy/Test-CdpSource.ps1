@@ -261,8 +261,23 @@ if (-not $klist) {
     Note 'Checks 2 and 6 exercise Kerberos for real, so their result is the answer that counts.'
 }
 else {
-    $tickets = & $klist.Source 2>&1
-    $klistExit = $LASTEXITCODE
+    $tickets = @()
+    $klistExit = 0
+
+    # Under $ErrorActionPreference = 'Stop' a native command writing to stderr
+    # raises a terminating error, and klist writes there when the cache is
+    # empty — which is precisely the state this check exists to report. Relaxing
+    # it for the one call is how the report survives the case it is about.
+    $previous = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $tickets = @(& $klist.Source 2>&1)
+        $klistExit = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previous
+    }
+
     $cached = @($tickets | Select-String -Pattern '^#\d+>').Count
 
     if ($klistExit -ne 0 -or $cached -eq 0) {

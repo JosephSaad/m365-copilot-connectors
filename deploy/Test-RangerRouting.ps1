@@ -184,7 +184,18 @@ if ($PSVersionTable.PSVersion.Major -lt 6) {
 }
 
 Write-Host "Ranger routing report — $RangerBaseUrl"
-Write-Host "Running as $([Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+
+# Which identity this ran as is the first thing to establish when Ranger answers
+# this script differently from the service. WindowsIdentity does not exist on a
+# Linux edge node, where the ticket cache decides instead of a logon session.
+$identity = if ($PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows) {
+    [Security.Principal.WindowsIdentity]::GetCurrent().Name
+}
+else {
+    "$env:USER, from the Kerberos ticket cache"
+}
+
+Write-Host "Running as $identity"
 Note 'This reports what CdpGraphPush will do. It does not decide it, and it changes nothing.'
 
 # ---------------------------------------------------------------------------
@@ -660,8 +671,9 @@ if ($requested.Count -eq 0) {
 
     Write-Host "  no -Table given, so reporting on the $($requested.Count) table(s) the policies name"
     if ($wildcards -gt 0) {
-        Note "$wildcards policy resource value(s) are wildcards and name no table. Pass -Table for anything"
-        Note 'covered only by a wildcard policy — Ranger cannot be asked which tables exist, only the metastore can.'
+        Note "$wildcards wildcard resource pattern(s) were skipped because they name no table individually."
+        Note 'Pass -Table for anything covered only by a wildcard policy: Ranger cannot be asked which tables'
+        Note 'exist, only the metastore can, so a wildcard here is a blind spot in this report and not in the crawl.'
     }
 }
 
