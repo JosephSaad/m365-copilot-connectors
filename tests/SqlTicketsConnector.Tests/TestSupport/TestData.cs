@@ -16,8 +16,8 @@ namespace SqlTicketsConnector.Tests.TestSupport
     using PushCore;
     using SqlTicketsConnector.Connector;
     using SqlTicketsConnector.Logging;
-    using Connector.Security.Configuration;
-    using Connector.Security.Logging;
+    using global::Connector.Security.Configuration;
+    using global::Connector.Security.Logging;
     using SqlTicketsConnector.Server;
 
     /// <summary>Builders used across the test suite.</summary>

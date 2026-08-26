@@ -30,7 +30,7 @@ namespace SqlTicketsConnector.Tests
     using CdpConnector.Source.Ranger;
     using CdpConnector.Source.Watermark;
     using CdpGraphPush;
-    using Connector.Security.Configuration;
+    using global::Connector.Security.Configuration;
     using Microsoft.Graph.Models.ExternalConnectors;
     using PushCore;
     using Serilog.Core;

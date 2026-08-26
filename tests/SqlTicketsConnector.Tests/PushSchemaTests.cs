@@ -20,7 +20,7 @@ namespace SqlTicketsConnector.Tests
     using SqlHierarchyPush;
     using PushCore;
     using SqlTicketsConnector.Connector;
-    using Connector.Security.Schema;
+    using global::Connector.Security.Schema;
     using Xunit;
     using ContractProperty = Microsoft.Graph.Connectors.Contracts.Grpc.SourcePropertyDefinition;
     using ContractSchema = Microsoft.Graph.Connectors.Contracts.Grpc.DataSourceSchema;

@@ -300,7 +300,9 @@ function Resolve-StubPermission([string]$relative, [bool]$isDirectory) {
     }
 
     if ($null -eq $best) {
-        $mode = if ($isDirectory) { $script:DefaultDirectoryPermission } else { $script:DefaultFilePermission }
+        $mode = $script:DefaultFilePermission
+        if ($isDirectory) { $mode = $script:DefaultDirectoryPermission }
+
         return [pscustomobject]@{ Group = $script:DefaultGroup; Permission = $mode; Extra = @() }
     }
 
@@ -436,7 +438,8 @@ if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
     exit 2
 }
 
-$rootFull = (Resolve-Path -LiteralPath $Root).ProviderPath.TrimEnd([System.IO.Path]::DirectorySeparatorChar)
+$separator = [System.IO.Path]::DirectorySeparatorChar
+$rootFull = (Resolve-Path -LiteralPath $Root).ProviderPath.TrimEnd($separator)
 Pass "serving $rootFull"
 
 if (-not $Prefix.EndsWith('/')) {
@@ -581,16 +584,16 @@ try {
             $relative = $hdfsPath.Trim('/')
             $localPath = $rootFull
             if ($relative) {
-                $localPath = Join-Path $rootFull $relative.Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+                $localPath = Join-Path $rootFull $relative.Replace('/', $separator)
             }
 
-            # The only boundary this stub has. It authenticates nobody, so a
+            # The last boundary this stub has. It authenticates nobody, so a
             # path containing .. must not be able to read a file outside -Root:
             # containment is checked on the resolved path, not on the text.
             $resolved = [System.IO.Path]::GetFullPath($localPath)
             $contained = $resolved.Equals($rootFull, [StringComparison]::OrdinalIgnoreCase) -or
                          $resolved.StartsWith(
-                             $rootFull + [System.IO.Path]::DirectorySeparatorChar,
+                             $rootFull + $separator,
                              [StringComparison]::OrdinalIgnoreCase)
 
             if (-not $contained) {
@@ -694,7 +697,8 @@ try {
             # would look exactly like a connector bug.
             $message = $_.Exception.Message
             try {
-                $body = [System.Text.Encoding]::UTF8.GetBytes((New-RemoteExceptionJson 'IOException' $message))
+                $json = New-RemoteExceptionJson 'IOException' $message
+                $body = [System.Text.Encoding]::UTF8.GetBytes($json)
                 Send-StubResponse -Response $response -Status 500 -Body $body
             }
             catch {

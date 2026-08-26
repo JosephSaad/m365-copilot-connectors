@@ -18,7 +18,7 @@ namespace SqlTicketsConnector.Tests
     using SqlHierarchyPush;
     using PushCore;
     using PushCore.Sql;
-    using Connector.Security.Configuration;
+    using global::Connector.Security.Configuration;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;
 

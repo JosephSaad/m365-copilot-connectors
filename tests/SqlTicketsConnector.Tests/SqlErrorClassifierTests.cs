@@ -16,7 +16,7 @@ namespace SqlTicketsConnector.Tests
     using System.Linq;
     using System.Reflection;
     using Microsoft.Data.SqlClient;
-    using Connector.Security.Sql;
+    using global::Connector.Security.Sql;
     using Xunit;
 
     public class SqlErrorClassifierTests

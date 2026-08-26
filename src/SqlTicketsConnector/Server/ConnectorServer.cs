@@ -19,12 +19,12 @@ namespace SqlTicketsConnector.Server
     using Serilog;
     using SqlTicketsConnector.Connector;
     using SqlTicketsConnector.Logging;
-    using Connector.Security.Certificates;
-    using Connector.Security.Configuration;
-    using Connector.Security.Credentials;
-    using Connector.Security.Logging;
-    using Connector.Security.Secrets;
-    using Connector.Security.Sql;
+    using global::Connector.Security.Certificates;
+    using global::Connector.Security.Configuration;
+    using global::Connector.Security.Credentials;
+    using global::Connector.Security.Logging;
+    using global::Connector.Security.Secrets;
+    using global::Connector.Security.Sql;
 
     /// <summary>Starts and stops the connector's gRPC listener.</summary>
     public sealed class ConnectorServer : IDisposable
