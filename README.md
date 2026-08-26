@@ -134,7 +134,9 @@ docs/
   ADDING-A-PUSH-CONNECTOR.md           One class and one config file: the recipe and the reasoning
   COPILOT-ROUTING.md                   Connector, action, MCP or Foundry - the decision upstream of this repository
   copilot-decision-matrix.html         Self-contained tool: the matrices, the tree, and an 11 question router
-  copilot-route-decision-tree.png / .svg  The routing drawing embedded by COPILOT-ROUTING.md
+  copilot-route-decision-tree.png / .svg / -dark.png  The routing drawing embedded by COPILOT-ROUTING.md
+  copilot-surface-matrix.png           The capability-by-surface matrix as a standalone image
+  copilot-delivery-paths.png           The delivery-path matrix as a standalone image
   GENESIS-PROMPT.md                    The prompt that produces this repository, and why it looks like this
   agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
   hierarchy-in-copilot.pptx            Deck: how to handle hierarchical data in a flat index
