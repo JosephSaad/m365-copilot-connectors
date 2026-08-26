@@ -129,6 +129,7 @@ $packages = @(
     @{ Id = 'Std.UriTemplate'; Version = '2.0.8' }
     @{ Id = 'System.ClientModel'; Version = '1.10.0' }
     @{ Id = 'System.Configuration.ConfigurationManager'; Version = '8.0.0' }
+    @{ Id = 'System.Data.Odbc'; Version = '9.0.0' }
     @{ Id = 'System.Diagnostics.EventLog'; Version = '8.0.0' }
     @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '6.35.0' }
     @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '8.15.0' }

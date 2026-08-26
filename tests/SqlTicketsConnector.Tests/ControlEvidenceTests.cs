@@ -34,6 +34,31 @@ namespace SqlTicketsConnector.Tests
             new[] { "SqlTicketsConnector.Tests.PushSchemaTests", "A_property_name_the_platform_would_reject_is_caught_before_any_graph_call" },
             new[] { "SqlTicketsConnector.Tests.PushEngineTests", "A_connection_carrying_a_foreign_schema_is_refused_before_any_write" },
             new[] { "SqlTicketsConnector.Tests.PushConfigurationTests", "A_view_name_that_is_not_a_plain_identifier_is_rejected" },
+
+            // The source seam. The unbreakable rule - a failed crawl never
+            // advances a watermark - stopped being a convention every connector
+            // had to keep and became something the engine enforces, so these are
+            // the tests that prove the enforcement is still wired up.
+            new[] { "SqlTicketsConnector.Tests.PushSourceTests", "A_write_that_dies_leaves_the_watermark_on_the_last_item_that_landed" },
+            new[] { "SqlTicketsConnector.Tests.PushSourceTests", "A_dry_run_writes_nothing_and_commits_nothing" },
+            new[] { "SqlTicketsConnector.Tests.PushSourceTests", "An_item_the_source_could_grant_to_nobody_is_skipped_rather_than_written" },
+
+            // The CDP connector's refusals. Every one of these is a case where
+            // indexing would publish data whose access rules the index cannot
+            // reproduce, so they are refusals rather than best efforts.
+            new[] { "SqlTicketsConnector.Tests.CdpConnectorTests", "A_table_ranger_filters_or_masks_is_routed_to_a_live_query" },
+            new[] { "SqlTicketsConnector.Tests.CdpConnectorTests", "A_table_with_a_deny_policy_is_routed_rather_than_mirrored" },
+            new[] { "SqlTicketsConnector.Tests.CdpConnectorTests", "An_unresolved_group_is_dropped_rather_than_guessed" },
+            new[] { "SqlTicketsConnector.Tests.CdpConnectorTests", "The_resume_rule_is_strictly_after_with_ties_broken_by_key" },
+            new[] { "SqlTicketsConnector.Tests.CdpConnectorTests", "A_credential_or_a_downgrade_in_the_extra_options_is_refused" },
+            new[] { "SqlTicketsConnector.Tests.CdpSourceTests", "A_file_nobody_can_be_granted_is_skipped_before_its_content_is_read" },
+            new[] { "SqlTicketsConnector.Tests.CdpSourceTests", "An_unreadable_ranger_stops_the_run_rather_than_indexing_anyway" },
+
+            // The ACL staleness bound. A permission change does not alter a
+            // file's modification time, so the periodic full recrawl is the only
+            // thing that re-derives an item's grants after one.
+            new[] { "SqlTicketsConnector.Tests.CdpSourceTests", "The_periodic_full_recrawl_ignores_the_marker" },
+            new[] { "SqlTicketsConnector.Tests.CdpSourceTests", "The_watermark_moves_only_over_items_the_engine_confirmed" },
         };
 
         [Fact]

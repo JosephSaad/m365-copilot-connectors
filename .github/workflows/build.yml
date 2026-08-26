@@ -254,6 +254,16 @@ jobs:
               'SqlGraphPush/PushCore.dll',             # the shared engine, beside each tool
               'SqlHierarchyPush/SqlHierarchyPush.exe',    # direct push tool, three level test case
               'SqlHierarchyPush/PushCore.dll',         # the same engine, its own copy
+
+              # The Cloudera CDP tool: a third source family on the same engine.
+              # PushCore.Sql must NOT be beside it - it opens no SQL connection,
+              # and that separation is the reason the core was split.
+              'CdpGraphPush/CdpGraphPush.exe',
+              'CdpGraphPush/PushCore.dll',
+              'CdpGraphPush/CdpConnector.Source.dll',
+              'CdpGraphPush/CdpConnector.Extraction.dll',
+              'CdpGraphPush/appsettings.cdphdfsdocs.json',
+              'CdpGraphPush/appsettings.cdphivecontracts.json',
               'Install-Connector.ps1',
               'Manifest.json',
               'ConnectionInfo.json',
@@ -271,6 +281,8 @@ jobs:
               'deploy/GraphPushAuth.ps1',
               'deploy/Test-GraphPushPrereqs.ps1',
               'deploy/Compare-SourceToIndex.ps1',
+              'deploy/Test-CdpSource.ps1',
+              'deploy/Test-RangerRouting.ps1',
               'deploy/Test-HierarchySearch.ps1',
 
               'sql/01-least-privilege.sql',
@@ -280,6 +292,13 @@ jobs:
               'sql/11-timesheet-sample-data.sql',
               'sql/12-timesheet-views.sql',               # the flattening layer
               'sql/13-timesheet-least-privilege.sql',
+
+              # The cluster-side scripts docs/CDP-DEPLOYMENT.md tells an
+              # operator to run. In the package, or the instruction is wrong.
+              'hadoop/00-create-hdfs-test-data.sh',
+              'hadoop/01-create-hive-test-data.hql',
+              'hadoop/02-create-ranger-test-policies.sh',
+              'hadoop/03-Start-LocalWebHdfsStub.ps1',
               'docs/SECURITY.md',
               'docs/RUNBOOK.md',
               'docs/ASSUMPTIONS.md',
@@ -290,6 +309,8 @@ jobs:
               'docs/APP-REGISTRATION.md',
               'docs/GENESIS-PROMPT.md',
               'docs/ADDING-A-PUSH-CONNECTOR.md',
+              'docs/CDP-DEPLOYMENT.md',
+              'docs/TROUBLESHOOTING-CDP.md',
               'docs/COPILOT-ROUTING.md',
               'docs/copilot-decision-matrix.html',        # linked by COPILOT-ROUTING.md
               'docs/copilot-route-decision-tree.svg',     # embedded by it
@@ -313,6 +334,12 @@ jobs:
               'source/src/SqlTicketsConnector/SqlTicketsConnector.csproj',
               'source/src/PushCore/PushCore.csproj',            # the shared push engine
               'source/src/PushCore/IPushConnector.cs',             # the extension point itself
+              'source/src/PushCore/IPushSource.cs',                # and the source seam
+              'source/src/PushCore.Sql/PushCore.Sql.csproj',       # the SQL half, kept out of the core
+              'source/src/PushCore.Sql/ISqlPushConnector.cs',
+              'source/src/CdpGraphPush/CdpGraphPush.csproj',
+              'source/src/CdpConnector.Source/CdpConnector.Source.csproj',
+              'source/src/CdpConnector.Extraction/CdpConnector.Extraction.csproj',
               'source/src/SqlGraphPush/SqlGraphPush.csproj',
               'source/src/SqlHierarchyPush/SqlHierarchyPush.csproj',
               'source/src/Connector.Security/Connector.Security.csproj',

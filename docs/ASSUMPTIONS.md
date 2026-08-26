@@ -114,6 +114,106 @@ Found by the new tests, not by inspection:
 
 ## 5. Later changes
 
+- **A Cloudera CDP connector, and a source seam to hold it, on 2026-08-26.**
+  Adding a source that is not a database made two things obvious at once: the
+  shared core was named for one of the two things it served, and its extension
+  point named a SQL type.
+
+  `SqlPushCore` became **`PushCore`** and `SqlConnector.Security` became
+  **`Connector.Security`**, and the SQL half of the engine moved into a new
+  **`PushCore.Sql`** which the core does not reference. `PushCore` no longer
+  carries a `Microsoft.Data.SqlClient` dependency at all, so a SqlClient
+  advisory is not a re-release of a connector that never opens a SQL
+  connection. The rename was done before the first CDP file merged, on the
+  reasoning that there will never be fewer consumers of the old name than there
+  are today.
+
+  `IPushConnector` lost `BuildQuery` and `MapRow` — the two members naming
+  `SqlDataReader` — and gained `CreateSource`, returning an `IPushSource` the
+  engine reads. `ISqlPushConnector` supplies `CreateSource`, `ApplyDefaults` and
+  `Validate` for a SQL connector out of the query and row mapping it already
+  wrote, so a SQL connector is still one class and one configuration file and
+  the two shipped connectors changed by one token each.
+
+  **Those three are explicit interface implementations on purpose.** A connector
+  writes `ValidateOptions` to add its own rules; had the family implemented
+  `Validate` implicitly, a connector defining a method with that name would
+  silently replace its family's checks — the `DataSource` section, the view
+  name, the vault secret — and the loss would look exactly like a passing build.
+
+  The seam also made the unbreakable rule structural rather than conventional.
+  Only the engine knows whether an item reached the index, so only the engine
+  says so: `OnItemCommittedAsync` fires after the write returns,
+  `OnCrawlCompletedAsync` only when the enumeration ended without throwing, and
+  neither fires during a dry run. A source cannot checkpoint something that was
+  merely read.
+
+- **What the CDP connector refuses to index, and why (2026-08-26).** These are
+  refusals rather than gaps, and each one is a case where a single indexed copy
+  cannot represent what the source would show two different people:
+
+  - A table carrying a **Ranger row filter or column mask** is routed to a live
+    query. A filter and a mask are per-user transforms applied when a query
+    runs; indexing one either leaks the unfiltered rows to everyone granted the
+    item, or stores the masked version and lies to the people entitled to the
+    real one.
+  - A table with any **deny policy** is routed rather than mirrored. Graph has
+    deny ACEs and mirroring looks safer, but a mirrored deny only protects while
+    the translation is right every time, and a translation that drifts fails
+    open. `PushAclEntry` cannot express a deny at all, so the rule is enforced
+    by the type system rather than by discipline.
+  - A **column-scoped grant** is the same problem wearing different clothes.
+  - **An unresolved group is dropped and an item with no grants is skipped.**
+    There is deliberately no fallback to the connection-wide ACL: a fallback
+    would widen the audience of exactly the item whose permissions could not be
+    established.
+
+- **ACL staleness is bounded by `Settings:FullRecrawlEveryRuns`, not by the
+  crawl interval (2026-08-26).** A permission change at the source does not
+  alter a file's modification time, so an incremental crawl never revisits a
+  file whose group grant was revoked, and its indexed ACL would stay stale
+  indefinitely. The periodic full recrawl is the only thing that re-derives
+  those grants, which makes that setting the documented upper bound — seven runs
+  by default, so seven days on a daily schedule — and it belongs in the
+  deployment's risk register rather than in a code comment. Setting it to zero
+  is accepted but reported at startup. The same mechanism is what catches a file
+  renamed into a crawled directory carrying an older timestamp, which no
+  bounded watermark can see.
+
+- **`GroupMappingMode: ExternalGroups` is refused rather than half-implemented
+  (2026-08-26).** A Graph external group may contain Entra users and Entra
+  groups; it may not contain an identity that exists only on the cluster. So
+  mirroring a cluster-local Hadoop group produces a group with nobody in it, and
+  items granted to it would be indexed and returned to no one — which looks like
+  success. Files readable only by cluster-local groups therefore cannot be
+  securely indexed at all until those identities exist in Entra, and the
+  connector says so at startup instead of appearing to work.
+
+- **PDF text extraction is an optional build flag (2026-08-26).** Text, CSV,
+  JSON, XML, HTML and the Open XML formats are extracted with the base class
+  library alone — an `.docx` is a zip of XML, and reading it needs no package.
+  PDF has no such answer, and adding a parser to a repository the customer
+  redistributes is a licensing decision rather than a coding one. Build with
+  `-p:EnablePdfExtraction=true` to compile against PdfPig (Apache-2.0), and
+  regenerate the offline package list in the same change. Without it a PDF is
+  still indexed by its metadata with `extractStatus` saying why there is no
+  body: a document nobody can find is worse than a document found without its
+  text. Copyleft and per-seat commercial parsers are excluded by policy.
+
+- **A SQL source rejecting the login is still exit 4, not exit 3 (2026-08-26).**
+  The new `PushSourceAuthenticationException` maps a source refusing this
+  identity to exit 3, and the CDP connector raises it for Kerberos, HDFS and
+  Ranger rejections. The SQL family was deliberately left alone: changing what
+  a SQL login failure exits with would alter the behaviour of two shipped
+  connectors that operators already have monitoring rules for. The asymmetry is
+  known and is a candidate for the next deliberate break.
+
+- **The solution and repository keep their `SqlTicketsConnector` names
+  (2026-08-26).** The shared code was renamed because it is shared; the
+  solution file, the release asset name and the repository are the product's
+  identity, and renaming them would change every released asset's file name and
+  every link to it for no behavioural gain. Revisit at a major version.
+
 - **A three level test case added on 2026-08-24**, at the customer's request:
   Customer to Engagement to TimeEntry, pushed by a new `SqlHierarchyPush`
   alongside the existing ticket test case rather than replacing it.
@@ -219,8 +319,13 @@ Found by the new tests, not by inspection:
   `PushCore`: credentials, the vault, the SQL connection, creating the
   connection, registering the schema and polling to Ready, truncation, ACLs, the
   PUT with backoff, exit codes, logging, `--dry-run` and `--help`. A connector
-  is `IPushConnector` — a schema, a query and a row mapping. Each executable's
+  was `IPushConnector` — a schema, a query and a row mapping. Each executable's
   `Program.cs` is one line.
+
+  *(The SQL connection and the query moved out of `PushCore` into `PushCore.Sql`
+  in August 2026, when a source that is not a database arrived; a SQL connector
+  still writes exactly those three things, now as `ISqlPushConnector`. See the
+  first entry in this section.)*
 
   Two decisions worth recording. **The Graph SDK lives in the engine, not in
   `Connector.Security`** — that is what lets the credential, vault and

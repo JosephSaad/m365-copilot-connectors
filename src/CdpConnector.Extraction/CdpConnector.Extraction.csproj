@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Turning a file into text.
+
+    Graph external items accept text and html and nothing else - there is no
+    binary ingestion - so a connector indexing documents has to do the
+    extraction itself. Everything in here does it with the base class library:
+    text formats are decoded, and Office formats are read as what they are, a
+    zip of XML parts.
+
+    PDF is the one common format with no BCL answer, and adding a PDF library is
+    a dependency decision rather than a coding one. It is therefore optional and
+    off: build with -p:EnablePdfExtraction=true to compile PdfTextExtractor
+    against PdfPig (Apache-2.0), and regenerate the offline package list in the
+    same change. Without it a PDF is still indexed - by name, path, owner and
+    size, with extractStatus saying why there is no body - because a document
+    nobody can find is worse than a document found without its text.
+
+    Copyleft and per-seat commercial extractors are out of scope by policy, not
+    by oversight: this repository ships to a customer who redistributes it, and
+    an AGPL or per-server-licensed parser would follow it there.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CdpConnector.Extraction</RootNamespace>
+    <AssemblyName>CdpConnector.Extraction</AssemblyName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EnablePdfExtraction)' == 'true'">
+    <DefineConstants>$(DefineConstants);PDF_EXTRACTION</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(EnablePdfExtraction)' == 'true'">
+    <PackageReference Include="PdfPig" Version="0.1.11" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>

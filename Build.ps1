@@ -58,6 +58,7 @@ $solution = Join-Path $PSScriptRoot 'SqlTicketsConnector.sln'
 $connectorProject = Join-Path $PSScriptRoot 'src\SqlTicketsConnector\SqlTicketsConnector.csproj'
 $pushProject = Join-Path $PSScriptRoot 'src\SqlGraphPush\SqlGraphPush.csproj'
 $hierarchyProject = Join-Path $PSScriptRoot 'src\SqlHierarchyPush\SqlHierarchyPush.csproj'
+$cdpProject = Join-Path $PSScriptRoot 'src\CdpGraphPush\CdpGraphPush.csproj'
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw 'dotnet SDK not found. Install the .NET 10 SDK from https://dotnet.microsoft.com/download'
@@ -145,6 +146,14 @@ $hierarchyDir = Join-Path $OutputRoot 'SqlHierarchyPush'
 dotnet publish $hierarchyProject -c $Configuration -r $Runtime --self-contained $selfContainedFlag -o $hierarchyDir @frameworkArgs
 if ($LASTEXITCODE -ne 0) { throw 'Publish of SqlHierarchyPush failed.' }
 
+Write-Host '== Publishing the Cloudera CDP push tool ==' -ForegroundColor Cyan
+# HDFS documents and Hive tables. A third source family beside the two SQL
+# tools, published beside them for the same reason: an operator deploying one
+# connector should not have to know the others exist.
+$cdpDir = Join-Path $OutputRoot 'CdpGraphPush'
+dotnet publish $cdpProject -c $Configuration -r $Runtime --self-contained $selfContainedFlag -o $cdpDir @frameworkArgs
+if ($LASTEXITCODE -ne 0) { throw 'Publish of CdpGraphPush failed.' }
+
 Write-Host '== Staging deployment assets ==' -ForegroundColor Cyan
 Copy-Item (Join-Path $PSScriptRoot 'deploy\Install-Connector.ps1') $OutputRoot -Force
 Copy-Item (Join-Path $PSScriptRoot 'deploy\Manifest.json') $OutputRoot -Force
@@ -160,6 +169,12 @@ Copy-Item (Join-Path $PSScriptRoot 'deploy\*.ps1') (Join-Path $OutputRoot 'deplo
 
 New-Item -ItemType Directory -Path (Join-Path $OutputRoot 'sql') -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'sql\*.sql') (Join-Path $OutputRoot 'sql') -Force
+
+# The cluster-side scripts that create the CDP test data, for the same reason
+# sql\ ships: the deployment guide tells somebody to run them, and that
+# instruction has to be true of what they unzipped.
+New-Item -ItemType Directory -Path (Join-Path $OutputRoot 'hadoop') -Force | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'hadoop\*') (Join-Path $OutputRoot 'hadoop') -Force
 
 New-Item -ItemType Directory -Path (Join-Path $OutputRoot 'docs') -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'docs\*.md') (Join-Path $OutputRoot 'docs') -Force
@@ -190,7 +205,7 @@ Write-Host '== Staging source ==' -ForegroundColor Cyan
 # bin\ and obj\ in particular must never travel, both for size and because they
 # hold artefacts from whichever machine last built.
 $sourceRoot = Join-Path $OutputRoot 'source'
-$excludedDirectories = @('bin', 'obj', 'artifacts', '.git', '.vs', 'packages', 'offline-packages')
+$excludedDirectories = @('bin', 'obj', 'artifacts', '.git', '.vs', 'packages', 'offline-packages', '.localtests')
 
 $sourceItems = Get-ChildItem -Path $PSScriptRoot -Recurse -File | Where-Object {
     $relative = $_.FullName.Substring($PSScriptRoot.Length).TrimStart('\')
