@@ -200,7 +200,7 @@ hadoop/
   01-create-hive-test-data.hql         One indexable table, one that must never be indexed
   02-create-ranger-test-policies.sh    The grant, the row filter, and the HDFS read policy
 tests/
-  SqlTicketsConnector.Tests/           179 tests, no live tenant, vault, database or cluster
+  SqlTicketsConnector.Tests/           225 tests, no live tenant, vault, database or cluster
 ```
 
 ---
