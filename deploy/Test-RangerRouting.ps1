@@ -269,8 +269,12 @@ function Read-PolicyItem {
     #>
     param($Element, [string]$Name)
 
+    # Emitted unwrapped rather than as a protected array: every caller collects
+    # this with @() or +=, and a comma-protected empty array collected that way
+    # becomes ONE element containing nothing - which would give every policy a
+    # non-empty Deny and route every table to a live query.
     $items = @()
-    if (-not $Element.PSObject.Properties[$Name]) { return , $items }
+    if (-not $Element.PSObject.Properties[$Name]) { return $items }
 
     foreach ($raw in @($Element.$Name)) {
         if (-not $raw) { continue }
@@ -293,7 +297,7 @@ function Read-PolicyItem {
         }
     }
 
-    return , $items
+    return $items
 }
 
 function ConvertTo-RoutingPolicy {
@@ -352,8 +356,10 @@ $script:PolicyTypeRowFilter = 2
 function Get-PolicyResource {
     param($Policy, [string]$Name)
 
-    if ($Policy.Resources.ContainsKey($Name)) { return @($Policy.Resources[$Name]) }
-    return @()
+    # Comma-protected, so a resource with one value stays an array here rather
+    # than arriving at the caller as a bare string with a Length of its own.
+    if ($Policy.Resources.ContainsKey($Name)) { return , @($Policy.Resources[$Name]) }
+    return , @()
 }
 
 function Test-PolicyCovers {
@@ -646,7 +652,7 @@ if ($requested.Count -eq 0) {
     foreach ($policy in @($sqlPolicies | Where-Object { $_.Enabled })) {
         foreach ($database in (Get-PolicyResource $policy 'database')) {
             foreach ($tableName in (Get-PolicyResource $policy 'table')) {
-                if ($database -like '*`**' -or $tableName -like '*`**') { $wildcards++; continue }
+                if ($database.Contains('*') -or $tableName.Contains('*')) { $wildcards++; continue }
                 if ($seenTables.Add("$database.$tableName")) { $requested += , @($database, $tableName) }
             }
         }

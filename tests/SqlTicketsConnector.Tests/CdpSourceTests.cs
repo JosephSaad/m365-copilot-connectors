@@ -285,6 +285,56 @@ namespace SqlTicketsConnector.Tests
         }
 
         // ------------------------------------------------------------------
+        // Hive
+        // ------------------------------------------------------------------
+
+        [Fact]
+        public async Task A_hive_item_carries_only_properties_its_schema_declares()
+        {
+            // Graph rejects a property that is not in the registered schema, so a
+            // source stashing its own bookkeeping on the item would fail every
+            // write of every watermarked table. The watermark belongs to the
+            // source, not to the item, and this is what keeps it there.
+            var connector = new CdpGraphPush.HiveContractsConnector();
+
+            var schema = new HashSet<string>(
+                connector.BuildSchema().Properties.Select(p => p.Name),
+                StringComparer.Ordinal);
+
+            (List<PushItem> items, CheckpointStore store) = await this.ReadHiveAsync();
+
+            Assert.Equal(2, items.Count);
+
+            foreach (PushItem item in items)
+            {
+                foreach (string property in item.Properties.Keys)
+                {
+                    Assert.True(
+                        schema.Contains(property),
+                        $"item {item.Id} carries '{property}', which is not in the registered schema");
+                }
+            }
+
+            // And the watermark still ends up on the last committed row, which is
+            // the thing the properties were being misused for.
+            Assert.Equal("C-1001", store.Read().MarkerKey);
+        }
+
+        [Fact]
+        public async Task A_row_filtered_table_is_never_queried_at_all()
+        {
+            // Not "queried and discarded". The rows the service account can see
+            // are the rows ITS filter admits, so reading them at all would be
+            // reading one user's view of the table.
+            var reader = new FakeHiveRowReader();
+
+            (List<PushItem> items, _) = await this.ReadHiveAsync(reader: reader, rowFiltered: true);
+
+            Assert.Empty(items);
+            Assert.Empty(reader.Queries);
+        }
+
+        // ------------------------------------------------------------------
         // Extraction
         // ------------------------------------------------------------------
 
@@ -434,6 +484,114 @@ namespace SqlTicketsConnector.Tests
                 TextExtractorSet.Default(),
                 new CheckpointStore(this.stateDirectory, "cdphdfsdocs", Logger.None),
                 Logger.None);
+        }
+
+        /// <summary>Runs a Hive source over canned rows and returns what it yielded.</summary>
+        private async Task<(List<PushItem> Items, CheckpointStore Store)> ReadHiveAsync(
+            FakeHiveRowReader reader = null, bool rowFiltered = false)
+        {
+            reader ??= new FakeHiveRowReader(
+                new Dictionary<string, object>
+                {
+                    ["contract_ref"] = "C-1000",
+                    ["counterparty"] = "Northwind",
+                    ["status"] = "Open",
+                    ["value_amount"] = 1250.5d,
+                    ["last_modified_ts"] = new DateTime(2026, 8, 20, 10, 0, 0, DateTimeKind.Utc),
+                },
+                new Dictionary<string, object>
+                {
+                    ["contract_ref"] = "C-1001",
+                    ["counterparty"] = "Contoso",
+                    ["status"] = "Under review",
+                    ["value_amount"] = 480d,
+                    ["last_modified_ts"] = new DateTime(2026, 8, 20, 10, 0, 0, DateTimeKind.Utc),
+                });
+
+            PushOptions options = CdpConnectorTests.CdpOptions();
+            options.Source.ItemView = "contracts.contract";
+            options.Settings["HiveWatermarkColumn"] = "last_modified_ts";
+            options.Settings["HiveKeyColumn"] = "contract_ref";
+            options.Settings["CheckpointDirectory"] = this.stateDirectory;
+
+            var policy = new RangerPolicy
+            {
+                Id = 1,
+                PolicyType = rowFiltered ? RangerPolicyType.RowFilter : RangerPolicyType.Access,
+                Enabled = true,
+            };
+
+            policy.Resources["database"] = new List<string> { "contracts" };
+            policy.Resources["table"] = new List<string> { "contract" };
+
+            var item = new RangerPolicyItem();
+            item.Accesses.Add("select");
+            item.Groups.Add("hadoop-contracts-read");
+            policy.Allow.Add(item);
+
+            var store = new CheckpointStore(this.stateDirectory, "cdphivecontracts", Logger.None);
+
+            var source = new CdpConnector.Source.Hive.HivePushSource(
+                CdpSettings.From(options),
+                options,
+                reader,
+                new RoutingEvaluator(new[] { policy }),
+                rowFiltered
+                    ? Array.Empty<PushAclEntry>()
+                    : new[] { new PushAclEntry(PushAclType.Group, TestData.GroupObjectId) },
+                store,
+                CdpGraphPush.HiveContractsConnector.MapRow,
+                Logger.None);
+
+            var items = new List<PushItem>();
+
+            await using (source)
+            {
+                await foreach (PushItem yielded in source.ReadAsync(CancellationToken.None))
+                {
+                    items.Add(yielded);
+                }
+
+                foreach (PushItem yielded in items)
+                {
+                    await source.OnItemCommittedAsync(yielded, CancellationToken.None);
+                }
+
+                await source.OnCrawlCompletedAsync(CancellationToken.None);
+            }
+
+            return (items, store);
+        }
+
+        /// <summary>Canned rows, and a record of the queries it was asked to run.</summary>
+        private sealed class FakeHiveRowReader : CdpConnector.Source.Hive.IHiveRowReader
+        {
+            private readonly List<Dictionary<string, object>> rows;
+
+            public FakeHiveRowReader(params Dictionary<string, object>[] rows)
+            {
+                this.rows = rows.ToList();
+            }
+
+            public List<string> Queries { get; } = new List<string>();
+
+            public async IAsyncEnumerable<CdpConnector.Source.Hive.HiveRow> QueryAsync(
+                string query,
+                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+            {
+                this.Queries.Add(query);
+
+                foreach (Dictionary<string, object> row in this.rows)
+                {
+                    await Task.Yield();
+                    yield return new CdpConnector.Source.Hive.HiveRow(row);
+                }
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                return ValueTask.CompletedTask;
+            }
         }
 
         /// <summary>A Ranger with no policies, or one that will not answer.</summary>

@@ -37,6 +37,14 @@ public sealed class HivePushSource : IPushSource
     private readonly Func<HiveRow, PushOptions, PushItem?> map;
     private readonly ILogger log;
 
+    // Keyed by item ID rather than carried on the item. A marker put into
+    // PushItem.Properties would be sent to Graph as an item property, and Graph
+    // rejects a property that is not in the registered schema - so every row of
+    // every watermarked table would fail to write. The watermark is the
+    // source's bookkeeping and has no business in the item.
+    private readonly Dictionary<string, (string Time, string Key)> markers =
+        new(StringComparer.Ordinal);
+
     private int skipped;
     private string pendingMarkerTime = string.Empty;
     private string pendingMarkerKey = string.Empty;
@@ -197,8 +205,9 @@ public sealed class HivePushSource : IPushSource
 
             if (!string.IsNullOrWhiteSpace(this.settings.HiveWatermarkColumn))
             {
-                item.Properties["_markerTime"] = row.Text(this.settings.HiveWatermarkColumn);
-                item.Properties["_markerKey"] = row.Text(this.settings.HiveKeyColumn);
+                this.markers[item.Id] = (
+                    row.Text(this.settings.HiveWatermarkColumn),
+                    row.Text(this.settings.HiveKeyColumn));
             }
 
             yield return item;
@@ -208,11 +217,15 @@ public sealed class HivePushSource : IPushSource
     /// <inheritdoc/>
     public ValueTask OnItemCommittedAsync(PushItem item, CancellationToken cancellationToken)
     {
-        if (item.Properties.TryGetValue("_markerTime", out object? time) &&
-            item.Properties.TryGetValue("_markerKey", out object? key))
+        if (this.markers.TryGetValue(item.Id, out (string Time, string Key) marker))
         {
-            this.pendingMarkerTime = (string)time;
-            this.pendingMarkerKey = (string)key;
+            this.pendingMarkerTime = marker.Time;
+            this.pendingMarkerKey = marker.Key;
+
+            // The engine reports each item once and never revisits it, so the
+            // entry has done its job. Dropping it keeps a million-row table from
+            // holding a million markers.
+            this.markers.Remove(item.Id);
         }
 
         return ValueTask.CompletedTask;
