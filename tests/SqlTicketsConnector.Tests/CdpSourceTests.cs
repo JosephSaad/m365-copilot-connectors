@@ -168,12 +168,18 @@ namespace SqlTicketsConnector.Tests
         {
             // The file's owning group is not mapped, but an extended ACL entry
             // names one that is - so it is indexed, granted to that group only.
+            //
+            // The mode is 640 because on a file with an extended ACL the middle
+            // digit is the ACL MASK, and a named entry grants its own bits AND
+            // the mask. At 600 the mask is --- and the cluster grants nothing,
+            // which is what CdpAclMaskTests asserts; this test is about the
+            // other direction, so it needs a mask that lets the entry through.
             FakeWebHdfs cluster = new FakeWebHdfs()
                 .File(
                     "/data/contracts/shared.txt",
                     "shared",
                     Base,
-                    permission: "600",
+                    permission: "640",
                     group: "unmapped-group",
                     "group:hadoop-contracts-read:r--");
 

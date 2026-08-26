@@ -13,6 +13,15 @@
 //   * An unknown extension is not an error. The file is indexed by everything
 //     else known about it, with a status saying there is no body.
 //
+//   * Opening the file is part of the attempt, not a precondition of it. A read
+//     that fails at the open is the same kind of event as one that fails at the
+//     parse - a sick DataNode and a malformed document are both one file out of
+//     a million - so both return a status rather than an exception that would
+//     end the crawl. The single exception is a file that has been DELETED since
+//     the listing, which is not a failure of anything: the open returns null,
+//     this returns null, and the caller skips the item instead of indexing a
+//     document with no body and no file behind it.
+//
 // The allowlist is the operator's, not this class's: a build that can read six
 // formats still only reads the ones the configuration asks for, because "what
 // this connector indexes" is a decision about the deployment rather than about
@@ -69,14 +78,22 @@ public sealed class TextExtractorSet
     }
 
     /// <summary>Extracts the text of one file.</summary>
-    /// <param name="open">Opens the file. Not called when the size ceiling refuses it.</param>
+    /// <param name="open">
+    /// Opens the file. Not called when the size ceiling or the extension refuses
+    /// it. Returns null to say the file is gone, which is the caller's own
+    /// judgement to make: this set knows nothing about where the bytes live.
+    /// </param>
     /// <param name="fileName">The file name, for the extractor choice and the reason.</param>
     /// <param name="sizeBytes">The file's reported size.</param>
     /// <param name="maxRawBytes">The ceiling above which the file is not read.</param>
     /// <param name="cancellationToken">Cancellation.</param>
-    /// <returns>The text, or why there is none.</returns>
-    public async Task<ExtractionResult> ExtractAsync(
-        Func<CancellationToken, Task<Stream>> open,
+    /// <returns>
+    /// The text or why there is none, or null when the open reported the file
+    /// gone - which is distinct from every failure status, because the caller
+    /// must skip such an item rather than index it with an empty body.
+    /// </returns>
+    public async Task<ExtractionResult?> ExtractAsync(
+        Func<CancellationToken, Task<Stream?>> open,
         string fileName,
         long sizeBytes,
         long maxRawBytes,
@@ -95,26 +112,40 @@ public sealed class TextExtractorSet
             return ExtractionResult.TooLarge(sizeBytes, maxRawBytes);
         }
 
-        Stream content = await open(cancellationToken);
+        Stream? content = null;
 
-        await using (content)
+        try
         {
-            try
+            // Inside the try, deliberately. An open that throws - a DataNode
+            // answering 500, a socket dying - used to escape this method and
+            // end the whole crawl on one unlucky file.
+            content = await open(cancellationToken);
+
+            if (content is null)
             {
-                return await extractor.ExtractAsync(content, fileName, cancellationToken);
+                return null;
             }
-            catch (OperationCanceledException)
+
+            return await extractor.ExtractAsync(content, fileName, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation is the run stopping, not this file failing.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // An extractor that throws anyway is a bug in the extractor, and one
+            // malformed file - or one file the cluster would not hand over -
+            // must not end a crawl of a million. The message names the exception
+            // type and its own message, neither of which contains file content.
+            return ExtractionResult.Failed($"{ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            if (content is not null)
             {
-                // Cancellation is the run stopping, not this file failing.
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // An extractor that throws anyway is a bug in the extractor, and
-                // one malformed file must not end a crawl of a million. The
-                // message names the exception type and its own message, neither
-                // of which contains file content.
-                return ExtractionResult.Failed($"{ex.GetType().Name}: {ex.Message}");
+                await content.DisposeAsync();
             }
         }
     }

@@ -25,6 +25,24 @@
 // An empty result is a real answer and means the file is not indexed. See
 // PushEngine: an item granted to nobody is accepted by Graph and then returned
 // to no one, which looks like success.
+//
+// The one thing this file decides that HdfsModels cannot is which reading of
+// the group permission digit applies. On a file with an extended ACL that digit
+// is the ACL MASK, every named entry's effective permission is its own bits AND
+// the mask, and the owning group's own permission is the "group::" entry; on a
+// file without one the digit is the owning group's, as it reads, and there is
+// no mask. Only here are both halves - the mode and the entries - in hand at
+// once, so only here can the question be settled.
+//
+// The mask is read from the FILE STATUS permission and passed in. HdfsAclStatus
+// carries a permission of its own that WebHDFS populates, and taking the mask
+// from there would pair the entries with the mode from the same response; the
+// status is preferred because it is the one every caller has. An HdfsAclStatus
+// assembled anywhere but the GETACLSTATUS parse carries an empty permission,
+// and an empty permission read the fail-closed way would strip every named
+// grant off every file without anything looking wrong. Making the mode an
+// argument means the caller states the mask rather than being able to forget
+// it.
 // ---------------------------------------------------------------------------
 
 namespace CdpConnector.Source.Acl;
@@ -49,8 +67,8 @@ public sealed class HdfsAclBuilder
     }
 
     /// <summary>Names every cluster group the cluster would let read this file.</summary>
-    /// <param name="status">The file's status.</param>
-    /// <param name="acl">Its extended ACL, or null when it has none.</param>
+    /// <param name="status">The file's status, whose permission carries the mask.</param>
+    /// <param name="acl">Its ACL as GETACLSTATUS returns it, or null. Entries that are empty, or only inheritance, mean a minimal ACL.</param>
     /// <param name="rangerGroups">Groups a Ranger path policy grants read.</param>
     /// <returns>The cluster group names, deduplicated.</returns>
     public static IReadOnlyList<string> ClusterGroups(
@@ -58,18 +76,39 @@ public sealed class HdfsAclBuilder
     {
         var groups = new List<string>();
 
-        // The owning group, but only when the group permission digit actually
-        // grants read. A file owned by group "finance" with mode 600 grants
-        // finance nothing, and treating ownership as access would be inventing a
-        // grant the cluster does not give.
-        if (status.GroupCanRead && !string.IsNullOrWhiteSpace(status.Group))
+        bool owningGroupCanRead;
+
+        // An HdfsAclStatus is not evidence of an extended ACL - WebHDFS answers
+        // GETACLSTATUS for every path - so the entries are what decide which
+        // reading of the group digit is in force.
+        if (acl is not null && acl.IsExtended)
+        {
+            // The owning group's effective permission is its "group::" entry AND
+            // the mask, which is what getfacl prints as "#effective:". An
+            // extended ACL stating no "group::" entry is a shape the cluster
+            // does not produce, and it grants nothing here rather than falling
+            // back to the digit: falling back would read the mask as a grant,
+            // which is the over-grant being fixed.
+            owningGroupCanRead =
+                HdfsAclStatus.MaskGrantsRead(status.Permission) && acl.OwningGroupCanRead;
+        }
+        else
+        {
+            // No extended ACL, so no mask: the digit is the owning group's, as
+            // it reads. A file owned by group "finance" with mode 600 grants
+            // finance nothing, and treating ownership as access would be
+            // inventing a grant the cluster does not give.
+            owningGroupCanRead = status.GroupCanRead;
+        }
+
+        if (owningGroupCanRead && !string.IsNullOrWhiteSpace(status.Group))
         {
             groups.Add(status.Group);
         }
 
         if (acl is not null)
         {
-            groups.AddRange(acl.GroupsGrantedRead());
+            groups.AddRange(acl.GroupsGrantedRead(status.Permission));
         }
 
         groups.AddRange(rangerGroups);
@@ -81,8 +120,8 @@ public sealed class HdfsAclBuilder
     }
 
     /// <summary>Builds the grants for one file.</summary>
-    /// <param name="status">The file's status.</param>
-    /// <param name="acl">Its extended ACL, or null when it has none.</param>
+    /// <param name="status">The file's status, whose permission carries the mask.</param>
+    /// <param name="acl">Its ACL as GETACLSTATUS returns it, or null.</param>
     /// <param name="rangerGroups">Groups a Ranger path policy grants read.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>The grants. Empty means the file is not indexed.</returns>

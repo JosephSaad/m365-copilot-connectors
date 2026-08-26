@@ -9,6 +9,7 @@ namespace Connector.Security.Configuration
     using System;
     using System.Collections.Generic;
     using System.Globalization;
+    using System.Linq;
 
     /// <summary>
     /// Accumulator for configuration validation messages.
@@ -32,7 +33,17 @@ namespace Connector.Security.Configuration
         /// <summary>Records a problem against a configuration path such as "Auth:TenantId".</summary>
         public void Add(string path, string message)
         {
-            this.errors.Add(path + ": " + message);
+            string line = path + ": " + message;
+
+            // Reported once, however many validators noticed it. Two layers
+            // legitimately check the same field - the engine checks the one
+            // DataSource value it reads itself, and the SQL family checks the
+            // whole section - and telling an operator the same thing twice
+            // makes a list of real problems look longer than it is.
+            if (!this.errors.Contains(line, StringComparer.Ordinal))
+            {
+                this.errors.Add(line);
+            }
         }
 
         /// <summary>Records a problem when the value is null, empty or whitespace.</summary>
