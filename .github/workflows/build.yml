@@ -294,6 +294,9 @@ jobs:
               'docs/copilot-decision-matrix.html',        # linked by COPILOT-ROUTING.md
               'docs/copilot-route-decision-tree.svg',     # embedded by it
               'docs/copilot-route-decision-tree.png',
+              'docs/copilot-route-decision-tree-dark.png',
+              'docs/copilot-surface-matrix.png',          # standalone render of the HTML tool's table 1
+              'docs/copilot-delivery-paths.png',          # and table 2
               'docs/agent-bypass-tradeoffs.pptx',         # linked from README
               'docs/hierarchy-in-copilot.pptx',
               'docs/architecture.png',                    # embedded by README.md
