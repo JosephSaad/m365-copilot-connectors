@@ -51,7 +51,12 @@
 param(
     [string]$ConfigPath = '.\appsettings.json',
     [System.Security.SecureString]$ClientSecret,
-    [switch]$SkipSql
+    [switch]$SkipSql,
+
+    # When the config omits Graph:ConnectionId (the tool fills it per
+    # connector), this names the connection to validate. The script refuses to
+    # guess: 'sqltickets' for SqlGraphPush, 'consultingwork' for SqlHierarchyPush.
+    [string]$ConnectionIdOverride
 )
 
 $ErrorActionPreference = 'Stop'
@@ -86,12 +91,19 @@ else {
 
 $connectionId = $config.Graph.ConnectionId
 
+if ([string]::IsNullOrWhiteSpace($connectionId) -and $ConnectionIdOverride) {
+    $connectionId = $ConnectionIdOverride
+}
+
 if ([string]::IsNullOrWhiteSpace($connectionId)) {
-    # PushHost.ApplyDefaults fills an omitted ConnectionId from the connector
-    # ('sqltickets' for the tickets tool), so an omitted value is a valid
-    # configuration - the pre-flight must not fail what the tool accepts.
-    $connectionId = 'sqltickets'
-    Note "Graph:ConnectionId is not set; the tool defaults it to '$connectionId'."
+    # An omitted ConnectionId is valid configuration - PushHost fills it from
+    # whichever connector runs - but this script cannot know which tool the
+    # config belongs to, and validating the WRONG connection would pass or fail
+    # the wrong deployment. Guessing is worse than asking.
+    Fail ("Graph:ConnectionId is not set in this file. Pass -ConnectionIdOverride with the connection the tool " +
+        "will use ('sqltickets' for SqlGraphPush, 'consultingwork' for SqlHierarchyPush) so the ownership " +
+        'checks below test the right one.')
+    exit 1
 }
 
 if ($connectionId.Length -lt 3 -or $connectionId.Length -gt 32 -or $connectionId -notmatch '^[a-zA-Z0-9]+$') {

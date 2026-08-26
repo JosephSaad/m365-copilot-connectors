@@ -58,9 +58,19 @@ namespace SqlTicketsConnector.Connector
             // failure, not a per-item surprise.
             this.aclTemplate = AclBuilder.Build(aclGroupObjectIds);
             this.maxContentBytes = maxContentBytes;
-            this.itemUrlTemplate = string.IsNullOrWhiteSpace(itemUrlTemplate)
-                ? "https://tickets.contoso.com/ticket/{0}"
-                : itemUrlTemplate;
+            // No fallback URL: startup validation requires the template, so an
+            // empty one reaching this constructor is a caller bug - and a silent
+            // sample-URL substitution would send every search result to a page
+            // that does not exist.
+            if (string.IsNullOrWhiteSpace(itemUrlTemplate))
+            {
+                throw new ArgumentException(
+                    "itemUrlTemplate is required. DataSource:ItemUrlTemplate is validated at startup; " +
+                    "reaching this point without one is a bug in the caller.",
+                    nameof(itemUrlTemplate));
+            }
+
+            this.itemUrlTemplate = itemUrlTemplate;
             this.logger = logger ?? Log.Logger;
         }
 

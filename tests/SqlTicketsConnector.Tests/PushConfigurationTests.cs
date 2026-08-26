@@ -26,11 +26,42 @@ namespace SqlTicketsConnector.Tests
         [Fact]
         public void Valid_configuration_produces_no_errors_for_either_connector()
         {
-            ValidationErrors hierarchy = TestData.ValidPushOptions().Validate();
+            // Both layers PushHost actually runs: the shared Validate() AND the
+            // connector's own ValidateOptions. Checking only the first blessed a
+            // tickets fixture the real startup path would have rejected.
+            PushOptions hierarchyOptions = TestData.ValidPushOptions();
+            ValidationErrors hierarchy = hierarchyOptions.Validate();
+            IPushConnector hierarchyConnector = new HierarchyPushConnector();
+            hierarchyConnector.ValidateOptions(hierarchyOptions, hierarchy);
             Assert.False(hierarchy.HasErrors, hierarchy.ToMessage());
 
-            ValidationErrors tickets = TestData.ValidPushOptions("sqltickets", "dbo.Tickets").Validate();
+            PushOptions ticketOptions = TestData.ValidPushOptions("sqltickets", "dbo.Tickets");
+            ValidationErrors tickets = ticketOptions.Validate();
+            IPushConnector ticketsConnector = new TicketsPushConnector();
+            ticketsConnector.ValidateOptions(ticketOptions, tickets);
             Assert.False(tickets.HasErrors, tickets.ToMessage());
+        }
+
+        [Theory]
+        [InlineData("", "is required")]
+        [InlineData("https://tickets.contoso.com/ticket/", "must contain {0}")]
+        [InlineData("https://tickets.contoso.com/ticket/{0}/{", "composite format")]
+        public void A_broken_url_template_is_a_named_configuration_error(string template, string expectedFragment)
+        {
+            // The template's failure modes are nasty: without {0} every item
+            // silently carries the identical URL; malformed, it throws on the
+            // first row of every run. Both must be exit-2 with the key named -
+            // and the agent connector shares this validator, so this pins both.
+            PushOptions options = TestData.ValidPushOptions("sqltickets", "dbo.Tickets");
+            options.DataSource.ItemUrlTemplate = template;
+
+            var errors = new ValidationErrors();
+            new TicketsPushConnector().ValidateOptions(options, errors);
+
+            Assert.True(errors.HasErrors, "template '" + template + "' should have been rejected");
+            Assert.Contains(errors.Errors, e =>
+                e.StartsWith("DataSource:ItemUrlTemplate:", StringComparison.Ordinal) &&
+                e.Contains(expectedFragment, StringComparison.OrdinalIgnoreCase));
         }
 
         [Fact]

@@ -59,9 +59,12 @@ namespace SqlTicketsConnector
                 return 2;
             }
 
-            using (logger)
+            // No using block: Log.CloseAndFlush() in the finally below disposes
+            // the logger exactly once. A using here would dispose it a second
+            // time after CloseAndFlush already has.
+            Log.Logger = logger;
+
             {
-                Log.Logger = logger;
 
                 try
                 {

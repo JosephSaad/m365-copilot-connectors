@@ -116,9 +116,13 @@ namespace SqlTicketsConnector.Server
             (this.DataSource ?? new DataSourceOptions()).Validate(errors, "DataSource", this.Environment);
 
             // This connector builds an item URL for every ticket, so the template
-            // is required HERE - the shared library no longer defaults it,
-            // because a tickets URL must not be the fallback for every connector.
-            errors.RequireNonEmpty("DataSource:ItemUrlTemplate", this.DataSource?.ItemUrlTemplate);
+            // is validated in full HERE - the shared library no longer defaults
+            // it, because a tickets URL must not be the fallback for every
+            // connector. The shared validator also catches a template without
+            // {0} (every item gets the identical URL, silently) and a malformed
+            // one (a FormatException on the first row of every crawl).
+            SqlConnector.Security.Configuration.UrlTemplateValidator.Validate(
+                errors, "DataSource:ItemUrlTemplate", this.DataSource?.ItemUrlTemplate ?? string.Empty);
             (this.Acl ?? new AclOptions()).Validate(errors, "Acl");
             (this.Logging ?? new LoggingOptions()).Validate(errors, "Logging");
 

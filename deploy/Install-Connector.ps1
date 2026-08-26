@@ -212,12 +212,19 @@ if (-not (Test-Path $AgentPath)) {
 # was left stopped, and whether the old binaries are still in place.
 $script:ServiceWasStopped = $false
 $script:BinariesReplaced = $false
+$script:PortMapWritten = $false
 
 trap {
     Write-Host ''
     Write-Host 'INSTALL FAILED - host state:' -ForegroundColor Red
 
+    # Each mutation reports independently: a fresh install has no service to
+    # stop but still overwrites binaries, so gating everything on the service
+    # flag would print 'nothing was changed' over a half-written install.
+    $mutated = $false
+
     if ($script:ServiceWasStopped) {
+        $mutated = $true
         if ($script:BinariesReplaced) {
             Write-Host ("  Service '$ServiceName' is STOPPED and its binaries were replaced with the new " +
                 'build. Fix the error above and re-run this script; do not start the service by hand until ' +
@@ -228,7 +235,18 @@ trap {
                 "'Start-Service $ServiceName' restores the previous deployment.") -ForegroundColor Yellow
         }
     }
-    else {
+    elseif ($script:BinariesReplaced) {
+        $mutated = $true
+        Write-Host ("  Binaries were copied into '$InstallPath'. No service was stopped. " +
+            'Fix the error above and re-run this script to finish the install.') -ForegroundColor Yellow
+    }
+
+    if ($script:PortMapWritten) {
+        $mutated = $true
+        Write-Host '  The agent port map was updated. Re-running this script is safe; the merge is idempotent.' -ForegroundColor Yellow
+    }
+
+    if (-not $mutated) {
         Write-Host '  Nothing was changed on this host.' -ForegroundColor Yellow
     }
 
@@ -251,6 +269,7 @@ if (-not (Test-Path $InstallPath)) {
     New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
 }
 Copy-Item -Path (Join-Path $SourcePath '*') -Destination $InstallPath -Recurse -Force
+$script:BinariesReplaced = $true
 
 # Files downloaded from SharePoint carry the mark of the web; .NET refuses to
 # load blocked assemblies.
@@ -267,8 +286,6 @@ if ($config.Logging.Directory) { $logPath = $config.Logging.Directory }
 if ($config.Connector.Port) { $Port = [int]$config.Connector.Port }
 if ($config.Connector.Id) { $ConnectorId = $config.Connector.Id }
 if ($config.Logging.EventLogSource) { $EventLogSource = $config.Logging.EventLogSource }
-
-$script:BinariesReplaced = $true
 
 Write-Host '== Step 3: Create the event log source ==' -ForegroundColor Cyan
 # Created here, never at runtime: registering a source needs administrative
@@ -302,13 +319,24 @@ elseif ($config.Auth.Mode -eq 'ClientSecret') {
         # administrator rather than as the service account. Finding the entry
         # here is therefore a warning sign, not a pass: it means the credential
         # was very likely stored under the wrong profile.
-        $listing = & cmdkey.exe "/list:$target" 2>&1 | Out-String
+        # CredRead rather than parsing cmdkey output: cmdkey's text is
+        # localized, so matching English markers like 'NONE' would misreport on
+        # every non-English Windows. The API answers the only question asked -
+        # does the entry exist for THIS account - directly.
+        if (-not ('Probe.InstallCredProbe' -as [type])) {
+            Add-Type -Namespace Probe -Name InstallCredProbe -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("advapi32.dll", EntryPoint = "CredReadW", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+public static extern bool CredRead(string target, uint type, uint flags, out System.IntPtr credential);
+[System.Runtime.InteropServices.DllImport("advapi32.dll")]
+public static extern void CredFree(System.IntPtr buffer);
+'@
+        }
 
-        # cmdkey echoes the requested target in its header even when nothing
-        # matches, so matching on the target name would warn unconditionally.
-        # The absence marker is what distinguishes the two states - the same
-        # probe Test-ConnectorHost.ps1 uses.
-        if ($listing -notmatch 'NONE' -and $listing -notmatch 'not found') {
+        $handle = [System.IntPtr]::Zero
+        $entryExists = [Probe.InstallCredProbe]::CredRead($target, 1, 0, [ref]$handle)
+        if ($handle -ne [System.IntPtr]::Zero) { [Probe.InstallCredProbe]::CredFree($handle) }
+
+        if ($entryExists) {
             Write-Warning ("Credential Manager entry '$target' exists for $env:USERNAME, which is NOT the account the " +
                 'service runs as. Credential Manager is per account, so the service will still fail to read it. ' +
                 "Store it as $ServiceAccount instead, and remove this copy with: cmdkey /delete:$target")
@@ -348,6 +376,7 @@ if (Test-Path $portMapPath) {
 
 $portMap[$ConnectorId] = "$Port"
 $portMap | ConvertTo-Json -Depth 3 | Set-Content -Path $portMapPath -Encoding UTF8
+$script:PortMapWritten = $true
 Write-Host "Mapped $ConnectorId to port $Port."
 
 Write-Host '== Step 6: Register Windows service ==' -ForegroundColor Cyan

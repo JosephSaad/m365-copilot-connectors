@@ -81,6 +81,29 @@ public sealed class PushEngine
                 "writing nothing to Graph.",
                 schema.Properties?.Count ?? 0,
                 this.connector.DisplayName);
+
+            // And it exercises the foreign-connection guard with read-only GETs,
+            // so a wrong Graph:ConnectionId fails at the desk too. Skipped with a
+            // note when the tenant is unreachable - the dry run's main job is
+            // proving the mapping, and that needs only SQL.
+            try
+            {
+                Schema? registered = await this.TryGetRegisteredSchemaAsync(
+                    this.options.Graph.ConnectionId, cancellationToken);
+
+                VerifySchemaOwnership(this.options.Graph.ConnectionId, schema, registered, this.log);
+            }
+            catch (ODataError ex) when (ex.ResponseStatusCode == 404)
+            {
+                this.log.Information("Connection {ConnectionId} does not exist yet; a real run would create it.",
+                    this.options.Graph.ConnectionId);
+            }
+            catch (Exception ex) when (ex is not InvalidOperationException)
+            {
+                this.log.Warning(
+                    "Could not check connection ownership ({Message}). The dry run continues; the real run checks.",
+                    ex.Message);
+            }
         }
         else
         {
@@ -134,29 +157,21 @@ public sealed class PushEngine
         ExternalConnection? connection = await this.graph.External.Connections[connectionId]
             .GetAsync(cancellationToken: cancellationToken);
 
+        // The connection exists - but is it OURS? A registered schema cannot be
+        // replaced, and the PUT is an upsert, so touching a connection another
+        // connector registered would corrupt its index. Instead of each
+        // connector naming the others' connection IDs - a list that goes stale
+        // the day a connector is added - compare what is actually registered
+        // against what this connector builds. Any foreign property means a
+        // foreign connection. Checked in EVERY state, not only Ready: a foreign
+        // connection whose registration is still in flight (draft) must not be
+        // claimed by PATCHing this connector's schema over it either.
+        Schema? registered = await this.TryGetRegisteredSchemaAsync(connectionId, cancellationToken);
+
+        VerifySchemaOwnership(connectionId, this.connector.BuildSchema(), registered, this.log);
+
         if (connection?.State == ConnectionState.Ready)
         {
-            // The connection exists and is live - but is it OURS? A registered
-            // schema cannot be replaced, and the PUT is an upsert, so pushing
-            // into a connection another connector registered would silently
-            // corrupt its index. Instead of each connector naming the others'
-            // connection IDs - a list that goes stale the day a connector is
-            // added - compare what is actually registered against what this
-            // connector builds. Any foreign property means a foreign connection.
-            Schema? registered = null;
-
-            try
-            {
-                registered = await this.graph.External.Connections[connectionId].Schema
-                    .GetAsync(cancellationToken: cancellationToken);
-            }
-            catch (ODataError ex) when (ex.ResponseStatusCode == 404)
-            {
-                // Ready with no readable schema: nothing to compare.
-            }
-
-            VerifySchemaOwnership(connectionId, this.connector.BuildSchema(), registered, this.log);
-
             this.log.Information("Schema already registered.");
             return;
         }
@@ -175,10 +190,15 @@ public sealed class PushEngine
             "deploy/Watch-SchemaRegistration.ps1 to watch, and read the schema it prints before pushing anything.");
 
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(this.options.Graph.SchemaReadyTimeoutMinutes);
+        TimeSpan pollDelay = TimeSpan.FromSeconds(30);
 
         while (true)
         {
-            await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+            // One delay per iteration. A throttled poll sets the NEXT delay to
+            // the honoured Retry-After instead of stacking it on top of the
+            // fixed interval, so the logged wait is the wait that happens.
+            await Task.Delay(pollDelay, cancellationToken);
+            pollDelay = TimeSpan.FromSeconds(30);
 
             ConnectionState? state;
 
@@ -192,12 +212,11 @@ public sealed class PushEngine
                 // Registration runs server side for 5 to 15 minutes; one throttled
                 // or transiently failing status poll must not abort a wait the
                 // operation itself is surviving. The deadline still bounds it.
-                TimeSpan wait = GraphThrottling.RetryAfter(ex) ?? TimeSpan.FromSeconds(30);
+                pollDelay = GraphThrottling.RetryAfter(ex) ?? TimeSpan.FromSeconds(30);
                 this.log.Warning(
                     "Status poll returned {Status}; polling again in {Seconds}s.",
                     ex.ResponseStatusCode,
-                    (int)wait.TotalSeconds);
-                await Task.Delay(wait, cancellationToken);
+                    (int)pollDelay.TotalSeconds);
                 state = null;
             }
             catch (HttpRequestException ex)
@@ -324,6 +343,21 @@ public sealed class PushEngine
         }
 
         return summary;
+    }
+
+    /// <summary>Reads the registered schema, or null when there is none to read.</summary>
+    private async Task<Schema?> TryGetRegisteredSchemaAsync(string connectionId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await this.graph.External.Connections[connectionId].Schema
+                .GetAsync(cancellationToken: cancellationToken);
+        }
+        catch (ODataError ex) when (ex.ResponseStatusCode == 404)
+        {
+            // No schema registered yet: nothing to compare.
+            return null;
+        }
     }
 
     /// <summary>

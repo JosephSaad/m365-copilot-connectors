@@ -136,6 +136,33 @@ Found by the new tests, not by inspection:
   `childCount`) are correct as of the last push and not at query time, and the
   sample data alone is 1126 items against tenant item quota.
 
+- **A regression audit over the audit fixed 31 more findings on 2026-08-25.**
+  The same two-phase adversarial shape, aimed at what the first audit, the
+  rename and the guard replacement had just changed. Its best catches were in
+  the newest code: the schema-ownership check ran only when the connection was
+  `Ready`, so a foreign connection still in draft could be silently claimed by
+  PATCHing this connector's schema over it - the one window the deleted named
+  guard had covered. The check now runs whenever the connection exists, in any
+  state, and `--dry-run` performs it too with read-only GETs.
+
+  One boundary is deliberate and recorded here: the ownership comparison is
+  one-directional. A connector whose schema is a strict SUPERSET of the
+  registered one passes (that is what append-only evolution looks like), so
+  protection between two connectors relies on each building at least one
+  property the other does not - true of every connector in this repository,
+  and pinned by a test comment so the limit is visible where it is relied on.
+
+  The rest, compressed: the agent connector's URL-template validation gained
+  the `{0}` and format checks through a shared `UrlTemplateValidator` both
+  consumers now call; the installer's failure trap reports from the actual
+  mutation flags (a fresh install that dies no longer claims "nothing was
+  changed"); the Credential Manager probes use `CredRead` instead of parsing
+  localized `cmdkey` text; a Graph HttpClient timeout no longer reports as
+  "cancelled"; the duplicate-items counter is in the completion line;
+  `Compare-SourceToIndex` prints its closing caveats before its failure exit;
+  and the watermark-on-failure fix, the ownership call site, and the template
+  rules are each pinned by tests that fail if the code is reverted.
+
 - **The shared library renamed to `SqlConnector.Security` on 2026-08-25**, at
   the customer's direction: nothing shared by more than one connector may carry
   one connector's name. The library began life serving only the tickets
