@@ -248,8 +248,8 @@ public static class PushHost
             PushSummary summary = await engine.RunAsync(cancellation.Token);
 
             Log.Information(
-                "{Verb} complete. {Total} row(s) written ({Breakdown}) for connection {ConnectionId}; " +
-                "the index holds {Distinct} distinct item(s). " +
+                "{Verb} complete. {Total} row(s) processed ({Breakdown}) for connection {ConnectionId}; " +
+                "{Distinct} distinct item(s). " +
                 "truncated={Truncated} skipped={Skipped} duplicates={Duplicates} throttleWaits={ThrottleWaits}",
                 dryRun ? "Dry run" : "Ingestion",
                 summary.Total,

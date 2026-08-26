@@ -55,13 +55,14 @@ outgrown it. That is what the agent-hosted connector is for, and
 | What you are seeing | Start at |
 |---|---|
 | `FATAL:` before any log line, exit code 2 | [0](#stage-0--configuration) |
-| Exit code 3, "Could not build the Entra credential" | [1](#stage-1--credential-and-consent) |
+| Exit code 3, "Could not build the Entra credential" or "rejected by Entra ID" | [1](#stage-1--credential-and-consent) |
+| "carries a schema this connector did not register" | The connection belongs to the OTHER push tool (or the agent). Configure this tool's own `Graph:ConnectionId` — the engine refuses foreign connections by comparing schemas, in every state including draft |
 | A 403 from any Graph call | [1](#stage-1--credential-and-consent), then [3](#stage-3--the-connection-and-who-owns-it) |
 | `AADSTS` anything | [1](#stage-1--credential-and-consent) |
 | It sat at "Connection state draft" and then timed out | [4](#stage-4--schema-registration) |
 | Exit code 4 partway through, some items written | [5](#stage-5--items-written) |
 | Deleted tickets are still in Copilot | [the deletion problem](#the-deletion-problem) |
-| Item count is lower than the row count | [5](#stage-5--items-written) — throttling, or the ID range |
+| Item count is lower than the row count | [5](#stage-5--items-written) — throttling, the ID range, or `duplicates=` in the summary |
 | Items exist but nobody can find them | [5](#stage-5--items-written), the ACL |
 | In search but not in Copilot | [7](TROUBLESHOOTING.md#stage-7--copilot-grounds-on-them) — same as the agent path |
 
@@ -324,7 +325,11 @@ rather than an implemented operation. Fetching known IDs is the only way.
 1. **Throttling that outlasted the backoff.** The engine honours `Retry-After`
    and retries an item five times before giving up, so a throttled write is
    normally survived rather than lost — the run summary reports
-   `throttleWaits=`, and a number there is the tell. Five failures in a row
+   `throttleWaits=`, and a number there is the tell. The summary also reports
+   `duplicates=`: rows whose item ID repeated an earlier row's, where the later
+   row silently overwrote the earlier item in the upsert — the row count and
+   the distinct-item count are both printed, and a gap between them is a source
+   view returning more than one row per item. Five failures in a row
    fails the run with exit code 4 rather than skipping the item silently.
    `Compare-SourceToIndex.ps1` honours `Retry-After` itself and reports how
    often it was throttled reading.
@@ -412,6 +417,7 @@ user in the ACL group:
 | Trap | Presents as |
 |---|---|
 | `CurrentUser` vs `LocalMachine` certificate store | Exit code 3 for a certificate visibly present |
+| A Graph HTTP timeout during a long push | Reports as exit 4 "Ingestion failed", not as "cancelled" — only a real Ctrl+C reports cancelled |
 | A permission listed but not consented | A bare 403 with no clue which permission |
 | The agent owns the connection ID | A bare 403, and the ID cannot be reused |
 | Deleting a "hung" draft connection | The same wait again, and every item lost |
