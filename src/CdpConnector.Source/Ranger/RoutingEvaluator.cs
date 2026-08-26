@@ -24,6 +24,28 @@
 // back with it. A refusal is not an error - the run continues and the report
 // records it - because "this table is queried live instead" is an architecture,
 // not a failure.
+//
+// One asymmetry below is deliberate, and it is the only place this file departs
+// from reading Ranger literally. The two ways of being wrong are not each
+// other's mirror image:
+//
+//   a GRANT matched too widely puts an item in the index carrying an ACL the
+//   cluster never gave it, which is the leak;
+//   a DENY matched too narrowly lets that same item through, which is the same
+//   leak arrived at from the other side.
+//
+// So grants are matched exactly as Ranger's own matcher would match them, and
+// denies are matched conservatively: a deny whose path covers the candidate or
+// any ancestor of it stops the candidate being indexed, whatever the policy's
+// isRecursive flag says. RangerPolicy.CoversPathForDeny is that reading, kept
+// separate from CoversPath so the widening is visible where it is used rather
+// than baked into a method whose name promises fidelity. The cost is that a
+// file Ranger would have allowed is queried live instead of indexed, which is
+// the error worth making.
+//
+// The widening applies to paths only. A table has no subtree, so there is no
+// recursion to guess at: a database or table name either matches the policy's
+// glob or it does not, and both sides of the policy can be read literally.
 // ---------------------------------------------------------------------------
 
 namespace CdpConnector.Source.Ranger;
@@ -129,7 +151,9 @@ public sealed class RoutingEvaluator
                 Array.Empty<string>());
         }
 
-        // Rule 2.
+        // Rule 2. Read from the same relevant set as the grants: a table name
+        // matches this policy's glob or it does not, so there is nothing here
+        // to widen the way a path's recursion has to be widened.
         List<RangerPolicy> denies = relevant.Where(policy => policy.Deny.Count > 0).ToList();
 
         if (denies.Count > 0)
@@ -194,11 +218,18 @@ public sealed class RoutingEvaluator
     /// <returns>The decision, whose Groups are the Ranger-granted groups to add to the file's own ACL.</returns>
     public RoutingDecision EvaluatePath(string path)
     {
-        List<RangerPolicy> relevant = this.policies
-            .Where(policy => policy.Enabled && policy.CoversPath(path))
-            .ToList();
+        List<RangerPolicy> enabled = this.policies.Where(policy => policy.Enabled).ToList();
 
-        List<RangerPolicy> denies = relevant.Where(policy => policy.Deny.Count > 0).ToList();
+        // The asymmetry described in the header, at the one place it exists.
+        // CoversPathForDeny ignores the policy's isRecursive flag and asks
+        // whether the deny covers this path or anything above it, so a deny
+        // written non-recursively on a directory still stops the files inside
+        // it. CoversPath, used for the grants below, does not: a grant that
+        // reached under a directory Ranger stopped at would hand out access
+        // nobody granted.
+        List<RangerPolicy> denies = enabled
+            .Where(policy => policy.Deny.Count > 0 && policy.CoversPathForDeny(path))
+            .ToList();
 
         if (denies.Count > 0)
         {
@@ -210,6 +241,8 @@ public sealed class RoutingEvaluator
                 denies.Select(policy => policy.Id).ToList(),
                 Array.Empty<string>());
         }
+
+        List<RangerPolicy> relevant = enabled.Where(policy => policy.CoversPath(path)).ToList();
 
         List<string> groups = relevant
             .Where(policy => policy.PolicyType == RangerPolicyType.Access)

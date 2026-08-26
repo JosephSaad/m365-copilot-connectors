@@ -14,6 +14,21 @@
 // place for someone to put a join that the routing check knows nothing about,
 // and the whole guarantee here is that what is read is exactly the table whose
 // policies were evaluated.
+//
+// Two things about the watermark are load-bearing and were both once wrong:
+//
+//   * The marker written to the checkpoint is the SAME text this file quotes
+//     into the next run's WHERE clause, and it is in Hive's literal grammar
+//     rather than ISO-8601. A marker Hive cannot parse casts to NULL inside the
+//     comparison, so the comparison matches nothing - and a run that reads zero
+//     rows reports success, which is the failure mode nobody notices.
+//   * A row whose watermark is NULL has no position in the ordering, so it is
+//     excluded from the query rather than read. Hive sorts NULLs first on an
+//     ascending order, so with Source:MaxItems set an unexcluded NULL row is
+//     committed, contributes no marker, and pins the crawl on the same first N
+//     rows for ever. Excluding it is the fail-closed choice: a row that is not
+//     indexed is recovered by giving the column a value, and a crawl stuck at
+//     row one is recovered by nobody, because it reports success every night.
 // ---------------------------------------------------------------------------
 
 namespace CdpConnector.Source.Hive;
@@ -46,6 +61,8 @@ public sealed class HivePushSource : IPushSource
         new(StringComparer.Ordinal);
 
     private int skipped;
+    private int committed;
+    private bool warnedAboutNulls;
     private string pendingMarkerTime = string.Empty;
     private string pendingMarkerKey = string.Empty;
 
@@ -116,15 +133,37 @@ public sealed class HivePushSource : IPushSource
         string watermark = settings.HiveWatermarkColumn;
         string key = settings.HiveKeyColumn;
 
+        // A row with no watermark value has no position in the watermark
+        // ordering, so an incremental crawl has nothing to resume from on it.
+        // It is excluded on EVERY run, marker or not: the first run is exactly
+        // where it does the damage, because Hive sorts NULLs first ascending
+        // and a LIMIT window made of them commits rows that move the checkpoint
+        // nowhere. ReadAsync says so once per run rather than dropping them in
+        // silence.
+        string present = $"`{watermark}` IS NOT NULL";
+
         // The composite resume rule, expressed in HiveQL: strictly after the
         // marker, with ties broken by the key so a row sharing a timestamp with
         // the resume point is not lost. Identifiers are validated as identifiers
         // in configuration; the marker is a literal, so it is quoted and any
         // quote inside it doubled.
+        //
+        // The literal is NOT wrapped in CAST(... AS TIMESTAMP), deliberately.
+        // Settings:HiveWatermarkColumn is any column identifier - a bigint
+        // sequence and a string date are both configurations this ships to
+        // support - and casting the literal to TIMESTAMP to compare it against
+        // one of those yields NULL, which is the very bug this file is fixing,
+        // moved to a different column type. Nothing here knows the column's
+        // type: BuildQuery is given settings, options and a checkpoint, and
+        // discovering the type would mean a DESCRIBE round trip before the
+        // query the routing check has already authorised. The marker is now
+        // written in Hive's own literal grammar, so Hive's implicit coercion of
+        // a string literal in a comparison against a TIMESTAMP column parses it
+        // - which is what the CAST would have been for.
         string where = checkpoint.HasMarker
-            ? $" WHERE (`{watermark}` > {Literal(checkpoint.MarkerTime)}) " +
-              $"OR (`{watermark}` = {Literal(checkpoint.MarkerTime)} AND `{key}` > {Literal(checkpoint.MarkerKey)})"
-            : string.Empty;
+            ? $" WHERE {present} AND ((`{watermark}` > {Literal(checkpoint.MarkerTime)}) " +
+              $"OR (`{watermark}` = {Literal(checkpoint.MarkerTime)} AND `{key}` > {Literal(checkpoint.MarkerKey)}))"
+            : $" WHERE {present}";
 
         return $"SELECT * FROM `{database}`.`{table}`{where} ORDER BY `{watermark}`, `{key}`{top}";
     }
@@ -170,6 +209,25 @@ public sealed class HivePushSource : IPushSource
                 ? " from watermark " + this.checkpoint.MarkerTime
                 : " in full");
 
+        if (!string.IsNullOrWhiteSpace(this.settings.HiveWatermarkColumn) && !this.warnedAboutNulls)
+        {
+            // Once per run, at the start, whether or not such a row exists:
+            // whether the table HAS NULLs in that column is a fact about the
+            // data that changes between runs, and a warning that appears only
+            // on the runs where it happens to be true is a warning nobody has
+            // ever seen when they need it.
+            this.warnedAboutNulls = true;
+
+            this.log.Warning(
+                "Rows of {Database}.{Table} whose {Column} is NULL are not indexed. An incremental crawl has " +
+                "no position to resume from on a row it cannot order, so they are excluded from the query " +
+                "rather than read and left unable to move the checkpoint. Give the column a value, or clear " +
+                "Settings:HiveWatermarkColumn to read the table whole every run.",
+                database,
+                table,
+                this.settings.HiveWatermarkColumn);
+        }
+
         int rowOrdinal = 0;
 
         await foreach (HiveRow row in this.reader.QueryAsync(query, cancellationToken))
@@ -205,8 +263,12 @@ public sealed class HivePushSource : IPushSource
 
             if (!string.IsNullOrWhiteSpace(this.settings.HiveWatermarkColumn))
             {
+                // Marker, not Text: this value is quoted into the next run's
+                // WHERE clause, and Text renders a timestamp as ISO-8601 for
+                // Graph's benefit. The key keeps Text - it breaks a tie by
+                // string comparison and is not a timestamp.
                 this.markers[item.Id] = (
-                    row.Text(this.settings.HiveWatermarkColumn),
+                    row.Marker(this.settings.HiveWatermarkColumn),
                     row.Text(this.settings.HiveKeyColumn));
             }
 
@@ -217,10 +279,21 @@ public sealed class HivePushSource : IPushSource
     /// <inheritdoc/>
     public ValueTask OnItemCommittedAsync(PushItem item, CancellationToken cancellationToken)
     {
+        this.committed++;
+
         if (this.markers.TryGetValue(item.Id, out (string Time, string Key) marker))
         {
-            this.pendingMarkerTime = marker.Time;
-            this.pendingMarkerKey = marker.Key;
+            // An empty marker leaves the previous one standing rather than
+            // overwriting it. The query excludes NULL watermarks, so this is
+            // reachable only if the driver hands one back anyway - and in that
+            // case advancing to a position that cannot be expressed is how the
+            // checkpoint stops moving. Keeping the last usable position costs a
+            // re-read of a row that is excluded next run in any case.
+            if (marker.Time.Length > 0)
+            {
+                this.pendingMarkerTime = marker.Time;
+                this.pendingMarkerKey = marker.Key;
+            }
 
             // The engine reports each item once and never revisits it, so the
             // entry has done its job. Dropping it keeps a million-row table from
@@ -240,6 +313,26 @@ public sealed class HivePushSource : IPushSource
         {
             stored.MarkerTime = this.pendingMarkerTime;
             stored.MarkerKey = this.pendingMarkerKey;
+        }
+        else if (this.committed > 0 && !string.IsNullOrWhiteSpace(this.settings.HiveWatermarkColumn))
+        {
+            // The backstop. Items were written and the checkpoint did not move,
+            // which means the next run reads the same rows again - for ever, and
+            // reporting success each time. The checkpoint is still left where it
+            // was, because writing a marker nobody derived would skip rows; what
+            // changes is that the run says so.
+            //
+            // One argument per placeholder, and the column named once. Serilog
+            // binds a template's properties to the arguments positionally, so a
+            // name repeated in the text is a second placeholder that consumes a
+            // second argument - and a template with more placeholders than
+            // arguments is dropped into SelfLog rather than raised.
+            this.log.Warning(
+                "{Count} item(s) were written and the watermark did not move, because no committed row had a " +
+                "usable value in {Column}. The next run reads exactly the same rows again. Check that the " +
+                "column is populated and is one this connector can render as a Hive literal.",
+                this.committed,
+                this.settings.HiveWatermarkColumn);
         }
 
         stored.RunCount = this.checkpoint.RunCount + 1;

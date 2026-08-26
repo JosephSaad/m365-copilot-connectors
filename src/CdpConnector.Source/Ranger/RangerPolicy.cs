@@ -16,9 +16,27 @@
 // reproduce it: one copy of a row cannot be simultaneously filtered for one
 // person and not for another. So a table carrying either is not something to
 // index badly - it is something to leave in the cluster and query live.
+//
+// Two per-resource flags are read alongside the values because each of them
+// inverts or narrows the resource rather than decorating it. isExcludes turns
+// "these tables" into "every table but these", so dropping it reads a policy as
+// the exact inverse of itself; isRecursive is what separates a grant on one
+// directory from a grant on everything beneath it. Ranger's own default for
+// both, when the policy document omits them, is false, and that is the default
+// used here.
+//
+// Matching is Ranger's, not an approximation of it: RangerDefaultResourceMatcher
+// with wildCard enabled is a glob, so '*' and '?' mean what they mean anywhere
+// in the value, not only in a trailing position. A row-filter policy written
+// against '*_pii' has to match customer_pii here or the refusal that keeps a
+// filtered table out of the index never fires.
 // ---------------------------------------------------------------------------
 
 namespace CdpConnector.Source.Ranger;
+
+using System.Collections.Concurrent;
+using System.Text;
+using System.Text.RegularExpressions;
 
 /// <summary>What a policy does, by Ranger's own numbering.</summary>
 public enum RangerPolicyType
@@ -52,9 +70,36 @@ public sealed class RangerPolicyItem
             access.Equals("select", StringComparison.OrdinalIgnoreCase));
 }
 
+/// <summary>Ranger's two per-resource modifiers, each of which changes what the values mean.</summary>
+public sealed class RangerResourceFlags
+{
+    /// <summary>
+    /// Gets or sets a value indicating whether the values name what the policy
+    /// does NOT cover. Ranger supports this on Hive database, table and column.
+    /// </summary>
+    public bool IsExcludes { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether a path value covers everything
+    /// beneath it as well as itself. Meaningful only for a path resource.
+    /// </summary>
+    public bool IsRecursive { get; set; }
+}
+
 /// <summary>One Ranger policy, reduced to what an indexer needs.</summary>
 public sealed class RangerPolicy
 {
+    /// <summary>
+    /// Translated resource values, keyed by the value and the matching mode it
+    /// was translated for.
+    ///
+    /// A policy set is read once per crawl but asked about every table and
+    /// every file, so the translation is done once. The keys come from Ranger's
+    /// own policy document, so the cache is bounded by the size of that.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, Regex> Patterns =
+        new(StringComparer.Ordinal);
+
     /// <summary>Gets or sets the policy ID, quoted in the routing report so a decision can be traced.</summary>
     public long Id { get; set; }
 
@@ -71,6 +116,18 @@ public sealed class RangerPolicy
     public IDictionary<string, IList<string>> Resources { get; } =
         new Dictionary<string, IList<string>>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Gets the per-resource flags, under the same resource names as
+    /// <see cref="Resources"/>.
+    ///
+    /// They are held beside the values rather than inside them so that a
+    /// resource set through <see cref="Resources"/> alone reads exactly as
+    /// Ranger reads a policy document that omits both flags: no entry here
+    /// means false for each, which is Ranger's own default.
+    /// </summary>
+    public IDictionary<string, RangerResourceFlags> ResourceFlags { get; } =
+        new Dictionary<string, RangerResourceFlags>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Gets the items that grant.</summary>
     public IList<RangerPolicyItem> Allow { get; } = new List<RangerPolicyItem>();
 
@@ -83,6 +140,37 @@ public sealed class RangerPolicy
     public IList<string> Resource(string name)
     {
         return this.Resources.TryGetValue(name, out IList<string>? values) ? values : Array.Empty<string>();
+    }
+
+    /// <summary>Sets one resource's values together with the flags that qualify them.</summary>
+    /// <param name="name">The resource name, for example "table".</param>
+    /// <param name="values">Its values.</param>
+    /// <param name="isExcludes">True when the values name what the policy does not cover.</param>
+    /// <param name="isRecursive">True when a path value covers everything beneath it.</param>
+    public void SetResource(string name, IList<string> values, bool isExcludes = false, bool isRecursive = false)
+    {
+        this.Resources[name] = values;
+        this.ResourceFlags[name] = new RangerResourceFlags
+        {
+            IsExcludes = isExcludes,
+            IsRecursive = isRecursive,
+        };
+    }
+
+    /// <summary>Gets a value indicating whether one resource's values are exclusions.</summary>
+    /// <param name="name">The resource name.</param>
+    /// <returns>True when the values name what the policy does not cover.</returns>
+    public bool IsExcludes(string name)
+    {
+        return this.ResourceFlags.TryGetValue(name, out RangerResourceFlags? flags) && flags.IsExcludes;
+    }
+
+    /// <summary>Gets a value indicating whether one resource's values cover their subtree.</summary>
+    /// <param name="name">The resource name.</param>
+    /// <returns>True when a path value covers everything beneath it.</returns>
+    public bool IsRecursive(string name)
+    {
+        return this.ResourceFlags.TryGetValue(name, out RangerResourceFlags? flags) && flags.IsRecursive;
     }
 
     /// <summary>
@@ -99,67 +187,199 @@ public sealed class RangerPolicy
         {
             IList<string> columns = this.Resource("column");
 
-            return columns.Count > 0 && !columns.All(value => value == "*");
+            if (columns.Count == 0)
+            {
+                return false;
+            }
+
+            // "every column except these" is a subset of the row too, and the
+            // subset it describes cannot be read off the values, so it counts
+            // as scoped whatever those values are. Refusing to index is the
+            // choice being made where the reading is uncertain.
+            if (this.IsExcludes("column"))
+            {
+                return true;
+            }
+
+            return !columns.All(value => value == "*");
         }
     }
 
-    /// <summary>Gets a value indicating whether a resource value matches, treating a trailing * as a prefix.</summary>
+    /// <summary>
+    /// Gets a value indicating whether a resource value matches, as Ranger's own
+    /// wildcard matcher would match it: a glob honouring '*' and '?' anywhere in
+    /// the value, case-insensitively, and honouring isExcludes.
+    /// </summary>
     /// <param name="resourceName">The resource to test, for example "table".</param>
     /// <param name="candidate">The value to test against it.</param>
     /// <returns>True when the policy covers the candidate.</returns>
     public bool Covers(string resourceName, string candidate)
     {
-        foreach (string value in this.Resource(resourceName))
+        IList<string> values = this.Resource(resourceName);
+        bool matched = values.Any(value => Matches(value, candidate));
+
+        // An exclusion inverts the resource: "every table in finance except
+        // salaries". The inversion applies only where the policy actually named
+        // something to exclude - negating an empty value list would turn "this
+        // policy puts no constraint on tables" into "this policy matches no
+        // table at all", which is a different policy.
+        if (values.Count > 0 && this.IsExcludes(resourceName))
         {
-            if (value == "*")
-            {
-                return true;
-            }
-
-            if (value.EndsWith('*'))
-            {
-                if (candidate.StartsWith(value[..^1], StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-
-                continue;
-            }
-
-            if (string.Equals(value, candidate, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+            return !matched;
         }
 
-        return false;
+        return matched;
     }
 
     /// <summary>
-    /// Gets a value indicating whether this policy's path resource covers a file.
+    /// Gets a value indicating whether this policy's path resource covers a
+    /// path, read exactly as Ranger reads it.
     ///
-    /// Ranger path policies are prefixes with an explicit recursive flag; this
-    /// treats every path value as covering its subtree, which is the
-    /// conservative reading. Over-matching here can only ADD a grant that
-    /// Ranger would also have granted at a deeper level, or refuse indexing of
-    /// a subtree that a deny covers - and refusing too much is the safe error.
+    /// A recursive value covers the path it names and everything beneath it. A
+    /// non-recursive one covers only the path it names, and a wildcard inside it
+    /// matches within a single path segment and never crosses a '/', so a
+    /// non-recursive grant on a directory grants nothing on the files in it.
+    /// That is the faithful reading, and it is the one a GRANT needs: a grant
+    /// that covered the subtree anyway would put files into the index with an
+    /// ACL the cluster never gave them. A deny needs the opposite error and has
+    /// its own method, <see cref="CoversPathForDeny"/>.
     /// </summary>
     /// <param name="path">The absolute HDFS path.</param>
     /// <returns>True when the policy covers it.</returns>
     public bool CoversPath(string path)
     {
-        foreach (string value in this.Resource("path"))
-        {
-            string prefix = value.TrimEnd('*').TrimEnd('/');
+        IList<string> values = this.Resource("path");
+        bool recursive = this.IsRecursive("path");
+        bool matched = values.Any(value => PathMatches(value, path, recursive));
 
-            if (prefix.Length == 0 ||
-                path.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+        // Same reading as Covers gives an excluded table, and the same refusal
+        // to negate an empty list.
+        if (values.Count > 0 && this.IsExcludes("path"))
+        {
+            return !matched;
         }
 
-        return false;
+        return matched;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this policy's path resource covers a path
+    /// for the purpose of refusing to index it.
+    ///
+    /// Deliberately not the same question as <see cref="CoversPath"/>. A grant
+    /// read too widely over-grants; a deny read too narrowly fails open, which
+    /// is the failure this connector exists to avoid. So a deny is read with
+    /// whichever setting of isRecursive disqualifies more: the flag is ignored
+    /// and every value is treated as covering its whole subtree, which is the
+    /// same as saying the deny catches the candidate or any ancestor of it.
+    ///
+    /// isExcludes is still honoured, because ignoring it does not widen a deny
+    /// consistently - it would union a set with its own complement and stop the
+    /// entire crawl. Where the values are excluded, the negation is taken
+    /// against the NON-recursive reading, since that is the narrower match and
+    /// so the wider refusal.
+    /// </summary>
+    /// <param name="path">The absolute HDFS path.</param>
+    /// <returns>True when a deny in this policy should stop the path being indexed.</returns>
+    public bool CoversPathForDeny(string path)
+    {
+        IList<string> values = this.Resource("path");
+
+        if (values.Count == 0)
+        {
+            return false;
+        }
+
+        if (this.IsExcludes("path"))
+        {
+            return !values.Any(value => PathMatches(value, path, recursive: false));
+        }
+
+        return values.Any(value => PathMatches(value, path, recursive: true));
+    }
+
+    /// <summary>Matches one resource value against a candidate, Ranger's wildcards included.</summary>
+    /// <param name="value">The policy's value.</param>
+    /// <param name="candidate">The database, table or column name being tested.</param>
+    /// <returns>True when the value matches.</returns>
+    private static bool Matches(string value, string candidate)
+    {
+        if (value == "*")
+        {
+            return true;
+        }
+
+        if (value.IndexOf('*') < 0 && value.IndexOf('?') < 0)
+        {
+            return string.Equals(value, candidate, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return Pattern("v:" + value, value, star: ".*", question: ".", suffix: string.Empty).IsMatch(candidate);
+    }
+
+    /// <summary>Matches one path value against a candidate path.</summary>
+    /// <param name="value">The policy's path value.</param>
+    /// <param name="path">The absolute HDFS path being tested.</param>
+    /// <param name="recursive">True to cover everything beneath the value as well.</param>
+    /// <returns>True when the value matches.</returns>
+    private static bool PathMatches(string value, string path, bool recursive)
+    {
+        string trimmed = Normalise(value);
+        string candidate = Normalise(path);
+
+        // A path wildcard is a segment wildcard. "/data/*" names the entries of
+        // /data and not the tree under them; what reaches under them is the
+        // recursive flag, and only the recursive flag.
+        return Pattern(
+            (recursive ? "r:" : "n:") + trimmed,
+            trimmed,
+            star: "[^/]*",
+            question: "[^/]",
+            suffix: recursive ? "(/.*)?" : string.Empty)
+            .IsMatch(candidate);
+    }
+
+    /// <summary>Drops a trailing separator so that /data and /data/ are one path.</summary>
+    /// <param name="path">The path to normalise.</param>
+    /// <returns>The path without its trailing separator.</returns>
+    private static string Normalise(string path)
+    {
+        return path.Length > 1 && path.EndsWith('/') ? path.TrimEnd('/') : path;
+    }
+
+    /// <summary>Translates a value into an anchored, case-insensitive glob.</summary>
+    /// <param name="key">The cache key, distinguishing the matching mode.</param>
+    /// <param name="value">The value to translate.</param>
+    /// <param name="star">What '*' becomes.</param>
+    /// <param name="question">What '?' becomes.</param>
+    /// <param name="suffix">Appended before the anchor, to reach under a recursive path.</param>
+    /// <returns>The compiled expression.</returns>
+    private static Regex Pattern(string key, string value, string star, string question, string suffix)
+    {
+        return Patterns.GetOrAdd(key, _ =>
+        {
+            // Anchored with \A and \z rather than ^ and $: in .NET, $ also
+            // matches before a trailing newline, which would let a name ending
+            // in one match a policy value that does not.
+            var builder = new StringBuilder(@"\A");
+
+            foreach (char character in value)
+            {
+                builder.Append(character switch
+                {
+                    '*' => star,
+                    '?' => question,
+                    _ => Regex.Escape(character.ToString()),
+                });
+            }
+
+            builder.Append(suffix).Append(@"\z");
+
+            // CultureInvariant with IgnoreCase: without it the current culture
+            // decides what upper case means, and under a Turkish culture 'I'
+            // and 'i' stop being the same letter, so a policy would match a
+            // different set of tables on a differently configured host.
+            return new Regex(builder.ToString(), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        });
     }
 }

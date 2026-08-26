@@ -71,7 +71,16 @@ public sealed class CdpSettings
     /// <summary>Gets the HttpFS or WebHDFS base URL, ending in /webhdfs/v1.</summary>
     public string HdfsBaseUrl { get; private init; } = string.Empty;
 
-    /// <summary>Gets the absolute HDFS paths to crawl.</summary>
+    /// <summary>
+    /// Gets the absolute HDFS paths to crawl, each in one spelling.
+    ///
+    /// Normalised here, once, because the crawl compares paths as strings and
+    /// HDFS paths are case-sensitive - so the walk's visited set has to be
+    /// ordinal, and an ordinal set treats "/data/contracts/" and
+    /// "/data/contracts" as two directories. Case is deliberately NOT touched:
+    /// /data/HR and /data/hr really are two directories on a cluster, and
+    /// folding them together would silently drop one of them.
+    /// </summary>
     public IReadOnlyList<string> HdfsRoots { get; private init; } = Array.Empty<string>();
 
     /// <summary>Gets the file extensions to index, lower case and without dots. Empty means every supported one.</summary>
@@ -195,7 +204,7 @@ public sealed class CdpSettings
         return new CdpSettings
         {
             HdfsBaseUrl = options.Setting("HdfsBaseUrl").TrimEnd('/'),
-            HdfsRoots = SplitList(options.Setting("HdfsRoots")),
+            HdfsRoots = SplitList(options.Setting("HdfsRoots")).Select(NormaliseRoot).ToList(),
             IncludeExtensions = SplitList(options.Setting("IncludeExtensions"))
                 .Select(value => value.TrimStart('.').ToLowerInvariant())
                 .ToList(),
@@ -396,6 +405,25 @@ public sealed class CdpSettings
                 "must be a plain column identifier: letters, digits and underscores, not starting with a digit. " +
                 "It is concatenated into the query, because a column name cannot be a parameter.");
         }
+    }
+
+    /// <summary>Puts one configured root into the spelling the walk derives.</summary>
+    private static string NormaliseRoot(string root)
+    {
+        string collapsed = root;
+
+        // A path typed with a doubled separator, or pasted with one, is the same
+        // path; the crawl's derived paths never have one, so a root that does
+        // would be a root nothing ever matches.
+        while (collapsed.Contains("//", StringComparison.Ordinal))
+        {
+            collapsed = collapsed.Replace("//", "/", StringComparison.Ordinal);
+        }
+
+        // Everything except the cluster root itself, which IS a single slash and
+        // must not be trimmed away into a relative path that validation would
+        // then reject for the wrong reason.
+        return collapsed.Length > 1 ? collapsed.TrimEnd('/') : collapsed;
     }
 
     private static List<string> SplitList(string value)

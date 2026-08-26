@@ -59,6 +59,21 @@ namespace SqlTicketsConnector.Tests
             // thing that re-derives an item's grants after one.
             new[] { "SqlTicketsConnector.Tests.CdpSourceTests", "The_periodic_full_recrawl_ignores_the_marker" },
             new[] { "SqlTicketsConnector.Tests.CdpSourceTests", "The_watermark_moves_only_over_items_the_engine_confirmed" },
+
+            // The ACL mask. HDFS keeps it in the group permission digit rather
+            // than as an entry, so reading an entry without it grants access the
+            // cluster refuses - the connector's worst over-grant, and invisible
+            // unless a test asserts both directions.
+            new[] { "SqlTicketsConnector.Tests.CdpAclMaskTests", "A_named_entry_grants_only_what_the_mask_allows" },
+            new[] { "SqlTicketsConnector.Tests.CdpAclMaskTests", "The_owning_group_is_read_from_its_entry_and_not_from_the_mask_digit" },
+            new[] { "SqlTicketsConnector.Tests.CdpAclMaskTests", "A_masked_entry_produces_no_grants_at_all_which_is_what_makes_the_engine_skip_it" },
+
+            // Reading a Ranger policy the way Ranger reads it. Each of these
+            // fields, dropped, fails in the direction that indexes too much.
+            new[] { "SqlTicketsConnector.Tests.CdpRangerFidelityTests", "An_excluded_table_is_not_covered_by_the_policy_that_excludes_it" },
+            new[] { "SqlTicketsConnector.Tests.CdpRangerFidelityTests", "A_non_recursive_path_grant_stops_at_the_directory_it_names" },
+            new[] { "SqlTicketsConnector.Tests.CdpRangerFidelityTests", "A_row_filter_named_with_a_leading_wildcard_still_refuses_the_table" },
+            new[] { "SqlTicketsConnector.Tests.CdpRangerFidelityTests", "A_non_recursive_deny_still_covers_everything_beneath_it" },
         };
 
         [Fact]

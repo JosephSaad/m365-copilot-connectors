@@ -203,6 +203,20 @@ public sealed class PushOptions
         // shape, which apply whenever the section is present.
         this.KeyVault.Validate(errors, "KeyVault", vaultRequired: false);
 
+        // The one field of the DataSource section the ENGINE itself reads, so
+        // the engine is what has to check it. The rest of that section - the
+        // server, the database, the authentication mode - belongs to the SQL
+        // family and is checked by SqlSourceRules, which a connector reading no
+        // database never runs. Without this line such a connector's truncation
+        // ceiling was validated by nobody: a zero would truncate every item to
+        // nothing, and a value above the platform's own limit would be rejected
+        // by Graph one item at a time, halfway through a crawl.
+        errors.RequireRange(
+            "DataSource:MaxContentBytes",
+            this.DataSource.MaxContentBytes,
+            1024,
+            DataSourceOptions.PlatformItemLimitBytes);
+
         return errors;
     }
 }

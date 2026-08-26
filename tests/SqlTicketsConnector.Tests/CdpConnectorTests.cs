@@ -162,7 +162,13 @@ namespace SqlTicketsConnector.Tests
         {
             // A default entry describes what a file created here would inherit,
             // not who may read what is here now.
-            var status = new HdfsFileStatus { Group = "owners", Permission = "600" };
+            //
+            // The mode is 640, not 600, and that is load-bearing: on a file with
+            // an extended ACL the middle digit is the ACL MASK, and every named
+            // entry's grant is its own bits AND the mask. This test used to pass
+            // 600 and still expect analysts to be granted, which is the
+            // over-grant CdpAclMaskTests now covers from both directions.
+            var status = new HdfsFileStatus { Group = "owners", Permission = "640" };
             var acl = new HdfsAclStatus();
             acl.Entries.Add("group:analysts:r--");
             acl.Entries.Add("group:writers:-w-");
@@ -326,11 +332,18 @@ namespace SqlTicketsConnector.Tests
             Assert.Contains("`contract_ref` > 'C-1000'", query, StringComparison.Ordinal);
             Assert.Contains("ORDER BY `last_modified_ts`, `contract_ref`", query, StringComparison.Ordinal);
 
-            // Without a marker there is no WHERE, but the ordering stays - a
-            // first run must leave a resumable prefix behind it too.
+            // Without a marker there is no resume predicate, but the ordering
+            // stays - a first run must leave a resumable prefix behind it too.
+            //
+            // There IS still a WHERE, and it is not the resume clause: a row
+            // whose watermark column is NULL cannot be ordered against a
+            // marker, and Hive sorts NULLs first, so leaving them in lets a
+            // capped first run fill its whole window with rows that produce no
+            // marker and re-read them for ever. They are excluded, loudly.
             string first = HivePushSource.BuildQuery(settings, options, new CrawlCheckpoint());
 
-            Assert.DoesNotContain("WHERE", first, StringComparison.Ordinal);
+            Assert.DoesNotContain("last_modified_ts` > '", first, StringComparison.Ordinal);
+            Assert.Contains("IS NOT NULL", first, StringComparison.Ordinal);
             Assert.Contains("ORDER BY", first, StringComparison.Ordinal);
         }
 

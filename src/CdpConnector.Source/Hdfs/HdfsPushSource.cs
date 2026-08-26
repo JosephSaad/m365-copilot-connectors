@@ -23,6 +23,17 @@
 // The error budget exists so that a systemically broken extractor or a sick
 // DataNode cannot be laundered into a successful crawl of skips. Past the
 // threshold the run fails, which leaves the watermark where it was.
+//
+// Two rules keep the watermark meaningful, and they are one defect apart. The
+// marker only ever moves FORWARDS, and a run that did not reach the end of what
+// it set out to read does not count as a crawl. A full recrawl ignores the
+// marker and so reads the corpus oldest-first; a run of it truncated by
+// Settings:MaxItemsPerRun therefore ends on an EARLY file, and writing that
+// position over a later high-water mark - while counting the run as a completed
+// crawl - abandons everything between the two, permanently, because the next
+// run starts from the earlier position again. So FlushMarker refuses a marker
+// that is not strictly after the stored one, and a truncated run leaves the run
+// counter alone so the next run re-enters the recrawl rather than abandoning it.
 // ---------------------------------------------------------------------------
 
 namespace CdpConnector.Source.Hdfs;
@@ -50,6 +61,7 @@ public sealed class HdfsPushSource : IPushSource
     private readonly bool ownsHdfs;
 
     private RoutingEvaluator? routing;
+    private bool truncated;
     private int skipped;
     private int examined;
     private int failures;
@@ -124,12 +136,22 @@ public sealed class HdfsPushSource : IPushSource
 
             if (this.settings.MaxItemsPerRun > 0 && yielded >= this.settings.MaxItemsPerRun)
             {
+                // The break ends the iterator normally, so the engine will call
+                // OnCrawlCompletedAsync as if the crawl had finished. This flag
+                // is what stops that being recorded as a crawl of the corpus.
+                this.truncated = true;
+
                 this.log.Warning(
                     "Stopping at Settings:MaxItemsPerRun ({Cap}). {Remaining} file(s) in scope were not read " +
-                    "this run; the watermark advances only over what was written, so the next run continues " +
-                    "from there.",
+                    "this run; the watermark advances only over what was written and never backwards, and " +
+                    "this run does not count towards Settings:FullRecrawlEveryRuns, so the next run continues " +
+                    "{Mode}.",
                     this.settings.MaxItemsPerRun,
-                    candidates.Count - yielded);
+                    candidates.Count - yielded,
+                    this.fullRecrawl
+                        ? "by re-entering the full recrawl, which cannot complete at all while the cap is " +
+                          "below the number of files in scope"
+                        : "from the marker");
                 break;
             }
 
@@ -170,20 +192,36 @@ public sealed class HdfsPushSource : IPushSource
     /// <inheritdoc/>
     public ValueTask OnCrawlCompletedAsync(CancellationToken cancellationToken)
     {
-        // Reached only when the enumeration ended and every write returned, so
-        // this is the one place the run counter may advance. A failed run leaves
-        // the counter alone, which means the full-recrawl cadence counts
-        // successful crawls rather than attempts.
+        // Reached when the enumeration ended and every write returned, which is
+        // the only place the run counter may advance. A failed run leaves the
+        // counter alone, and so does a run the per-run cap cut short: the
+        // full-recrawl cadence counts crawls that covered the corpus, not
+        // attempts and not partial passes.
         this.FlushMarker();
 
         CrawlCheckpoint stored = this.checkpoints.Read();
-        stored.RunCount = this.checkpoint.RunCount + 1;
+
+        if (!this.truncated)
+        {
+            // The cadence counts crawls that actually COVERED the corpus, not
+            // runs that returned without throwing. Re-deriving item ACLs after a
+            // permission change at the source is the entire reason the cadence
+            // exists, and a recrawl that stopped at Settings:MaxItemsPerRun did
+            // not re-derive the ACLs of the files it never reached. Counting it
+            // would abandon the recrawl for another FullRecrawlEveryRuns runs on
+            // the strength of work that was not done.
+            stored.RunCount = this.checkpoint.RunCount + 1;
+        }
+
         stored.LastCompletedUtc = DateTimeOffset.UtcNow.ToString("o");
         this.checkpoints.Write(stored);
 
         this.log.Information(
-            "Crawl complete. {Examined} file(s) examined, {Failures} failed extraction or read, " +
+            "Crawl {Outcome}. {Examined} file(s) examined, {Failures} failed extraction or read, " +
             "watermark at {Marker}.",
+            this.truncated
+                ? "stopped early at the per-run cap and does not count as a crawl of the corpus"
+                : "complete",
             this.examined,
             this.failures,
             stored.MarkerTime.Length == 0 ? "(none)" : stored.MarkerTime);
@@ -210,7 +248,14 @@ public sealed class HdfsPushSource : IPushSource
     private async Task<IReadOnlyList<HdfsFileStatus>> GatherAsync(CancellationToken cancellationToken)
     {
         var found = new List<HdfsFileStatus>();
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Ordinal, because HDFS paths are case-sensitive. /data/root/HR and
+        // /data/root/hr are two different directories on the cluster, and
+        // comparing them case-insensitively drops the second one and its whole
+        // subtree with no warning and no failure. The roots are normalised once
+        // in CdpSettings, so a root written with a trailing slash is the same
+        // string as the one this walk derives from a listing.
+        var visited = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (string root in this.settings.HdfsRoots)
         {
@@ -326,18 +371,13 @@ public sealed class HdfsPushSource : IPushSource
     {
         this.examined++;
 
-        HdfsAclStatus? acl;
-
-        try
-        {
-            acl = await this.hdfs.AclAsync(file.Path, cancellationToken);
-        }
-        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            // Deleted between the listing and now.
-            this.skipped++;
-            return null;
-        }
+        // A file deleted between the listing and now does not surface here:
+        // WebHdfsClient answers a 404 on GETACLSTATUS with null rather than
+        // throwing, and null is also what a path carrying no extended ACL
+        // returns. The two are not distinguishable at this point and do not need
+        // to be - the listing's POSIX group still says who may read the file,
+        // and a file that has really gone is caught at the open below.
+        HdfsAclStatus? acl = await this.hdfs.AclAsync(file.Path, cancellationToken);
 
         RoutingDecision decision = this.routing!.EvaluatePath(file.Path);
 
@@ -364,12 +404,30 @@ public sealed class HdfsPushSource : IPushSource
 
         string name = file.Path[(file.Path.LastIndexOf('/') + 1)..];
 
-        ExtractionResult extraction = await this.extractors.ExtractAsync(
-            token => this.hdfs.OpenAsync(file.Path, token),
+        ExtractionResult? extraction = await this.extractors.ExtractAsync(
+            token => this.OpenOrGoneAsync(file.Path, token),
             name,
             file.Length,
             this.settings.MaxRawFileBytes,
             cancellationToken);
+
+        if (extraction is null)
+        {
+            // The file was deleted between the listing and the read. That is
+            // routine in a live lake - one retention job must not end a crawl of
+            // a million files - and it is not an extraction failure either:
+            // there is no file left to have failed, so it does not spend the
+            // error budget. Skipped rather than indexed, which is the closed
+            // choice: an item with no body and no file behind it is a search
+            // result that leads nowhere.
+            this.skipped++;
+
+            this.log.Information(
+                "{Path} was deleted between the listing and the read, and is not indexed this run.",
+                file.Path);
+
+            return null;
+        }
 
         if (extraction.Status is ExtractionStatus.Failed)
         {
@@ -403,6 +461,23 @@ public sealed class HdfsPushSource : IPushSource
         return item;
     }
 
+    /// <summary>Opens a file, or returns null when it is no longer there.</summary>
+    private async Task<Stream?> OpenOrGoneAsync(string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await this.hdfs.OpenAsync(path, cancellationToken);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Only a 404, and only here. Every other way an open can fail - a
+            // 500 from a sick DataNode, a socket that died mid-crawl - stays an
+            // extraction failure, so it counts against the error budget instead
+            // of being quietly counted as a file somebody deleted.
+            return null;
+        }
+    }
+
     private void CheckErrorBudget()
     {
         if (this.settings.MaxErrorRatePercent <= 0 || this.examined < 50)
@@ -432,8 +507,31 @@ public sealed class HdfsPushSource : IPushSource
         }
 
         CrawlCheckpoint stored = this.checkpoints.Read();
-        stored.MarkerTime = this.pendingMarkerTime;
-        stored.MarkerKey = this.pendingMarkerKey;
+
+        var pending = new CrawlCheckpoint
+        {
+            MarkerTime = this.pendingMarkerTime,
+            MarkerKey = this.pendingMarkerKey,
+        };
+
+        // Monotonic, with no slack. A marker that can regress is not a
+        // high-water mark and carries no invariant at all: a full recrawl reads
+        // oldest-first, so a run of it truncated by the per-run cap would
+        // otherwise write an early position over a later one and lose every file
+        // between them for ever. Slack belongs to the decision about what to
+        // READ - it absorbs clock skew against the NameNode - and using it here
+        // would licence the marker to move backwards by exactly that much.
+        if (!stored.IsAfter(pending.MarkerTimestamp(), pending.MarkerKey, slack: 0))
+        {
+            // Counted as flushed even though nothing was written: a recrawl
+            // working through files behind the high-water mark would otherwise
+            // re-read the checkpoint on every single commit for the rest of it.
+            this.commitsSinceFlush = 0;
+            return;
+        }
+
+        stored.MarkerTime = pending.MarkerTime;
+        stored.MarkerKey = pending.MarkerKey;
         this.checkpoints.Write(stored);
         this.commitsSinceFlush = 0;
     }

@@ -9,6 +9,13 @@
 // So an unreachable Ranger is a failure, never a default, and never a warning
 // followed by a crawl.
 //
+// The parsing follows from the same rule. A field dropped here is not a field
+// missing from a report - it is a policy read as something the cluster never
+// said. Each resource is therefore read with its isExcludes and isRecursive
+// flags rather than its values alone: an exclusion read as an inclusion turns
+// "every finance table except salaries" into "salaries", which is the exact
+// inverse, and indexes the one table the policy exists to withhold.
+//
 // A note for whoever deploys this: many Ranger installations front the REST API
 // with basic authentication against local users rather than SPNEGO. This client
 // does Kerberos only, on purpose - a password here would be a secret in
@@ -165,7 +172,17 @@ public sealed class RangerPolicyClient : IDisposable
                         }
                     }
 
-                    policy.Resources[resource.Name] = values;
+                    // The values alone are not the resource. isExcludes says
+                    // the values are what the policy does NOT cover, so a
+                    // policy read without it says the opposite of what it says;
+                    // isRecursive says whether a path reaches under itself.
+                    // Ranger's own default for each, when the document omits
+                    // it, is false, and that is what an absent flag means here.
+                    policy.SetResource(
+                        resource.Name,
+                        values,
+                        isExcludes: Flag(resource.Value, "isExcludes"),
+                        isRecursive: Flag(resource.Value, "isRecursive"));
                 }
             }
 
@@ -184,6 +201,27 @@ public sealed class RangerPolicyClient : IDisposable
         }
 
         return policies;
+    }
+
+    /// <summary>Reads one resource flag, absent meaning Ranger's own default of false.</summary>
+    /// <param name="resource">The resource object.</param>
+    /// <param name="name">The flag, isExcludes or isRecursive.</param>
+    /// <returns>What the flag says, or false.</returns>
+    private static bool Flag(JsonElement resource, string name)
+    {
+        if (!resource.TryGetProperty(name, out JsonElement flag))
+        {
+            return false;
+        }
+
+        // Ranger writes a JSON boolean. A quoted "true" is accepted as well
+        // because the alternative is reading an exclusion as an inclusion,
+        // which indexes exactly the table the policy was written to withhold;
+        // anything else unreadable stays at the default.
+        return flag.ValueKind == JsonValueKind.True ||
+               (flag.ValueKind == JsonValueKind.String &&
+                bool.TryParse(flag.GetString(), out bool parsed) &&
+                parsed);
     }
 
     private static void ReadItems(JsonElement policy, string name, IList<RangerPolicyItem> into)
