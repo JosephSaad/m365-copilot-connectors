@@ -251,9 +251,19 @@ jobs:
               'publish/hostpolicy.dll',                   # bundled host
               'publish/grpc_csharp_ext.x64.dll',          # Grpc.Core native asset
               'SqlGraphPush/SqlGraphPush.exe',            # direct push tool, tickets
-              'SqlGraphPush/SqlPushCore.dll',             # the shared engine, beside each tool
+              'SqlGraphPush/PushCore.dll',             # the shared engine, beside each tool
               'SqlHierarchyPush/SqlHierarchyPush.exe',    # direct push tool, three level test case
-              'SqlHierarchyPush/SqlPushCore.dll',         # the same engine, its own copy
+              'SqlHierarchyPush/PushCore.dll',         # the same engine, its own copy
+
+              # The Cloudera CDP tool: a third source family on the same engine.
+              # PushCore.Sql must NOT be beside it - it opens no SQL connection,
+              # and that separation is the reason the core was split.
+              'CdpGraphPush/CdpGraphPush.exe',
+              'CdpGraphPush/PushCore.dll',
+              'CdpGraphPush/CdpConnector.Source.dll',
+              'CdpGraphPush/CdpConnector.Extraction.dll',
+              'CdpGraphPush/appsettings.cdphdfsdocs.json',
+              'CdpGraphPush/appsettings.cdphivecontracts.json',
               'Install-Connector.ps1',
               'Manifest.json',
               'ConnectionInfo.json',
@@ -271,6 +281,8 @@ jobs:
               'deploy/GraphPushAuth.ps1',
               'deploy/Test-GraphPushPrereqs.ps1',
               'deploy/Compare-SourceToIndex.ps1',
+              'deploy/Test-CdpSource.ps1',
+              'deploy/Test-RangerRouting.ps1',
               'deploy/Test-HierarchySearch.ps1',
 
               'sql/01-least-privilege.sql',
@@ -280,6 +292,13 @@ jobs:
               'sql/11-timesheet-sample-data.sql',
               'sql/12-timesheet-views.sql',               # the flattening layer
               'sql/13-timesheet-least-privilege.sql',
+
+              # The cluster-side scripts docs/CDP-DEPLOYMENT.md tells an
+              # operator to run. In the package, or the instruction is wrong.
+              'hadoop/00-create-hdfs-test-data.sh',
+              'hadoop/01-create-hive-test-data.hql',
+              'hadoop/02-create-ranger-test-policies.sh',
+              'hadoop/03-Start-LocalWebHdfsStub.ps1',
               'docs/SECURITY.md',
               'docs/RUNBOOK.md',
               'docs/ASSUMPTIONS.md',
@@ -290,10 +309,15 @@ jobs:
               'docs/APP-REGISTRATION.md',
               'docs/GENESIS-PROMPT.md',
               'docs/ADDING-A-PUSH-CONNECTOR.md',
+              'docs/CDP-DEPLOYMENT.md',
+              'docs/TROUBLESHOOTING-CDP.md',
               'docs/COPILOT-ROUTING.md',
               'docs/copilot-decision-matrix.html',        # linked by COPILOT-ROUTING.md
               'docs/copilot-route-decision-tree.svg',     # embedded by it
               'docs/copilot-route-decision-tree.png',
+              'docs/copilot-route-decision-tree-dark.png',
+              'docs/copilot-surface-matrix.png',          # standalone render of the HTML tool's table 1
+              'docs/copilot-delivery-paths.png',          # and table 2
               'docs/agent-bypass-tradeoffs.pptx',         # linked from README
               'docs/hierarchy-in-copilot.pptx',
               'docs/architecture.png',                    # embedded by README.md
@@ -308,11 +332,17 @@ jobs:
               'source/Directory.Build.props',              # holds the target framework
               'source/build/SecretHygiene.targets',
               'source/src/SqlTicketsConnector/SqlTicketsConnector.csproj',
-              'source/src/SqlPushCore/SqlPushCore.csproj',            # the shared push engine
-              'source/src/SqlPushCore/IPushConnector.cs',             # the extension point itself
+              'source/src/PushCore/PushCore.csproj',            # the shared push engine
+              'source/src/PushCore/IPushConnector.cs',             # the extension point itself
+              'source/src/PushCore/IPushSource.cs',                # and the source seam
+              'source/src/PushCore.Sql/PushCore.Sql.csproj',       # the SQL half, kept out of the core
+              'source/src/PushCore.Sql/ISqlPushConnector.cs',
+              'source/src/CdpGraphPush/CdpGraphPush.csproj',
+              'source/src/CdpConnector.Source/CdpConnector.Source.csproj',
+              'source/src/CdpConnector.Extraction/CdpConnector.Extraction.csproj',
               'source/src/SqlGraphPush/SqlGraphPush.csproj',
               'source/src/SqlHierarchyPush/SqlHierarchyPush.csproj',
-              'source/src/SqlConnector.Security/SqlConnector.Security.csproj',
+              'source/src/Connector.Security/Connector.Security.csproj',
               'source/src/SqlTicketsConnector/Contracts/CommonModels.proto',
               'source/tests/SqlTicketsConnector.Tests/SqlTicketsConnector.Tests.csproj'
           )

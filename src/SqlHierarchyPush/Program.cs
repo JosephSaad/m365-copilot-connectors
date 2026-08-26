@@ -4,7 +4,7 @@
 // straight to Microsoft Graph with no connector agent involved.
 //
 // The connector itself is HierarchyPushConnector.cs - a schema, a query and a
-// row mapping. Everything else is SqlPushCore, shared with the other push
+// row mapping. Everything else is PushCore, shared with the other push
 // tools and unchanged by anything added here.
 //
 // Coexists with SqlGraphPush rather than replacing it. Different tables, a
@@ -13,6 +13,6 @@
 // Exit codes: 0 success, 2 configuration invalid, 3 credential, 4 ingestion.
 // ---------------------------------------------------------------------------
 
-using SqlPushCore;
+using PushCore;
 
 return await PushHost.RunAsync(args);

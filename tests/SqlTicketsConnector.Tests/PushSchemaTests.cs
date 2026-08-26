@@ -18,9 +18,9 @@ namespace SqlTicketsConnector.Tests
     using Microsoft.Graph.Models.ExternalConnectors;
     using SqlGraphPush;
     using SqlHierarchyPush;
-    using SqlPushCore;
+    using PushCore;
     using SqlTicketsConnector.Connector;
-    using SqlConnector.Security.Schema;
+    using Connector.Security.Schema;
     using Xunit;
     using ContractProperty = Microsoft.Graph.Connectors.Contracts.Grpc.SourcePropertyDefinition;
     using ContractSchema = Microsoft.Graph.Connectors.Contracts.Grpc.DataSourceSchema;

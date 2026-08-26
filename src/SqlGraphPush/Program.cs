@@ -4,12 +4,12 @@
 // connector agent. Used to seed or repair a connection.
 //
 // The connector itself is TicketsPushConnector.cs - a schema, a query and a row
-// mapping. Everything else is SqlPushCore, shared with the other push tools and
+// mapping. Everything else is PushCore, shared with the other push tools and
 // unchanged by anything added here.
 //
 // Exit codes: 0 success, 2 configuration invalid, 3 credential, 4 ingestion.
 // ---------------------------------------------------------------------------
 
-using SqlPushCore;
+using PushCore;
 
 return await PushHost.RunAsync(args);

@@ -4,7 +4,7 @@
 //
 // This is the whole connector. Credentials, the vault, the SQL connection,
 // connection and schema registration, truncation, ACLs, throttling, exit codes
-// and logging are the engine's, in SqlPushCore, identical for every source.
+// and logging are the engine's, in PushCore, identical for every source.
 //
 // WHAT THIS DEMONSTRATES
 //
@@ -24,10 +24,11 @@ namespace SqlHierarchyPush;
 
 using Microsoft.Data.SqlClient;
 using Microsoft.Graph.Models.ExternalConnectors;
-using SqlPushCore;
+using PushCore;
+using PushCore.Sql;
 
 /// <summary>Customers, engagements and logged time, flattened by SQL views.</summary>
-public sealed class HierarchyPushConnector : IPushConnector
+public sealed class HierarchyPushConnector : ISqlPushConnector
 {
     /// <inheritdoc/>
     public string Key => "consultingwork";

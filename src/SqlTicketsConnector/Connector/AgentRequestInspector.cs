@@ -15,7 +15,7 @@ namespace SqlTicketsConnector.Connector
     using Microsoft.Data.SqlClient;
     using Microsoft.Graph.Connectors.Contracts.Grpc;
     using Serilog;
-    using SqlConnector.Security.Sql;
+    using Connector.Security.Sql;
     using SqlTicketsConnector.Server;
 
     /// <summary>Validates and reports on the connection data supplied by the agent.</summary>

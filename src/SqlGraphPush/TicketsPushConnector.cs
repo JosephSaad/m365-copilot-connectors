@@ -5,7 +5,7 @@
 //
 // This is the whole connector. Credentials, the vault, the SQL connection,
 // connection and schema registration, truncation, ACLs, throttling, exit codes
-// and logging are the engine's, in SqlPushCore.
+// and logging are the engine's, in PushCore.
 //
 // Unlike the agent-hosted connector, this path does call Microsoft Graph, so
 // certificate authentication here is for Graph. Application permissions remain
@@ -21,11 +21,12 @@ namespace SqlGraphPush;
 using System.Globalization;
 using Microsoft.Data.SqlClient;
 using Microsoft.Graph.Models.ExternalConnectors;
-using SqlPushCore;
-using SqlConnector.Security.Configuration;
+using PushCore;
+using PushCore.Sql;
+using Connector.Security.Configuration;
 
 /// <summary>Support tickets, one item per row of dbo.Tickets.</summary>
-public sealed class TicketsPushConnector : IPushConnector
+public sealed class TicketsPushConnector : ISqlPushConnector
 {
     /// <inheritdoc/>
     public string Key => "tickets";

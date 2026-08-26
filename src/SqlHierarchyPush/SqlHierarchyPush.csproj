@@ -9,7 +9,7 @@
     pins, so anything new has to be a deliberate decision with that list
     regenerated in the same change.
 
-    Like SqlGraphPush, this references SqlConnector.Security and nothing
+    Like SqlGraphPush, this references Connector.Security and nothing
     from the connector: certificates, credentials, secrets, SQL connection
     construction and log redaction are shared, and only the Graph-facing code is
     per scenario. The agent-hosted connector still has no Graph dependency of
@@ -26,12 +26,13 @@
 
   <ItemGroup>
     <!--
-      The engine, and through it SqlConnector.Security and the Graph
-      SDK. Package versions and their advisory pins live in SqlPushCore so
+      The engine, and through it Connector.Security and the Graph
+      SDK. Package versions and their advisory pins live in PushCore so
       there is one place to change them and the offline restore graph
       cannot drift between the push tools.
     -->
-    <ProjectReference Include="..\SqlPushCore\SqlPushCore.csproj" />
+    <ProjectReference Include="..\PushCore\PushCore.csproj" />
+    <ProjectReference Include="..\PushCore.Sql\PushCore.Sql.csproj" />
   </ItemGroup>
 
   <ItemGroup>

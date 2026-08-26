@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Cloudera CDP push tool.
+
+    One executable hosting every CDP connector, selected on the command line,
+    in the same shape as SqlGraphPush and SqlHierarchyPush: Program.cs is one
+    line and everything else is a connector class and its appsettings file.
+
+    It references PushCore and NOT PushCore.Sql. Nothing here opens a SQL Server
+    connection, so nothing here carries SqlClient - which is the reason the SQL
+    half of the engine was split out in the first place.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CdpGraphPush</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PushCore\PushCore.csproj" />
+    <ProjectReference Include="..\CdpConnector.Source\CdpConnector.Source.csproj" />
+    <ProjectReference Include="..\CdpConnector.Extraction\CdpConnector.Extraction.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.cdphdfsdocs.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="appsettings.cdphivecontracts.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>

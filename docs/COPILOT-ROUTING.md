@@ -40,7 +40,10 @@ market-data team has to negotiate.
 The editable source of the drawing is
 [`copilot-route-decision-tree.svg`](copilot-route-decision-tree.svg); the PNG
 above (2000×1660) is what the markdown embeds, so the picture renders
-identically everywhere — including viewers that do not rasterise SVG.
+identically everywhere — including viewers that do not rasterise SVG. A
+dark-theme render of the same drawing ships as
+[`copilot-route-decision-tree-dark.png`](copilot-route-decision-tree-dark.png)
+for decks and dark documents.
 
 **Read the two `CALL IT` leaves as wire protocols, not deployables.** An API
 action is an OpenAPI spec and a manifest that a declarative agent or a Copilot
@@ -81,6 +84,19 @@ self-contained page — no build step, no dependencies, no network calls. It hol
 
 **GitHub shows this file as source, not as a page.** Download it and open it in
 a browser, or `git clone` and open it from disk. It works offline.
+
+Both matrices also ship as standalone images, rendered from this page so they
+cannot drift from it — drop them straight into a deck or a review pack:
+
+**The surfaces** — where the person is standing, including the extension rows
+for regulated data, licensing and cost:
+
+![Capability-by-surface matrix: nine Copilot surfaces scored across grounding, actions, reach and effort, plus the extension rows — live entitlement enforcement, licensed third-party data fit, network isolation, model choice, build effort, recurrent meter and budget owner.](copilot-surface-matrix.png)
+
+**The delivery paths** — how data reaches those surfaces, with cost, freshness,
+deletion latency, security boundary and data fit:
+
+![Delivery-path matrix: gallery connector, custom connector, API action, MCP server and Foundry application compared on layer, standalone-ness, wiring per surface, freshness, deletion latency, infrastructure, build and recurrent cost, access enforcement, persistent copies, audit trail, and fit for first-party, RLS-guarded and licensed third-party data.](copilot-delivery-paths.png)
 
 ---
 

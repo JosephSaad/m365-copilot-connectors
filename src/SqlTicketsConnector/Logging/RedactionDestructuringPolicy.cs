@@ -34,7 +34,7 @@ namespace SqlTicketsConnector.Logging
         /// Serilog stringifies an object at capture time when it is logged through a
         /// plain {Value} hole, which happens before any destructuring policy runs.
         /// Registering these as scalars keeps the object itself in the event, where
-        /// <see cref="SqlConnector.Security.Logging.ScrubbingEnricher"/> hands it back to this
+        /// <see cref="Connector.Security.Logging.ScrubbingEnricher"/> hands it back to this
         /// policy. Both spellings of a log call therefore end up redacted.
         /// </summary>
         public static readonly Type[] NeverStringify =

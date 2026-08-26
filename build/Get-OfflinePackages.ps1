@@ -8,7 +8,7 @@
     isolated build machine, and restore from it with --source. The list is
     grouped into three sets, because you probably do not need all three:
 
-      Base (80 packages, about 132 MB)
+      Base (81 packages, about 132 MB)
           Everything 'dotnet build' and 'dotnet test' of the solution need,
           across all four projects. Always downloaded. Twelve more than main's
           list: net9.0 needs System.Text.Json, System.IO.Pipelines and their
@@ -135,6 +135,7 @@ $packages = @(
     @{ Id = 'Std.UriTemplate'; Version = '2.0.8' }
     @{ Id = 'System.ClientModel'; Version = '1.10.0' }
     @{ Id = 'System.Configuration.ConfigurationManager'; Version = '8.0.0' }
+    @{ Id = 'System.Data.Odbc'; Version = '9.0.0' }
     @{ Id = 'System.Diagnostics.DiagnosticSource'; Version = '10.0.3' }
     @{ Id = 'System.Diagnostics.EventLog'; Version = '8.0.0' }
     @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '6.35.0' }

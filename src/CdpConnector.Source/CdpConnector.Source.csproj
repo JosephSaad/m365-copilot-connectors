@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Reading a Cloudera CDP Private Cloud Base cluster: files out of HDFS through
+    HttpFS or WebHDFS, rows out of Hive or Impala through ODBC, and the Ranger
+    policies that decide which of those may be indexed at all.
+
+    It references PushCore and not PushCore.Sql. That is the whole point of the
+    split: nothing here opens a SQL Server connection, so nothing here should
+    carry SqlClient, and a SqlClient advisory is not a re-release of the Hadoop
+    connector.
+
+    The one package this adds is System.Data.Odbc. Cloudera's Hive and Impala
+    drivers are ODBC drivers and there is no maintained .NET client for
+    HiveServer2's Kerberos SASL transport, so ODBC is the supported path rather
+    than a convenience. The driver itself is an operator-installed MSI under
+    Cloudera's own licence and is never bundled here.
+
+    Authentication adds nothing at all: Kerberos travels over SSPI inside the
+    ODBC driver and over Negotiate inside HttpClient, both from the identity the
+    service already runs as. There is no credential for this project to hold.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CdpConnector.Source</RootNamespace>
+    <AssemblyName>CdpConnector.Source</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Data.Odbc" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PushCore\PushCore.csproj" />
+    <ProjectReference Include="..\Connector.Security\Connector.Security.csproj" />
+    <ProjectReference Include="..\CdpConnector.Extraction\CdpConnector.Extraction.csproj" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>

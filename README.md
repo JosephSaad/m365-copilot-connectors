@@ -18,10 +18,14 @@ byte and unmodified.
 | Project | Model | Runs where |
 |---|---|---|
 | `SqlTicketsConnector` | gRPC server behind the Graph connector agent. **Never calls Microsoft Graph.** | On-premises Windows Server with the agent installed |
-| `SqlConnector.Security` | Shared secrets, certificates, credentials, SQL connections, log redaction | Class library, referenced by everything |
-| `SqlPushCore` | The push engine: connection, schema, truncation, ACLs, throttling, exit codes | Class library, referenced by every push tool |
+| `Connector.Security` | Shared secrets, certificates, credentials, SQL connections, log redaction | Class library, referenced by everything |
+| `PushCore` | The push engine: connection, schema, truncation, ACLs, throttling, watermark rules, exit codes. **Names no source technology.** | Class library, referenced by every push tool |
+| `PushCore.Sql` | The SQL Server half of the engine: `ISqlPushConnector`, a query and a row mapping become a source | Class library, referenced only by the SQL push tools |
 | `SqlGraphPush` | Direct `PUT /external/connections/{id}/items/{itemId}` — one flat table | Operator workstation or jump box with outbound HTTPS to Graph |
 | `SqlHierarchyPush` | The same, for a three level hierarchy: Customer → Engagement → TimeEntry | Same |
+| `CdpGraphPush` | The same, for Cloudera CDP 7.1.9: HDFS documents and Hive tables, with per-file ACLs and Ranger routing | Windows host with Kerberos to the cluster and outbound HTTPS to Graph |
+| `CdpConnector.Source` | HttpFS/WebHDFS, Hive over ODBC, Ranger policies, ACL mapping, watermarks | Class library, referenced by `CdpGraphPush` |
+| `CdpConnector.Extraction` | File bytes to indexable text: text formats and Open XML with the BCL, PDF behind a build flag | Class library, referenced by `CdpGraphPush` |
 
 Connector ID: `9e5e2b95-e7ab-4266-98c7-4f7868d377bf`
 Default port: `30303`
@@ -134,7 +138,9 @@ docs/
   ADDING-A-PUSH-CONNECTOR.md           One class and one config file: the recipe and the reasoning
   COPILOT-ROUTING.md                   Connector, action, MCP or Foundry - the decision upstream of this repository
   copilot-decision-matrix.html         Self-contained tool: the matrices, the tree, and an 11 question router
-  copilot-route-decision-tree.png / .svg  The routing drawing embedded by COPILOT-ROUTING.md
+  copilot-route-decision-tree.png / .svg / -dark.png  The routing drawing embedded by COPILOT-ROUTING.md
+  copilot-surface-matrix.png           The capability-by-surface matrix as a standalone image
+  copilot-delivery-paths.png           The delivery-path matrix as a standalone image
   GENESIS-PROMPT.md                    The prompt that produces this repository, and why it looks like this
   agent-bypass-tradeoffs.pptx          Deck: the ten features the agent provides and a direct push forgoes
   hierarchy-in-copilot.pptx            Deck: how to handle hierarchical data in a flat index
@@ -153,7 +159,7 @@ src/
     Logging/                           Redaction policy, interceptor, metrics, sink setup
     Server/                            Options, validation, host
     appsettings.json                   Non-sensitive configuration only
-  SqlConnector.Security/
+  Connector.Security/
     Secrets/                           ISecretProvider, Key Vault, environment, cache, retry
     Certificates/                      Store resolver, selection rules, expiry, process identity
     Credentials/                       TokenCredential factory, rotating certificate credential
@@ -161,20 +167,40 @@ src/
     Logging/                           Scrubber, enricher, redacted exception
     Configuration/                     Shared options and validation
     Schema/                            The two Graph schema rules that cannot be undone once registered
-  SqlPushCore/
-    IPushConnector.cs                  The extension point: schema, query, row mapping, and nothing else
+  PushCore/
+    IPushConnector.cs                  The extension point. Names no source technology
+    IPushSource.cs                     Where items come from, and where the watermark is kept
     PushHost.cs                        The whole of a push tool's Main: config, credential, exit codes
     PushEngine.cs                      Connection, schema, truncation, ACLs, the PUT with backoff
     PushOptions.cs                     Shared configuration, plus a Settings bag for what is not shared
-    PushSchema.cs, PushItem.cs, SqlRead.cs, PushSummary.cs, GraphThrottling.cs
+    PushSchema.cs, PushItem.cs, PushAclEntry.cs, PushSummary.cs, GraphThrottling.cs
+  PushCore.Sql/
+    ISqlPushConnector.cs               A query and a row mapping; supplies CreateSource on their behalf
+    SqlPushSource.cs, SqlSourceRules.cs, SqlRead.cs
   SqlGraphPush/
     TicketsPushConnector.cs            Six properties, dbo.Tickets. Program.cs is one line
     appsettings.json
   SqlHierarchyPush/
     HierarchyPushConnector.cs          26 properties, three levels. Program.cs is one line
     appsettings.json
+  CdpGraphPush/
+    HdfsDocumentsConnector.cs          Files under the HDFS roots, each with its own ACL
+    HiveContractsConnector.cs          One Hive table, and the template for the next
+    appsettings.cdphdfsdocs.json, appsettings.cdphivecontracts.json
+  CdpConnector.Source/
+    Hdfs/                              WebHDFS and HttpFS over Negotiate, the ordered crawl
+    Hive/                              ODBC reader, composed connection string, the table source
+    Ranger/                            Policy client, and the rules deciding what may be indexed at all
+    Acl/                               Cluster groups to Entra grants, fail closed
+    Watermark/                         The composite marker and its atomic checkpoint file
+  CdpConnector.Extraction/
+    Text, HTML and Open XML with the BCL; PDF only with -p:EnablePdfExtraction=true
+hadoop/
+  00-create-hdfs-test-data.sh          Documents with three different permission shapes
+  01-create-hive-test-data.hql         One indexable table, one that must never be indexed
+  02-create-ranger-test-policies.sh    The grant, the row filter, and the HDFS read policy
 tests/
-  SqlTicketsConnector.Tests/           120 tests, no live tenant, vault or database
+  SqlTicketsConnector.Tests/           178 tests, no live tenant, vault, database or cluster
 ```
 
 ---

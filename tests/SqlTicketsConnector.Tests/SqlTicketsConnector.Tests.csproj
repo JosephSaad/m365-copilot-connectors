@@ -35,10 +35,11 @@
       Exe project is what makes the public types in it reachable; nothing
       internal is exposed.
     -->
-    <ProjectReference Include="..\..\src\SqlPushCore\SqlPushCore.csproj" />
+    <ProjectReference Include="..\..\src\PushCore\PushCore.csproj" />
+    <ProjectReference Include="..\..\src\PushCore.Sql\PushCore.Sql.csproj" />
     <ProjectReference Include="..\..\src\SqlGraphPush\SqlGraphPush.csproj" />
     <ProjectReference Include="..\..\src\SqlHierarchyPush\SqlHierarchyPush.csproj" />
-    <ProjectReference Include="..\..\src\SqlConnector.Security\SqlConnector.Security.csproj" />
+    <ProjectReference Include="..\..\src\Connector.Security\Connector.Security.csproj" />
   </ItemGroup>
 
   <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />

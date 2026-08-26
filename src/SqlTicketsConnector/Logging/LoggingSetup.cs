@@ -15,7 +15,7 @@ namespace SqlTicketsConnector.Logging
     using Serilog;
     using Serilog.Core;
     using Serilog.Events;
-    using SqlConnector.Security.Logging;
+    using Connector.Security.Logging;
     using SqlTicketsConnector.Server;
 
     /// <summary>
