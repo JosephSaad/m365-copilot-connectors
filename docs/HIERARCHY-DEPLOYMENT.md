@@ -326,18 +326,26 @@ Then check the source, ideally as the identity that will read it:
 
 ## Step 5 — Dry run
 
-Read the source and report exactly what would be written, with no tenant
-involved and no Graph call made:
+Read the source and report exactly what would be written, writing nothing.
+Three guards run at the desk: the schema builds (so the irrecoverable
+searchable/refinable and name-length rules fire here, not against the tenant),
+every row maps, and — when the tenant is reachable — a read-only GET checks the
+connection is not another connector's. If Graph is unreachable the ownership
+check is skipped with a note and the dry run continues; its main job needs only
+SQL.
 
 ```powershell
 .\SqlHierarchyPush\SqlHierarchyPush.exe --dry-run
 ```
 
-Expect a line per item and a summary naming all three levels:
+Expect a line per item and a summary counting all three levels:
 
 ```
-Dry run complete. 1126 item(s): 12 customer(s), 62 engagement(s), 1052 time entr(y/ies).
+Dry run complete. 1126 row(s) processed (Customer=12, Engagement=62, TimeEntry=1052) for connection consultingwork; 1126 distinct item(s). truncated=0 skipped=0 duplicates=0 throttleWaits=0
 ```
+
+`duplicates=` above zero means the view returned more than one row per item ID
+— the later row would silently overwrite the earlier item in the real push.
 
 If the level counts are wrong, the problem is in the views, not in Graph. Go
 back to step 2.
