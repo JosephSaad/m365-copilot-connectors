@@ -114,6 +114,83 @@ Found by the new tests, not by inspection:
 
 ## 5. Later changes
 
+- **Twelve defects found by an adversarial review of the CDP connector, fixed
+  before it was ever published (2026-08-26).** The connector was reviewed by
+  six independent readers, each attacking one failure mode, and every candidate
+  finding was then given to a skeptic prompted to refute it. Twenty-eight
+  candidates, fourteen survived, twelve distinct. The release was held as an
+  unpublished draft until all twelve were fixed, and `v1.2.18` was deliberately
+  left as the published version in the meantime so there was always a
+  last-known-good package to fall back to.
+
+  Two root causes accounted for half of them, and both **over-granted** — which
+  is the direction that matters here, because the failure is a person seeing a
+  document the cluster would have refused them.
+
+  **The POSIX ACL mask.** HDFS does not store the extended-ACL mask as an ACL
+  entry. It stores it in the *group digit of the file mode*, and moves the
+  owning group's own permission into a `group::` entry. So `chmod 600` on a file
+  carrying `group:analysts:r--` revokes analysts at the cluster — `getfacl`
+  prints `#effective:---` — while the entry text is unchanged. Reading the entry
+  alone kept granting it; reading the digit as the owning group's permission
+  granted the file's owner whatever the mask allowed. Both now intersect with
+  the mask. Related: a permission string is read by place value rather than by
+  position, because Hadoop renders the mode with `%o` and drops leading zeros —
+  `"70"` means `070`, and indexing position 1 of it read the *other* digit and
+  silently dropped a group-readable file from the index.
+
+  **Reading a Ranger policy the way Ranger reads it.** Three fields were parsed
+  and discarded. `isExcludes` turned "every finance table EXCEPT salaries" into
+  "salaries" — the exact inverse, so the excluded table was the one indexed.
+  `isRecursive` turned a grant on one directory into a grant on its whole
+  subtree. And resource matching handled only a trailing wildcard where Ranger
+  honours `*` and `?` anywhere, so a row-filter policy named `*_pii` was
+  invisible and the filtered table was read and indexed — the exact failure the
+  routing doctrine exists to prevent.
+
+  **One asymmetry there is deliberate**, and is commented at both ends: grants
+  are matched faithfully, denies conservatively. A grant that matches too much
+  over-grants; a deny that matches too little fails open. A deny covering any
+  ancestor therefore disqualifies indexing whatever its recursive flag says,
+  through its own `CoversPathForDeny` rather than by making `CoversPath` wrong
+  for grants.
+
+  The rest, each with a regression test that fails without its fix:
+
+  - The **Hive watermark** was stored in .NET round-trip form
+    (`2026-08-20T10:00:00.0000000Z`) and injected as a HiveQL timestamp literal,
+    whose grammar accepts neither the `T` separator nor the trailing `Z`. Run 1
+    read the whole table; every incremental run after it returned zero rows and
+    reported success. The test that existed pinned the query *shape* using a
+    hand-written Hive-format marker, so it agreed with itself and never
+    exercised the format the code produced. The round trip is now the test.
+  - **Rows with a NULL watermark** are excluded and the exclusion is logged.
+    Hive sorts NULLs first, so a capped window could fill with rows that commit
+    no marker, leaving the checkpoint untouched and the crawl re-reading the
+    same first N rows for ever, successfully.
+  - A **full recrawl truncated by `MaxItemsPerRun`** wrote its truncated
+    position over the high-water mark and still counted as a completed crawl,
+    bounding the reachable corpus at cap × cadence and leaving the *newest*
+    files unreachable by any run. The marker is now monotonic, and a truncated
+    run does not advance the cadence — re-deriving ACLs is what the cadence is
+    for, and a truncated recrawl did not do it.
+  - A **file deleted between the listing and the read** killed the whole crawl:
+    the extractor called `open()` outside its `try`, and the catch meant to
+    handle it was dead because the 404 had already been swallowed upstream.
+  - The **visited set compared paths case-insensitively** on a case-sensitive
+    filesystem, silently skipping an entire subtree.
+  - `DataSource:MaxContentBytes` is the one field of that section the **engine**
+    reads, so `PushOptions` now checks it; it had been validated only by the SQL
+    family, which a connector reading no database never runs.
+
+  **Two existing tests encoded the old behaviour and were corrected rather than
+  worked around.** One asserted that a named ACL entry grants at mode `600`,
+  which is the over-grant itself; one asserted a first-run Hive query carries no
+  `WHERE`, no longer true now that NULL watermarks are excluded. Both now say
+  why in place. A test that has to change when a bug is fixed is evidence the
+  test was asserting the bug, and that is worth recording rather than quietly
+  editing.
+
 - **A Cloudera CDP connector, and a source seam to hold it, on 2026-08-26.**
   Adding a source that is not a database made two things obvious at once: the
   shared core was named for one of the two things it served, and its extension

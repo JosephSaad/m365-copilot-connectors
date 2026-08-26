@@ -706,6 +706,41 @@ there.
 A cap is not a loss. The marker moves only to items the engine confirmed
 written, so a capped run leaves an exact resume point.
 
+Two things make that true, and both were bugs once:
+
+- **The marker never moves backwards.** A run writes a marker only when it is
+  strictly after the one already stored. Without that, a *full recrawl* — which
+  deliberately ignores the marker and restarts oldest-first — would write its
+  truncated position over the high-water mark, and the reachable corpus would be
+  permanently bounded at `MaxItemsPerRun` × `FullRecrawlEveryRuns`, with the
+  newest files unreachable by any run.
+- **A truncated run does not count towards the recrawl cadence.** If the cap
+  stops a full recrawl partway, `runCount` stays where it was, so the next run
+  re-enters the recrawl and continues it. The cadence exists to re-derive item
+  ACLs, and a recrawl that read a fifth of the corpus did not do that.
+
+The symptom to watch for, if you ever see it again, is a backlog that saws:
+35,000 unread, then 30,000, down to 5,000, then back to 35,000. That is a
+recrawl rewinding the marker, not a cluster growing.
+
+### Rows whose watermark column is NULL are not indexed
+
+```
+Rows with a NULL value in last_modified_ts are not indexed: an incremental crawl
+cannot order a row it cannot compare. 3 such row(s) exist in contracts.contract.
+```
+
+An incremental Hive crawl resumes by comparing each row's watermark against the
+stored marker, and a NULL compares to nothing. Hive also sorts NULLs **first** on
+an ascending order, so leaving them in is worse than losing them: with
+`Source:MaxItems` set, a whole window can fill with rows that commit no marker,
+the checkpoint never moves, and the crawl re-reads the same first N rows on every
+run while reporting success each time.
+
+They are therefore excluded from the query, and the exclusion is logged rather
+than silent. If the count is not zero, the fix is at the source — backfill the
+column, or point `Settings:HiveWatermarkColumn` at one that is never null.
+
 ---
 
 ## Stage 7 — a push never deletes
