@@ -414,7 +414,7 @@ above applies to it. It has its own end-to-end instructions in
 [`HIERARCHY-DEPLOYMENT.md`](HIERARCHY-DEPLOYMENT.md), and when it misbehaves the
 guide is [`TROUBLESHOOTING-DIRECT-PUSH.md`](TROUBLESHOOTING-DIRECT-PUSH.md).
 
-**Both push tools run on one engine**, `SqlPushCore`, so they fail the same way
+**Both push tools run on one engine**, `PushCore`, so they fail the same way
 and the same exit codes mean the same things. Another SQL source is a class and
 a configuration file rather than a third program to learn:
 [`ADDING-A-PUSH-CONNECTOR.md`](ADDING-A-PUSH-CONNECTOR.md).

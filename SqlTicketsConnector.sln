@@ -5,7 +5,7 @@ VisualStudioVersion = 17.9.34728.123
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SqlTicketsConnector", "src\SqlTicketsConnector\SqlTicketsConnector.csproj", "{A8B4AE68-1A10-403C-AB3B-F66249F6AF3C}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SqlConnector.Security", "src\SqlConnector.Security\SqlConnector.Security.csproj", "{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Connector.Security", "src\Connector.Security\Connector.Security.csproj", "{3D6E1B7A-9C24-4E58-9E0C-1F4B77A6D521}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SqlGraphPush", "src\SqlGraphPush\SqlGraphPush.csproj", "{CC6E8FD7-E9BC-45C0-8A5D-E3BC23315A7E}"
 EndProject
@@ -46,7 +46,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SqlHierarchyPush", "src\SqlHierarchyPush\SqlHierarchyPush.csproj", "{8127A46C-1FE7-4C8F-A906-62252E46D4CC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SqlPushCore", "src\SqlPushCore\SqlPushCore.csproj", "{749DC955-490A-4D1D-8721-8423DB781A93}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PushCore", "src\PushCore\PushCore.csproj", "{749DC955-490A-4D1D-8721-8423DB781A93}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PushCore.Sql", "src\PushCore.Sql\PushCore.Sql.csproj", "{6A7BD01A-0D90-4F98-802A-E3798192A65E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -130,6 +132,18 @@ Global
 		{749DC955-490A-4D1D-8721-8423DB781A93}.Release|x64.Build.0 = Release|Any CPU
 		{749DC955-490A-4D1D-8721-8423DB781A93}.Release|x86.ActiveCfg = Release|Any CPU
 		{749DC955-490A-4D1D-8721-8423DB781A93}.Release|x86.Build.0 = Release|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Debug|x64.Build.0 = Debug|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Debug|x86.Build.0 = Debug|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Release|x64.ActiveCfg = Release|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Release|x64.Build.0 = Release|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Release|x86.ActiveCfg = Release|Any CPU
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -137,6 +151,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{8127A46C-1FE7-4C8F-A906-62252E46D4CC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{749DC955-490A-4D1D-8721-8423DB781A93} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{6A7BD01A-0D90-4F98-802A-E3798192A65E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {0ADAFC15-EC15-4144-92E2-99BC8ED97973}

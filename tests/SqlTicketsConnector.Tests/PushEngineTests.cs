@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // PushEngineTests.cs
 // The shared engine, and the promise it makes: a new SQL source is a class and
-// a configuration file, with no change to SqlPushCore and no effect on the
+// a configuration file, with no change to PushCore and no effect on the
 // connectors already there.
 //
 // SampleConnector below is that promise, executed. It is defined here, in the
@@ -11,7 +11,9 @@
 // What is not covered, and cannot be without a database: MapRow. SqlDataReader
 // is sealed with no interface behind it, so a row cannot be faked. The queries
 // those mappings read are asserted instead, and the mapping itself is exercised
-// by a --dry-run against a real source.
+// by a --dry-run against a real source. The half of the loop that does not need
+// a database - what the engine does with an item once it has one, and when it
+// tells the source that item counted - is covered in PushSourceTests.
 // ---------------------------------------------------------------------------
 
 namespace SqlTicketsConnector.Tests
@@ -27,8 +29,9 @@ namespace SqlTicketsConnector.Tests
     using Serilog;
     using Serilog.Core;
     using Serilog.Events;
-    using SqlPushCore;
-    using SqlConnector.Security.Configuration;
+    using PushCore;
+    using PushCore.Sql;
+    using Connector.Security.Configuration;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;
 
@@ -36,9 +39,9 @@ namespace SqlTicketsConnector.Tests
     {
         /// <summary>
         /// A connector written the way a future one would be. Nothing in
-        /// SqlPushCore knows it exists, and nothing had to be changed to add it.
+        /// PushCore knows it exists, and nothing had to be changed to add it.
         /// </summary>
-        private sealed class SampleConnector : IPushConnector
+        private sealed class SampleConnector : ISqlPushConnector
         {
             public string Key => "invoices";
 
@@ -76,7 +79,7 @@ namespace SqlTicketsConnector.Tests
             // The whole requirement, in one test. SampleConnector is defined in
             // this file, implements only the public interface, and gets a schema
             // builder, defaults, validation and a configuration file of its own
-            // without a line changing anywhere in SqlPushCore.
+            // without a line changing anywhere in PushCore.
             var connector = new SampleConnector();
             var options = new PushOptions();
 
@@ -285,7 +288,6 @@ namespace SqlTicketsConnector.Tests
                 new HierarchyPushConnector(),
                 TestData.ValidPushOptions(),
                 graph,
-                connections: null,
                 Logger.None,
                 dryRun: false);
 

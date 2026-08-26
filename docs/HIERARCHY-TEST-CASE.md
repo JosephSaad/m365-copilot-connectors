@@ -267,7 +267,7 @@ hoping.
 | Items | One per ticket | One per customer, engagement and time entry |
 | Schema | 6 properties | 26 properties |
 | Connection ID | `sqltickets` | `consultingwork` |
-| Engine | `SqlPushCore`, the same one | `SqlPushCore`, the same one |
+| Engine | `PushCore`, the same one | `PushCore`, the same one |
 | Throttling, dry run, exit codes | The engine's | The engine's, identical |
 
 Both accept a **certificate or a client secret** through `Auth:Mode`, using the
@@ -286,7 +286,7 @@ other connectors' IDs would go stale the day a connector is added; the schema
 comparison cannot.
 
 Everything security-related is shared, not duplicated:
-`SqlConnector.Security` resolves the certificate, builds the credential,
+`Connector.Security` resolves the certificate, builds the credential,
 constructs the SQL connection and scrubs the logs for both tools. Only the schema
 and the item shape are new. The agent-hosted connector still has no Graph
 dependency of any kind.

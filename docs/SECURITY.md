@@ -21,12 +21,12 @@ file, and where a test proves it, the test name.
 | **Certificate use in `SqlGraphPush`** | Microsoft Graph. That tool is a separate, operator-run utility. |
 | **Certificate use in `SqlHierarchyPush`** | Microsoft Graph. A second operator-run utility, for the three level test case; same permissions, its own connection. |
 | **Data at rest in this process** | None. Rows are streamed, never spooled to disk. |
-| **Where the side paths' code lives** | `SqlPushCore`, one engine both run on. A push tool is a schema, a query and a row mapping; credentials, SQL, ACLs, truncation and throttling are the engine's. Adding a third source changes no file in it — see `docs/ADDING-A-PUSH-CONNECTOR.md`. |
+| **Where the side paths' code lives** | `PushCore`, one engine both run on. A push tool is a schema, a query and a row mapping; credentials, SQL, ACLs, truncation and throttling are the engine's. Adding a third source changes no file in it — see `docs/ADDING-A-PUSH-CONNECTOR.md`. |
 
-**`SqlPushCore` is where the Graph SDK is allowed to be, and that is deliberate.**
-It sits between the push tools and `SqlConnector.Security`, so the shared
+**`PushCore` is where the Graph SDK is allowed to be, and that is deliberate.**
+It sits between the push tools and `Connector.Security`, so the shared
 credential, vault and SQL code can be shared with the agent-hosted connector
-without the Graph SDK reaching it. `SqlConnector.Security` references
+without the Graph SDK reaching it. `Connector.Security` references
 neither the Graph SDK nor the gRPC contracts, and that is what keeps the
 boundary below honest rather than merely stated.
 
@@ -34,7 +34,7 @@ The connector project has no reference to the Microsoft Graph SDK. A reference
 appearing there in a future change is a review failure, not a refactor:
 `src/SqlTicketsConnector/SqlTicketsConnector.csproj` should list only
 `Google.Protobuf`, `Grpc.Core`, `Grpc.Tools`, `Microsoft.Data.SqlClient`,
-`Serilog` and its sinks, plus the `SqlConnector.Security` project.
+`Serilog` and its sinks, plus the `Connector.Security` project.
 
 ---
 
@@ -138,7 +138,7 @@ whose names match the credential pattern but whose values are not credentials:
 
 ## 3. Dependency notes for the scan
 
-Package versions for the push path live in `src/SqlPushCore/SqlPushCore.csproj`
+Package versions for the push path live in `src/PushCore/PushCore.csproj`
 alone. The executables reference the engine and declare no package of their own,
 so the Kiota advisory pin cannot be applied to one push tool and forgotten on
 another, and a connector added later inherits it without being told.

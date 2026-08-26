@@ -251,9 +251,9 @@ jobs:
               'publish/hostpolicy.dll',                   # bundled host
               'publish/grpc_csharp_ext.x64.dll',          # Grpc.Core native asset
               'SqlGraphPush/SqlGraphPush.exe',            # direct push tool, tickets
-              'SqlGraphPush/SqlPushCore.dll',             # the shared engine, beside each tool
+              'SqlGraphPush/PushCore.dll',             # the shared engine, beside each tool
               'SqlHierarchyPush/SqlHierarchyPush.exe',    # direct push tool, three level test case
-              'SqlHierarchyPush/SqlPushCore.dll',         # the same engine, its own copy
+              'SqlHierarchyPush/PushCore.dll',         # the same engine, its own copy
               'Install-Connector.ps1',
               'Manifest.json',
               'ConnectionInfo.json',
@@ -311,11 +311,11 @@ jobs:
               'source/Directory.Build.props',              # holds the target framework
               'source/build/SecretHygiene.targets',
               'source/src/SqlTicketsConnector/SqlTicketsConnector.csproj',
-              'source/src/SqlPushCore/SqlPushCore.csproj',            # the shared push engine
-              'source/src/SqlPushCore/IPushConnector.cs',             # the extension point itself
+              'source/src/PushCore/PushCore.csproj',            # the shared push engine
+              'source/src/PushCore/IPushConnector.cs',             # the extension point itself
               'source/src/SqlGraphPush/SqlGraphPush.csproj',
               'source/src/SqlHierarchyPush/SqlHierarchyPush.csproj',
-              'source/src/SqlConnector.Security/SqlConnector.Security.csproj',
+              'source/src/Connector.Security/Connector.Security.csproj',
               'source/src/SqlTicketsConnector/Contracts/CommonModels.proto',
               'source/tests/SqlTicketsConnector.Tests/SqlTicketsConnector.Tests.csproj'
           )

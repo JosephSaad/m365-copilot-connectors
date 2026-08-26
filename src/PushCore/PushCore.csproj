@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The engine every direct push connector runs on.
+
+    It exists because SqlGraphPush and SqlHierarchyPush were 85% the same file.
+    Everything they shared - credential, vault, SQL connection, connection and
+    schema registration, the poll to Ready, truncation, ACLs, the PUT with
+    backoff, the exit codes - lives here once. What differs between two sources
+    is a schema, a query and a row mapping, and that is all a new connector has
+    to write.
+
+    Nothing in this project knows about any particular source. Adding a
+    connector does not change a file in here. That is the point: this is the
+    part that stays still.
+
+    Package set is identical to the two push executables on purpose, so the
+    offline restore graph that build/Get-OfflinePackages.ps1 pins is unchanged.
+
+    It references Connector.Security and nothing from the connector.
+    The agent-hosted connector still has no Graph dependency of any kind, which
+    is why the Graph SDK is here rather than in Security.
+
+    There is no SqlClient reference here, and there must not be one. This
+    project names no source technology: SQL Server lives in PushCore.Sql, which
+    references this one. A connector reading something else references this and
+    stops there.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PushCore</RootNamespace>
+    <AssemblyName>PushCore</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Microsoft.Graph" Version="5.105.0" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+
+    <!--
+      Same advisory floor as the executables: GHSA-7j59-v9qr-6fq9 /
+      CVE-2026-44503 (High) in the Kiota RedirectHandler, fixed in 1.22.0, while
+      Microsoft.Graph 5.105.0 still asks for 1.21.1. Remove the pins together
+      once the Graph SDK catches up.
+    -->
+    <PackageReference Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Connector.Security\Connector.Security.csproj" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>

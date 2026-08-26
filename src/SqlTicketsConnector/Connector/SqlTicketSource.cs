@@ -16,8 +16,8 @@ namespace SqlTicketsConnector.Connector
     using Microsoft.Data.SqlClient;
     using Serilog;
     using SqlTicketsConnector.Logging;
-    using SqlConnector.Security.Configuration;
-    using SqlConnector.Security.Sql;
+    using Connector.Security.Configuration;
+    using Connector.Security.Sql;
 
     /// <summary>Reads dbo.Tickets over a SqlConnection.</summary>
     public sealed class SqlTicketSource : ITicketSource

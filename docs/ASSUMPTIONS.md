@@ -163,7 +163,7 @@ Found by the new tests, not by inspection:
   and the watermark-on-failure fix, the ownership call site, and the template
   rules are each pinned by tests that fail if the code is reverted.
 
-- **The shared library renamed to `SqlConnector.Security` on 2026-08-25**, at
+- **The shared library renamed to `Connector.Security` on 2026-08-25**, at
   the customer's direction: nothing shared by more than one connector may carry
   one connector's name. The library began life serving only the tickets
   connector and kept its name as consumers accumulated - by the time the
@@ -216,14 +216,14 @@ Found by the new tests, not by inspection:
   line program.
 
   `SqlGraphPush` and `SqlHierarchyPush` were 85% the same file. That part is now
-  `SqlPushCore`: credentials, the vault, the SQL connection, creating the
+  `PushCore`: credentials, the vault, the SQL connection, creating the
   connection, registering the schema and polling to Ready, truncation, ACLs, the
   PUT with backoff, exit codes, logging, `--dry-run` and `--help`. A connector
   is `IPushConnector` — a schema, a query and a row mapping. Each executable's
   `Program.cs` is one line.
 
   Two decisions worth recording. **The Graph SDK lives in the engine, not in
-  `SqlConnector.Security`** — that is what lets the credential, vault and
+  `Connector.Security`** — that is what lets the credential, vault and
   SQL code stay shared with the agent-hosted connector while that project keeps
   no Graph dependency of any kind. And **connectors are discovered by reflection
   over the entry assembly, never by scanning a folder for DLLs**: a plugin
@@ -243,7 +243,7 @@ Found by the new tests, not by inspection:
 
 - **The push tools put under test on 2026-08-25.** Neither `SqlGraphPush` nor
   `SqlHierarchyPush` had a test. Everything they delegate to
-  `SqlConnector.Security` was covered, which is most of the security
+  `Connector.Security` was covered, which is most of the security
   surface, but the parts unique to them were not — and those carry the most
   expensive failure here. A Graph schema is append-only once registered, so a
   wrong annotation is corrected only by deleting the connection and every item

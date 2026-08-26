@@ -1,7 +1,7 @@
 # Adding a SQL push connector
 
 A new SQL source is **one class and one configuration file**. Nothing in
-`SqlPushCore` changes, and no connector already there is touched, rebuilt
+`PushCore` changes, and no connector already there is touched, rebuilt
 differently, or able to notice.
 
 This document is the recipe and the reasoning. If you only want the recipe,
@@ -13,21 +13,21 @@ This document is the recipe and the reasoning. If you only want the recipe,
 
 | | Where it lives | Who writes it |
 |---|---|---|
-| Certificate or client secret, Key Vault, token acquisition | `SqlPushCore` → `SqlConnector.Security` | Nobody. It is done |
+| Certificate or client secret, Key Vault, token acquisition | `PushCore` → `Connector.Security` | Nobody. It is done |
 | SQL connection, encryption, retry, error classification | Same | Nobody |
-| Creating the external connection, registering the schema, polling to `Ready` | `SqlPushCore/PushEngine.cs` | Nobody |
+| Creating the external connection, registering the schema, polling to `Ready` | `PushCore/PushEngine.cs` | Nobody |
 | Content truncation, ACLs, item ID rules, the `PUT`, throttling backoff | Same | Nobody |
-| Configuration shape, validation, exit codes, logging, `--dry-run`, `--help` | `SqlPushCore/PushHost.cs` | Nobody |
+| Configuration shape, validation, exit codes, logging, `--dry-run`, `--help` | `PushCore/PushHost.cs` | Nobody |
 | **The schema** | your connector | You |
 | **The query** | your connector | You |
 | **The row → item mapping** | your connector | You |
 | **Anything specific to your source** | `Settings` in your appsettings file | You |
 
 Four things. That is the whole interface, and it is
-[`IPushConnector`](../src/SqlPushCore/IPushConnector.cs).
+[`IPushConnector`](../src/PushCore/IPushConnector.cs).
 
 **The engine is not extended, it is used.** If you find yourself wanting to
-change a file in `SqlPushCore` to make your connector work, stop and read
+change a file in `PushCore` to make your connector work, stop and read
 [When the core does have to change](#when-the-core-does-have-to-change) — the
 answer is usually the `Settings` bag, and when it is not, the change is a real
 one that affects every connector and should be made deliberately.
@@ -43,7 +43,7 @@ namespace SqlInvoicePush;
 
 using Microsoft.Data.SqlClient;
 using Microsoft.Graph.Models.ExternalConnectors;
-using SqlPushCore;
+using PushCore;
 
 public sealed class InvoicePushConnector : IPushConnector
 {
@@ -122,7 +122,7 @@ Either add it to an existing push executable, or give it one. A push
 executable's whole `Program.cs` is:
 
 ```csharp
-using SqlPushCore;
+using PushCore;
 
 return await PushHost.RunAsync(args);
 ```
@@ -137,7 +137,7 @@ assertion in CI.
 
 A new project is a copy of
 [`SqlHierarchyPush.csproj`](../src/SqlHierarchyPush/SqlHierarchyPush.csproj)
-with the name changed. It references `SqlPushCore` and nothing else — package
+with the name changed. It references `PushCore` and nothing else — package
 versions and their advisory pins live there, so the offline restore graph cannot
 drift between push tools.
 
@@ -201,7 +201,7 @@ Add a class to `tests/SqlTicketsConnector.Tests`. At minimum, assert:
 
 `PushEngineTests.cs` is the template; it also holds a `SampleConnector` written
 exactly the way yours will be. That connector exists to prove this document is
-true — if adding a connector ever required editing `SqlPushCore`, that file
+true — if adding a connector ever required editing `PushCore`, that file
 would stop compiling.
 
 **`MapRow` cannot be unit tested.** `SqlDataReader` is sealed with no interface
@@ -212,7 +212,7 @@ anything.
 ## Step 6 — package it
 
 If you added a new executable, add it to `Build.ps1` beside the other two, and
-add its `.exe` and `SqlPushCore.dll` to the package completeness assertion in
+add its `.exe` and `PushCore.dll` to the package completeness assertion in
 `.github/workflows/build.yml`. If you added a class to an existing executable,
 there is nothing to do.
 

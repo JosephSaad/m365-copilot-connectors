@@ -12,7 +12,7 @@ namespace SqlTicketsConnector.Tests
     using System;
     using System.Collections.Generic;
     using System.Security.Cryptography.X509Certificates;
-    using SqlConnector.Security.Certificates;
+    using Connector.Security.Certificates;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;
 

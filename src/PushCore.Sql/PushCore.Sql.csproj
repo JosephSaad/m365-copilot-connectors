@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The SQL Server half of the push engine.
+
+    PushCore knows how to register a schema, attach an ACL, write an item with
+    backoff and keep a watermark honest. It does not know what a table is. This
+    project is what teaches it one source family: a connector supplies a query
+    and a row mapping, and ISqlPushConnector turns those into the IPushSource the
+    engine consumes.
+
+    It exists as a separate project rather than a folder so the split is one the
+    compiler enforces. When a connector for something that is not a database is
+    added, it references PushCore and not this, and the day a SqlClient advisory
+    lands, the projects that have to be re-released are the ones that actually
+    open SQL connections.
+
+    Everything a connector needs from here is ISqlPushConnector and SqlRead.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PushCore.Sql</RootNamespace>
+    <AssemblyName>PushCore.Sql</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The only package this project adds over PushCore's set. Its version is the
+      one Connector.Security pins, and it stays that way: two versions of
+      SqlClient in one output directory is a load conflict, not a merge.
+    -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PushCore\PushCore.csproj" />
+    <ProjectReference Include="..\Connector.Security\Connector.Security.csproj" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>

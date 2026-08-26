@@ -16,8 +16,9 @@ namespace SqlTicketsConnector.Tests
     using System.IO;
     using SqlGraphPush;
     using SqlHierarchyPush;
-    using SqlPushCore;
-    using SqlConnector.Security.Configuration;
+    using PushCore;
+    using PushCore.Sql;
+    using Connector.Security.Configuration;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;
 
@@ -26,19 +27,20 @@ namespace SqlTicketsConnector.Tests
         [Fact]
         public void Valid_configuration_produces_no_errors_for_either_connector()
         {
-            // Both layers PushHost actually runs: the shared Validate() AND the
-            // connector's own ValidateOptions. Checking only the first blessed a
-            // tickets fixture the real startup path would have rejected.
+            // Every layer PushHost actually runs: the shared Validate(), then
+            // the connector's Validate - which is its source family's rules
+            // followed by its own. Checking only the first blessed a tickets
+            // fixture the real startup path would have rejected.
             PushOptions hierarchyOptions = TestData.ValidPushOptions();
             ValidationErrors hierarchy = hierarchyOptions.Validate();
             IPushConnector hierarchyConnector = new HierarchyPushConnector();
-            hierarchyConnector.ValidateOptions(hierarchyOptions, hierarchy);
+            hierarchyConnector.Validate(hierarchyOptions, hierarchy);
             Assert.False(hierarchy.HasErrors, hierarchy.ToMessage());
 
             PushOptions ticketOptions = TestData.ValidPushOptions("sqltickets", "dbo.Tickets");
             ValidationErrors tickets = ticketOptions.Validate();
             IPushConnector ticketsConnector = new TicketsPushConnector();
-            ticketsConnector.ValidateOptions(ticketOptions, tickets);
+            ticketsConnector.Validate(ticketOptions, tickets);
             Assert.False(tickets.HasErrors, tickets.ToMessage());
         }
 
@@ -56,7 +58,8 @@ namespace SqlTicketsConnector.Tests
             options.DataSource.ItemUrlTemplate = template;
 
             var errors = new ValidationErrors();
-            new TicketsPushConnector().ValidateOptions(options, errors);
+            IPushConnector connector = new TicketsPushConnector();
+            connector.ValidateOptions(options, errors);
 
             Assert.True(errors.HasErrors, "template '" + template + "' should have been rejected");
             Assert.Contains(errors.Errors, e =>
@@ -173,6 +176,11 @@ namespace SqlTicketsConnector.Tests
             };
 
             ValidationErrors errors = options.Validate();
+
+            // The SQL half of startup: DataSource, the view name and the vault
+            // secret belong to the source family, not to every connector.
+            IPushConnector connector = new TicketsPushConnector();
+            connector.Validate(options, errors);
 
             Assert.True(errors.HasErrors);
 
