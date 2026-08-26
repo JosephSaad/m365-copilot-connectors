@@ -19,6 +19,7 @@ namespace SqlTicketsConnector.Tests
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
     using Microsoft.Graph.Models.ExternalConnectors;
     using SqlGraphPush;
@@ -264,7 +265,7 @@ namespace SqlTicketsConnector.Tests
         }
 
         [Fact]
-        public void The_ownership_check_actually_guards_the_schema_call_site()
+        public async Task The_ownership_check_actually_guards_the_schema_call_site()
         {
             // The pure-function tests above cannot notice the single call at
             // EnsureSchemaAsync being deleted. This drives the REAL call path:
@@ -288,8 +289,8 @@ namespace SqlTicketsConnector.Tests
                 Logger.None,
                 dryRun: false);
 
-            InvalidOperationException thrown = Assert.ThrowsAsync<InvalidOperationException>(
-                () => engine.EnsureSchemaAsync()).GetAwaiter().GetResult();
+            InvalidOperationException thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => engine.EnsureSchemaAsync());
 
             Assert.Contains("another connector", thrown.Message, StringComparison.Ordinal);
             Assert.Empty(adapter.Writes);
