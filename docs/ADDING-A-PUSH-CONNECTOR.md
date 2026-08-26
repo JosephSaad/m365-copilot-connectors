@@ -252,6 +252,11 @@ Stated plainly, because each of these has surprised somebody:
   want to reconcile, keep the source-side list.
 - **Two connectors cannot share a connection.** They register different schemas,
   a registered schema cannot be replaced, and whichever app created the
-  connection is the only one that can manage it. The host refuses a connection
-  ID belonging to a connector hosted alongside yours; across separate
-  executables nothing can see the collision, so pick a distinct ID and mean it.
+  connection is the only one that can manage it. You get two layers of
+  protection without writing any: within one executable, the host refuses a
+  neighbour's connection ID at validation; across executables, the engine
+  fetches the schema registered on the connection before pushing and refuses if
+  it carries any property your connector does not build - naming the foreign
+  properties. `--dry-run` performs the same check with read-only GETs. The one
+  case no check can catch is a foreign connection that exists with NO schema
+  registered yet; pick a distinct ID and mean it.

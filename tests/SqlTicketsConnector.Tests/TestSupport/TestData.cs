@@ -50,6 +50,10 @@ namespace SqlTicketsConnector.Tests.TestSupport
                 SqlAuthMode = "WindowsIntegrated",
                 MaxContentBytes = 3670016,
                 SoftDeleteEnabled = true,
+
+                // The tickets push tool requires a template; the hierarchy tool
+                // ignores it. An agnostic value keeps one fixture valid for both.
+                ItemUrlTemplate = "https://portal.contoso.com/item/{0}",
             };
         }
 

@@ -175,10 +175,12 @@ namespace SqlTicketsConnector.Tests.TestSupport
     public sealed class FakeStreamWriter<T> : IServerStreamWriter<T>
     {
         private readonly Action<int> afterWrite;
+        private readonly Func<T, bool> throwOn;
 
-        public FakeStreamWriter(Action<int> afterWrite = null)
+        public FakeStreamWriter(Action<int> afterWrite = null, Func<T, bool> throwOn = null)
         {
             this.afterWrite = afterWrite;
+            this.throwOn = throwOn;
         }
 
         public WriteOptions WriteOptions { get; set; }
@@ -187,6 +189,12 @@ namespace SqlTicketsConnector.Tests.TestSupport
 
         public Task WriteAsync(T message)
         {
+            if (this.throwOn != null && this.throwOn(message))
+            {
+                // The failing write is NOT recorded: the platform never got it.
+                throw new InvalidOperationException("Simulated stream failure.");
+            }
+
             this.Written.Add(message);
 
             if (this.afterWrite != null)

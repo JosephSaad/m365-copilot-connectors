@@ -100,30 +100,10 @@ public sealed class TicketsPushConnector : IPushConnector
     /// <param name="errors">Accumulator.</param>
     public void ValidateOptions(PushOptions options, ValidationErrors errors)
     {
-        string template = options.DataSource.ItemUrlTemplate;
-
-        if (string.IsNullOrWhiteSpace(template))
-        {
-            errors.Add("DataSource:ItemUrlTemplate", "is required: every item carries a URL back to its ticket.");
-            return;
-        }
-
-        if (!template.Contains("{0}", StringComparison.Ordinal))
-        {
-            errors.Add(
-                "DataSource:ItemUrlTemplate",
-                "must contain {0}, the placeholder the ticket ID is formatted into.");
-            return;
-        }
-
-        try
-        {
-            string _ = string.Format(CultureInfo.InvariantCulture, template, 0);
-        }
-        catch (FormatException)
-        {
-            errors.Add("DataSource:ItemUrlTemplate", "is not a valid composite format string.");
-        }
+        // The same three checks the agent-hosted connector runs, from the same
+        // shared validator - so neither consumer can quietly validate less than
+        // the other.
+        UrlTemplateValidator.Validate(errors, "DataSource:ItemUrlTemplate", options.DataSource.ItemUrlTemplate);
     }
 
     /// <inheritdoc/>

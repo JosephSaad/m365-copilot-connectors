@@ -23,7 +23,9 @@ namespace SqlTicketsConnector.Tests
     using Microsoft.Graph.Models.ExternalConnectors;
     using SqlGraphPush;
     using SqlHierarchyPush;
+    using Serilog;
     using Serilog.Core;
+    using Serilog.Events;
     using SqlPushCore;
     using SqlConnector.Security.Configuration;
     using SqlTicketsConnector.Tests.TestSupport;
@@ -223,23 +225,74 @@ namespace SqlTicketsConnector.Tests
         public void A_connections_own_schema_passes_the_ownership_check()
         {
             Schema schema = new HierarchyPushConnector().BuildSchema();
+            var sink = new CollectingSink();
 
-            // Identical: the normal re-run.
-            PushEngine.VerifySchemaOwnership("consultingwork", schema, schema, Logger.None);
-
-            // Older connection missing a property this connector has since
-            // added: append-only evolution, warned but never fatal.
-            var older = new Schema
+            using (Serilog.Core.Logger log = new LoggerConfiguration()
+                .MinimumLevel.Verbose()
+                .WriteTo.Sink(sink)
+                .CreateLogger())
             {
-                BaseType = schema.BaseType,
-                Properties = schema.Properties.Take(schema.Properties.Count - 1).ToList(),
-            };
+                // Identical: the normal re-run, and no warning about it.
+                PushEngine.VerifySchemaOwnership("consultingwork", schema, schema, log);
+                Assert.Empty(sink.Events);
 
-            PushEngine.VerifySchemaOwnership("consultingwork", schema, older, Logger.None);
+                // Older connection missing a property this connector has since
+                // added: append-only evolution - never fatal, but WARNED, with
+                // the pending property named so the operator adds it on purpose.
+                string dropped = schema.Properties[^1].Name;
+                var older = new Schema
+                {
+                    BaseType = schema.BaseType,
+                    Properties = schema.Properties.Take(schema.Properties.Count - 1).ToList(),
+                };
 
-            // Unreadable or empty registered schema: nothing to compare.
-            PushEngine.VerifySchemaOwnership("consultingwork", schema, null, Logger.None);
-            PushEngine.VerifySchemaOwnership("consultingwork", schema, new Schema(), Logger.None);
+                PushEngine.VerifySchemaOwnership("consultingwork", schema, older, log);
+
+                LogEvent warning = Assert.Single(sink.Events);
+                Assert.Equal(LogEventLevel.Warning, warning.Level);
+                Assert.Contains(dropped, warning.RenderMessage(), StringComparison.OrdinalIgnoreCase);
+
+                // Unreadable or empty registered schema: nothing to compare.
+                // KNOWN BOUNDARY, recorded in ASSUMPTIONS.md: the check is
+                // one-directional. A connector whose schema is a strict SUPERSET
+                // of the registered one passes - protection between connectors
+                // relies on each having at least one property the other lacks,
+                // which holds for every connector in this repository.
+                PushEngine.VerifySchemaOwnership("consultingwork", schema, null, log);
+                PushEngine.VerifySchemaOwnership("consultingwork", schema, new Schema(), log);
+            }
+        }
+
+        [Fact]
+        public void The_ownership_check_actually_guards_the_schema_call_site()
+        {
+            // The pure-function tests above cannot notice the single call at
+            // EnsureSchemaAsync being deleted. This drives the REAL call path:
+            // a Ready connection carrying the tickets schema, approached by the
+            // hierarchy engine, must throw before any write reaches the adapter.
+            var adapter = new StubGraphAdapter(
+                new Microsoft.Graph.Models.ExternalConnectors.ExternalConnection
+                {
+                    Id = "consultingwork",
+                    State = Microsoft.Graph.Models.ExternalConnectors.ConnectionState.Ready,
+                },
+                new TicketsPushConnector().BuildSchema());
+
+            var graph = new Microsoft.Graph.GraphServiceClient(adapter);
+
+            var engine = new PushEngine(
+                new HierarchyPushConnector(),
+                TestData.ValidPushOptions(),
+                graph,
+                connections: null,
+                Logger.None,
+                dryRun: false);
+
+            InvalidOperationException thrown = Assert.ThrowsAsync<InvalidOperationException>(
+                () => engine.EnsureSchemaAsync()).GetAwaiter().GetResult();
+
+            Assert.Contains("another connector", thrown.Message, StringComparison.Ordinal);
+            Assert.Empty(adapter.Writes);
         }
 
         [Fact]

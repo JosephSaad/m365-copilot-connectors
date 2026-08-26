@@ -85,6 +85,7 @@ namespace SqlTicketsConnector.Tests
                 "DataSource:Database",
                 "DataSource:SqlAuthMode",
                 "DataSource:MaxContentBytes",
+                "DataSource:ItemUrlTemplate",
                 "DataSource:SqlUserId",
                 "Acl:GrantGroupObjectIds",
                 "Logging:MinimumLevel",

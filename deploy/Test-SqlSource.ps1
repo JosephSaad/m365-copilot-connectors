@@ -265,7 +265,7 @@ FROM   $Table;
         # Aggregates over an empty table return NULL, and [int]DBNull is a
         # terminating cast error that would kill the diagnostic mid-run - before
         # the watermark, item-size and summary sections it exists to print.
-        Warn 'the table is empty; skipping the timestamp checks'
+        Warn 'the table is empty; skipping the timestamp checks and the -Watermark pending-rows check'
     }
     else {
 

@@ -23,7 +23,6 @@ namespace SqlConnector.Security.Sql
     /// </summary>
     public static class SqlConnectionStringFactory
     {
-        /// <summary>The application name stamped on every connection, so DBAs can attribute load.</summary>
         /// <summary>
         /// The Application Name stamped on every connection: the entry
         /// executable's own name, so a DBA looking at sys.dm_exec_sessions sees

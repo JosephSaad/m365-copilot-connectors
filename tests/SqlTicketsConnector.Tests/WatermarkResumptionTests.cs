@@ -88,6 +88,67 @@ namespace SqlTicketsConnector.Tests
         }
 
         [Fact]
+        public async Task A_crawl_that_dies_mid_row_checkpoints_the_last_delivered_row()
+        {
+            // The one unbreakable rule: a watermark must never advance past a row
+            // that was not delivered. `position` moves to the current row before
+            // the row is written, so a failure handler that checkpointed it would
+            // skip the dying row forever on resume. This drives that exact path:
+            // the stream fails while writing row 1003, and the failure bit's
+            // checkpoint must be row 1002's watermark - resuming from it must
+            // yield 1003 again.
+            var rows = new List<TicketRow>
+            {
+                TestData.Row(1001, Shared, "alpha"),
+                TestData.Row(1002, Shared, "bravo"),
+                TestData.Row(1003, Later, "charlie"),
+                TestData.Row(1004, Later.AddMinutes(5), "delta"),
+            };
+
+            var source = new FakeTicketSource(rows);
+            ConnectorOptions options = TestData.ValidOptions();
+            var service = new ConnectorCrawlerServiceImpl(source, options, Logger.None);
+
+            var failingWriter = new FakeStreamWriter<IncrementalCrawlStreamBit>(
+                throwOn: bit => bit.CrawlItem != null && bit.CrawlItem.ItemId == "ticket1003");
+
+            await service.GetIncrementalCrawlStream(
+                new GetIncrementalCrawlStreamRequest { Schema = SqlDataSource.BuildSchema() },
+                failingWriter,
+                new FakeServerCallContext("/x/GetIncrementalCrawlStream", CancellationToken.None));
+
+            // The failure bit is status-only, and its checkpoint is the LAST
+            // DELIVERED row - 1002 - not the row that was in flight.
+            IncrementalCrawlStreamBit final = failingWriter.Written.Last();
+            Assert.Null(final.CrawlItem);
+            Assert.NotEqual(OperationResult.Success, final.Status.Result);
+
+            string deliveredCheckpoint = failingWriter.Written
+                .Where(bit => bit.CrawlItem != null)
+                .Select(bit => bit.CrawlProgressMarker.CustomMarkerData)
+                .Last();
+
+            Assert.Equal(deliveredCheckpoint, final.CrawlProgressMarker.CustomMarkerData);
+
+            // And resuming from that checkpoint re-yields the dying row.
+            var resumeWriter = new FakeStreamWriter<IncrementalCrawlStreamBit>();
+
+            await service.GetIncrementalCrawlStream(
+                new GetIncrementalCrawlStreamRequest
+                {
+                    Schema = SqlDataSource.BuildSchema(),
+                    CrawlProgressMarker = new CrawlCheckpoint
+                    {
+                        CustomMarkerData = final.CrawlProgressMarker.CustomMarkerData,
+                    },
+                },
+                resumeWriter,
+                new FakeServerCallContext("/x/GetIncrementalCrawlStream", CancellationToken.None));
+
+            Assert.Equal(new[] { "ticket1003", "ticket1004" }, ItemIds(resumeWriter.Written));
+        }
+
+        [Fact]
         public async Task Cancellation_emits_a_cancelled_status_rather_than_an_rpc_error()
         {
             var source = new FakeTicketSource(new List<TicketRow>

@@ -324,8 +324,22 @@ if ($config -and $config.Auth.Mode -eq 'Certificate') {
 elseif ($config -and $config.Auth.Mode -eq 'ClientSecret') {
     $target = $config.Auth.ClientSecretCredentialTarget
     if ($target) {
-        $listed = cmdkey /list:$target 2>&1 | Out-String
-        if ($listed -match 'NONE' -or $listed -match 'not found') {
+        # CredRead, not cmdkey text: cmdkey output is localized, so the
+        # English markers would misreport on non-English Windows.
+        if (-not ('Probe.HostCredProbe' -as [type])) {
+            Add-Type -Namespace Probe -Name HostCredProbe -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("advapi32.dll", EntryPoint = "CredReadW", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+public static extern bool CredRead(string target, uint type, uint flags, out System.IntPtr credential);
+[System.Runtime.InteropServices.DllImport("advapi32.dll")]
+public static extern void CredFree(System.IntPtr buffer);
+'@
+        }
+
+        $credHandle = [System.IntPtr]::Zero
+        $credExists = [Probe.HostCredProbe]::CredRead($target, 1, 0, [ref]$credHandle)
+        if ($credHandle -ne [System.IntPtr]::Zero) { [Probe.HostCredProbe]::CredFree($credHandle) }
+
+        if (-not $credExists) {
             Warn "no Credential Manager entry '$target' under $([Security.Principal.WindowsIdentity]::GetCurrent().Name)"
             Note 'Inconclusive unless this session IS the service account: entries are per account. Store it as the'
             Note 'service account (docs/RUNBOOK.md §2a) — the startup log tells you the truth either way.'

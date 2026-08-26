@@ -351,14 +351,14 @@ if ($orphans.Count -gt 0) {
 if ($errors.Count -gt 0) {
     # A row that could not be read is a row about which nothing is known. An
     # all-clear over unread rows would be the reconciliation equivalent of a
-    # green build with skipped tests.
+    # green build with skipped tests. The exit 1 happens at the very end, so
+    # the closing caveats (the hard-delete gap) still print.
     Write-Host ''
     Write-Host "  $($errors.Count) row(s) could not be checked - the comparison is incomplete." -ForegroundColor Red
     Write-Host '  Fix the errors above (throttling, expiry, network) and re-run before trusting any verdict.'
-    exit 1
 }
 
-if ($orphans.Count -eq 0 -and $missing.Count -eq 0) {
+if ($errors.Count -eq 0 -and $orphans.Count -eq 0 -and $missing.Count -eq 0) {
     Write-Host '  Nothing to do: the index matches the source.' -ForegroundColor Green
 }
 
@@ -368,3 +368,5 @@ if ($softDelete) {
     Note 'so its item cannot be found by this or any other client — there is no list-items API to enumerate against.'
     Note 'If hard deletes have happened, the only reliable repair is to delete the connection and push again.'
 }
+
+if ($errors.Count -gt 0) { exit 1 }

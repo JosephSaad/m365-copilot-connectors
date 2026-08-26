@@ -127,7 +127,10 @@ public static class PushHost
         try
         {
             Directory.CreateDirectory(logsDirectory);
-            string probe = Path.Combine(logsDirectory, ".writable");
+
+            // Per-process probe name: two connectors sharing an install directory
+            // must not race on one file and manufacture a spurious warning.
+            string probe = Path.Combine(logsDirectory, $".writable-{Environment.ProcessId}");
             File.WriteAllText(probe, string.Empty);
             File.Delete(probe);
         }
@@ -135,7 +138,7 @@ public static class PushHost
         {
             Console.Error.WriteLine(
                 $"WARNING: the log directory {logsDirectory} is not writable ({ex.Message}). " +
-                "This run will log to the console only.");
+                "File logging may be unavailable for this run; the console output is authoritative.");
         }
 
         using var logger = CreateLogger(executable);
@@ -182,6 +185,10 @@ public static class PushHost
             connector.DisplayName,
             options.Graph.ConnectionId,
             options.SourcePath);
+
+        // Declared ahead of the try so the cancellation catch below can tell a
+        // genuine Ctrl+C from an HttpClient timeout wearing the same exception.
+        using var cancellation = new CancellationTokenSource();
 
         ICertificateResolver? certificateResolver = options.Auth.ParsedMode == AuthMode.Certificate
             ? new StoreCertificateResolver(options.Auth, Log.Logger)
@@ -231,7 +238,6 @@ public static class PushHost
             // Ctrl+C cancels cleanly: the token reaches every Graph call and
             // every poll delay, so a two-hour schema wait does not have to be
             // killed from Task Manager.
-            using var cancellation = new CancellationTokenSource();
             Console.CancelKeyPress += (_, eventArgs) =>
             {
                 eventArgs.Cancel = true;
@@ -242,14 +248,17 @@ public static class PushHost
             PushSummary summary = await engine.RunAsync(cancellation.Token);
 
             Log.Information(
-                "{Verb} complete. {Total} item(s) ({Breakdown}) for connection {ConnectionId}. " +
-                "truncated={Truncated} skipped={Skipped} throttleWaits={ThrottleWaits}",
+                "{Verb} complete. {Total} row(s) written ({Breakdown}) for connection {ConnectionId}; " +
+                "the index holds {Distinct} distinct item(s). " +
+                "truncated={Truncated} skipped={Skipped} duplicates={Duplicates} throttleWaits={ThrottleWaits}",
                 dryRun ? "Dry run" : "Ingestion",
                 summary.Total,
                 summary.Describe(),
                 options.Graph.ConnectionId,
+                summary.Total - summary.Duplicates,
                 summary.Truncated,
                 summary.Skipped,
+                summary.Duplicates,
                 summary.ThrottleWaits);
 
             return 0;
@@ -274,8 +283,11 @@ public static class PushHost
                 options.Graph.ConnectionId);
             return 3;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
+            // Filtered: the Graph HttpClient's request timeout also surfaces as
+            // an OperationCanceledException, and a network hang must report as
+            // an ingestion failure, not as "you cancelled" when nobody did.
             Log.Warning("Cancelled. The index holds what was written before the stop; re-run to complete.");
             return 4;
         }

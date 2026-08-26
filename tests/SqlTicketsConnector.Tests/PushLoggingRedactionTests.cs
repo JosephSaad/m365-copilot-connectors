@@ -88,8 +88,11 @@ namespace SqlTicketsConnector.Tests
             // this scan is the check. Allowed shapes: Wrap(...) as the first
             // argument, or no exception argument at all.
             var offenders = new List<string>();
+
+            // Covers every Serilog level plus the Write(level, ex, ...) overload,
+            // and dotted receivers (this.lastException) as well as bare locals.
             var pattern = new Regex(
-                @"\.(Fatal|Error|Warning|Information|Debug)\(\s*(?!RedactedException\.Wrap)(?<arg>[A-Za-z_][A-Za-z0-9_]*)\s*,",
+                @"\.(Fatal|Error|Warning|Information|Debug|Verbose|Write)\(\s*(?:LogEventLevel\.\w+\s*,\s*)?(?!(?:Logging\.)?RedactedException\.Wrap)(?<arg>[A-Za-z_][A-Za-z0-9_.]*)\s*,",
                 RegexOptions.Compiled);
 
             foreach (string file in Directory.EnumerateFiles(
@@ -100,9 +103,10 @@ namespace SqlTicketsConnector.Tests
                 foreach (Match match in pattern.Matches(text))
                 {
                     string arg = match.Groups["arg"].Value;
+                    string leaf = arg[(arg.LastIndexOf('.') + 1)..];
 
-                    if (arg.EndsWith("Exception", StringComparison.Ordinal) ||
-                        arg is "ex" or "exception" or "e" or "error")
+                    if (leaf.EndsWith("Exception", StringComparison.Ordinal) ||
+                        leaf is "ex" or "exception" or "e" or "error" or "failure")
                     {
                         int line = text.Take(match.Index).Count(c => c == '\n') + 1;
                         offenders.Add($"{Path.GetFileName(file)}:{line} logs '{arg}' unwrapped");
