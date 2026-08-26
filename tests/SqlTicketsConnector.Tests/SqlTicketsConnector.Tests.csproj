@@ -40,6 +40,17 @@
     <ProjectReference Include="..\..\src\SqlGraphPush\SqlGraphPush.csproj" />
     <ProjectReference Include="..\..\src\SqlHierarchyPush\SqlHierarchyPush.csproj" />
     <ProjectReference Include="..\..\src\Connector.Security\Connector.Security.csproj" />
+
+    <!--
+      The Cloudera CDP connector and the two libraries behind it. Referenced for
+      the same reason the SQL push tools are: the routing refusals, the ACL
+      derivation and the watermark comparison are the most expensive things here
+      to get wrong, and a test project that could not see them would be testing
+      the easy half.
+    -->
+    <ProjectReference Include="..\..\src\CdpGraphPush\CdpGraphPush.csproj" />
+    <ProjectReference Include="..\..\src\CdpConnector.Source\CdpConnector.Source.csproj" />
+    <ProjectReference Include="..\..\src\CdpConnector.Extraction\CdpConnector.Extraction.csproj" />
   </ItemGroup>
 
   <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
