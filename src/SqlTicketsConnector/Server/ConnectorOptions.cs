@@ -15,7 +15,7 @@ namespace SqlTicketsConnector.Server
     using System.Collections.Generic;
     using System.IO;
     using System.Text.Json;
-    using Connector.Security.Configuration;
+    using global::Connector.Security.Configuration;
 
     /// <summary>Root of appsettings.json.</summary>
     public sealed class ConnectorOptions
@@ -47,7 +47,7 @@ namespace SqlTicketsConnector.Server
         /// <summary>Gets a value indicating whether the strict production rules apply.</summary>
         public bool IsProduction
         {
-            get { return Connector.Security.Sql.SqlConnectionStringFactory.IsProduction(this.Environment); }
+            get { return global::Connector.Security.Sql.SqlConnectionStringFactory.IsProduction(this.Environment); }
         }
 
         /// <summary>Reads appsettings.json from beside the executable.</summary>
@@ -121,7 +121,7 @@ namespace SqlTicketsConnector.Server
             // connector. The shared validator also catches a template without
             // {0} (every item gets the identical URL, silently) and a malformed
             // one (a FormatException on the first row of every crawl).
-            Connector.Security.Configuration.UrlTemplateValidator.Validate(
+            global::Connector.Security.Configuration.UrlTemplateValidator.Validate(
                 errors, "DataSource:ItemUrlTemplate", this.DataSource?.ItemUrlTemplate ?? string.Empty);
             (this.Acl ?? new AclOptions()).Validate(errors, "Acl");
             (this.Logging ?? new LoggingOptions()).Validate(errors, "Logging");
@@ -200,8 +200,8 @@ namespace SqlTicketsConnector.Server
             errors.RequireRange(path + ":ConnectionCallTimeoutSeconds", this.ConnectionCallTimeoutSeconds, 5, 29);
 
             if (!string.IsNullOrWhiteSpace(this.TlsCertificateThumbprint) &&
-                !Connector.Security.Certificates.CertificateSelector.IsWellFormedThumbprint(
-                    Connector.Security.Certificates.CertificateSelector.NormalizeThumbprint(this.TlsCertificateThumbprint)))
+                !global::Connector.Security.Certificates.CertificateSelector.IsWellFormedThumbprint(
+                    global::Connector.Security.Certificates.CertificateSelector.NormalizeThumbprint(this.TlsCertificateThumbprint)))
             {
                 errors.Add(path + ":TlsCertificateThumbprint", "must be a 40 character SHA-1 thumbprint in hexadecimal.");
             }

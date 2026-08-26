@@ -53,8 +53,18 @@ public sealed class HiveTableSourceFactory
     /// <returns>The item ID.</returns>
     public static string ItemId(string itemView, string key)
     {
+        // The separator is written as an escape rather than as the character
+        // itself: a raw control character in a source file is invisible to
+        // whoever reads it next, and the first reviewer of this line read it as
+        // no separator at all. It has to be SOME separator, because
+        // concatenating two free-text values with nothing between them makes
+        // the hash ambiguous - ("sales.orderline", "7") and ("sales.order",
+        // "line7") would be the same bytes and therefore the same item, so one
+        // table's row would silently overwrite another's. A unit separator
+        // cannot appear in a Hive identifier and is not something a natural key
+        // carries.
         byte[] hash = System.Security.Cryptography.SHA256.HashData(
-            System.Text.Encoding.UTF8.GetBytes(itemView + "" + key));
+            System.Text.Encoding.UTF8.GetBytes(itemView + "\u001f" + key));
 
         return "t" + Convert.ToHexString(hash).ToLowerInvariant();
     }

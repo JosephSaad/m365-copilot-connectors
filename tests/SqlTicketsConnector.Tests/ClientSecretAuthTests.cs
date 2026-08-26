@@ -14,8 +14,8 @@ namespace SqlTicketsConnector.Tests
     using System;
     using System.Runtime.Versioning;
     using System.Threading;
-    using Connector.Security.Configuration;
-    using Connector.Security.Secrets;
+    using global::Connector.Security.Configuration;
+    using global::Connector.Security.Secrets;
     using SqlTicketsConnector.Server;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;
