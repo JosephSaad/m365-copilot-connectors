@@ -204,13 +204,13 @@ hadoop/
   03-Start-LocalWebHdfsStub.ps1        A loopback-only WebHDFS test double, for a laptop with no cluster
   04-create-atlas-test-metadata.sh     Descriptions, owners, classifications and terms for the catalogue to find
 tests/
-  SqlTicketsConnector.Tests/           245 tests, no live tenant, vault, database or cluster
+  SqlTicketsConnector.Tests/           255 tests, no live tenant, vault, database or cluster
     CdpAclMaskTests.cs                 The POSIX ACL mask, where this connector's worst over-grant lived
     CdpRangerFidelityTests.cs          Reading a Ranger policy the way Ranger reads it
     CdpHiveWatermarkTests.cs           The Hive marker, round tripped through a checkpoint into the next query
     CdpCrawlResilienceTests.cs         The three ways the HDFS crawl used to lose files while reporting success
     CdpAtlasTests.cs                   The catalogue's two deliberate departures from every other source here
-    ControlEvidenceTests.cs            Tripwire over the thirty-six tests that exist as control evidence
+    ControlEvidenceTests.cs            Tripwire over the forty tests that exist as control evidence
 ```
 
 ---
