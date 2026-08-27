@@ -45,7 +45,7 @@ to survive into the answer. It is the wrong answer for a catalogue: descriptive
 metadata is a search problem over names and descriptions, so it belongs in the
 index however structured it looks.
 
-The interactive version of this page — thirteen questions that route one source
+The interactive version of this page — fourteen questions that route one source
 to one delivery path, with the cost and the warnings attached — ships beside it
 as [`copilot-decision-matrix.html`](copilot-decision-matrix.html). Open it in a
 browser; it is a single self-contained file with no build step and no network
@@ -89,14 +89,14 @@ would still choose retrieval versus invocation, with your own index and your own
 tools. It appears in the drawing because "the askers are not M365 users" is a
 real branch, not because it is a peer of a connector.
 
-**Four things force it, and only two of them are questions in the tool.**
+**Four things force it, and the tool asks about all four.**
 
 | Forcing condition | Why nothing in M365 answers it |
 |---|---|
 | The askers have no Entra identity in the tenant | M365 Copilot is not reachable by them at any price |
 | Network isolation — VNet, private endpoint | No M365 surface offers one. Note that Power BI Copilot is **explicitly unsupported** with Private Link and in closed networks, so it is not the fallback either |
 | You must pin and validate the model | Under model-risk governance an assistant whose model changes on Microsoft's cadence is hard to attest to. Foundry is the only route where you choose the model and its version |
-| You need retrieval you control | Your own chunking, embeddings, hybrid search and reranking. A Graph connector gives you *its* retrieval, not yours |
+| You need retrieval you control | Your own chunking, embeddings, hybrid search and reranking. A Graph connector gives you *its* retrieval, not yours — what you can change is the schema, the semantic labels, and which content is in scope |
 
 Two more reasons argue for it without forcing it: a **per-token cost model**
 rather than per-seat, which flips the arithmetic at both very low and very high
