@@ -112,6 +112,19 @@ public sealed class RangerPolicy
     /// <summary>Gets or sets what the policy does.</summary>
     public RangerPolicyType PolicyType { get; set; }
 
+    /// <summary>
+    /// Gets or sets the Ranger security zone this policy belongs to, or empty
+    /// for an unzoned one.
+    ///
+    /// Read but never acted on, and that is deliberate. Zones change which
+    /// policies apply to a resource rather than what a policy says, so honouring
+    /// them means selecting the zone a resource falls into before any policy is
+    /// filtered - which needs the zone definitions, not just this name. Until
+    /// that exists the value is here so that RangerPolicyClient can REFUSE a
+    /// zoned policy set rather than read it as though the zones were not there.
+    /// </summary>
+    public string ZoneName { get; set; } = string.Empty;
+
     /// <summary>Gets the resource values by resource name: path, database, table, column.</summary>
     public IDictionary<string, IList<string>> Resources { get; } =
         new Dictionary<string, IList<string>>(StringComparer.OrdinalIgnoreCase);

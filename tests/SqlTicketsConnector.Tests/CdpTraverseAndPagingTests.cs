@@ -25,6 +25,7 @@
 
 namespace SqlTicketsConnector.Tests
 {
+    using System;
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
@@ -278,10 +279,65 @@ namespace SqlTicketsConnector.Tests
         }
 
         // ------------------------------------------------------------------
+        // RNG-01 - a zoned policy set is refused, not read zone-blind
+        // ------------------------------------------------------------------
+
+        [Fact]
+        public async Task A_policy_in_a_security_zone_stops_the_run()
+        {
+            // The connector applies every policy to every resource. Ranger does
+            // not: a resource inside a zone is evaluated against that zone's
+            // policies only. Reading them together applies a legacy unzoned
+            // grant to a table the zone protects, and hands the item to people
+            // the cluster refuses - so the run stops instead.
+            var ranger = new ZonedRanger("eu-pii");
+
+            InvalidOperationException thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => Client(ranger).PoliciesAsync("cm_hive", CancellationToken.None));
+
+            Assert.Contains("eu-pii", thrown.Message, System.StringComparison.Ordinal);
+            Assert.Contains("cm_hive", thrown.Message, System.StringComparison.Ordinal);
+            Assert.Contains("security zone", thrown.Message, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task An_unzoned_policy_set_is_read_normally()
+        {
+            // The guard must not fire on the ordinary cluster. Ranger omits
+            // zoneName on an unzoned policy and some builds send it empty;
+            // both mean unzoned, and reading either as a zone would stop every
+            // run everywhere.
+            foreach (string zoneName in new[] { null, string.Empty, "   " })
+            {
+                var ranger = new ZonedRanger(zoneName);
+
+                IReadOnlyList<RangerPolicy> policies =
+                    await Client(ranger).PoliciesAsync("cm_hive", CancellationToken.None);
+
+                Assert.Single(policies);
+                Assert.Empty(policies[0].ZoneName);
+            }
+        }
+
+        [Fact]
+        public async Task The_refusal_names_the_zones_rather_than_only_counting_them()
+        {
+            // An operator reading this in a log at 03:00 needs to know which
+            // zone to look at, not that some number of policies were zoned.
+            var ranger = new ZonedRanger("eu-pii", "uk-retail");
+
+            InvalidOperationException thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => Client(ranger).PoliciesAsync("cm_hive", CancellationToken.None));
+
+            Assert.Contains("eu-pii", thrown.Message, System.StringComparison.Ordinal);
+            Assert.Contains("uk-retail", thrown.Message, System.StringComparison.Ordinal);
+        }
+
+        // ------------------------------------------------------------------
         // Helpers
         // ------------------------------------------------------------------
 
-        private static RangerPolicyClient Client(PagingRanger ranger)
+        private static RangerPolicyClient Client(HttpMessageHandler ranger)
         {
             return new RangerPolicyClient(
                 "https://ranger.test:6182", new HttpClient(ranger), Logger.None, ownsClient: true);
@@ -301,6 +357,63 @@ namespace SqlTicketsConnector.Tests
             item.Accesses.Add(access);
             item.Groups.Add(group);
             return item;
+        }
+
+        /// <summary>A Ranger serving one policy per named zone.</summary>
+        private sealed class ZonedRanger : HttpMessageHandler
+        {
+            private readonly string[] zoneNames;
+
+            public ZonedRanger(params string[] zoneNames)
+            {
+                this.zoneNames = zoneNames;
+            }
+
+            protected override Task<HttpResponseMessage> SendAsync(
+                HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
+
+                // One page only: the second request must come back empty or the
+                // pager keeps asking.
+                if (int.Parse(query["startIndex"] ?? "0") > 0)
+                {
+                    return Task.FromResult(Ok("[]"));
+                }
+
+                var json = new StringBuilder("[");
+
+                for (int i = 0; i < this.zoneNames.Length; i++)
+                {
+                    if (i > 0)
+                    {
+                        json.Append(',');
+                    }
+
+                    json.Append("{\"id\":").Append(i)
+                        .Append(",\"isEnabled\":true,\"policyType\":0");
+
+                    // A null name stands for the field Ranger omits entirely.
+                    if (this.zoneNames[i] is not null)
+                    {
+                        json.Append(",\"zoneName\":\"").Append(this.zoneNames[i]).Append('"');
+                    }
+
+                    json.Append(",\"resources\":{},\"policyItems\":[]}");
+                }
+
+                json.Append(']');
+
+                return Task.FromResult(Ok(json.ToString()));
+            }
+
+            private static HttpResponseMessage Ok(string body)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(body, Encoding.UTF8, "application/json"),
+                };
+            }
         }
 
         /// <summary>A Ranger that pages, and that clamps pageSize the way Ranger does.</summary>
