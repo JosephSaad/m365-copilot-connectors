@@ -25,6 +25,7 @@ documentation that ships with it.
 
 | | |
 |---|---|
+| [**What we need from the CDP team**](CDP-PILOT-PARAMETERS.md) | The parameters to collect before a pilot — what is asked, why, and a column to answer in |
 | [CDP connector](CDP-DEPLOYMENT.md) | HDFS documents, Hive tables and the Atlas catalogue, from a Kerberised cluster |
 | [Hierarchy connector](HIERARCHY-DEPLOYMENT.md) | The worked three-level example, flattened for a flat index |
 | [App registration](APP-REGISTRATION.md) | Entra setup, certificate auth, and the permissions each path actually needs |
