@@ -49,50 +49,17 @@
   }
 
   :root {
+    /* Pinned to dark. This is a reference read on a screen, and the palette
+       is part of how it reads, so it does not follow the viewer's colour
+       scheme. color-scheme makes the browser match its own chrome - radios,
+       focus rings, scrollbars - rather than leaving light controls sitting
+       on a dark page. */
+    color-scheme: dark;
+
     --sans:  "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --serif: Spectral, Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
     --mono:  "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
-    --ground:      #F2F5F4;
-    --surface:     #FBFCFC;
-    --surface-alt: #E9EEEC;
-    --ink:         #111819;
-    --ink-muted:   #55656A;
-    --ink-faint:   #859599;
-    --rule:        #D6DEDC;
-    --rule-strong: #B6C2BF;
-    --accent:      #12514E;
-    --accent-soft: #E0EAE8;
-    --full:        #1C6B4E;
-    --partial:     #A8760F;
-    --none:        #96A2A5;
-    --risk:        #A0392F;
-    --risk-soft:   #F3E4E1;
-    --shadow:      0 1px 2px rgba(17, 24, 25, .05), 0 8px 24px -16px rgba(17, 24, 25, .22);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --ground:      #0C1214;
-      --surface:     #141C1E;
-      --surface-alt: #1B2427;
-      --ink:         #E4EBEA;
-      --ink-muted:   #94A3A6;
-      --ink-faint:   #6E7C80;
-      --rule:        #253032;
-      --rule-strong: #354245;
-      --accent:      #58C4AF;
-      --accent-soft: #16302E;
-      --full:        #4FB187;
-      --partial:     #D3A244;
-      --none:        #67757A;
-      --risk:        #E38175;
-      --risk-soft:   #33201D;
-      --shadow:      0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
-    }
-  }
-
-  :root[data-theme="dark"] {
     --ground:      #0C1214;
     --surface:     #141C1E;
     --surface-alt: #1B2427;
@@ -1630,7 +1597,7 @@
   <footer>
     <p>Reconstructed from a photographed capability matrix and extended with the grounding, cost and data-provenance analysis from the surrounding architecture review.</p>
     <p>Microsoft's Copilot surface naming and capability boundaries move faster than anything else in this stack &mdash; particularly MCP support inside M365 and the line between declarative agents and Copilot Studio. Treat the tables as the shape of the decision, and confirm current boundaries before committing.</p>
-    <p class="stamp">Revision <strong>2026-08-27 &middot; r8</strong> &mdash; 14 questions, 10 routes. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
+    <p class="stamp">Revision <strong>2026-08-27 &middot; r9</strong> &mdash; 14 questions, 10 routes. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
   </footer>
 
 </div>
