@@ -473,7 +473,7 @@
        the card while everything below it had the full padding, which reads as
        the whole panel sitting low. The legend carries its own top padding
        instead, matching the card's. */
-    padding: 1.1rem 0 0;
+    padding: 1.65rem 0 0.15rem;
     display: flex;
     align-items: baseline;
     gap: 0.6rem;
@@ -790,7 +790,7 @@
   <section id="questionnaire">
     <div class="section-head">
       <p class="eyebrow">Walk the tree</p>
-      <h2>Thirteen questions that pick your route</h2>
+      <h2>Fourteen questions that pick your route</h2>
       <p class="lede">The gates in Figure 1, plus the three that decide it in practice more often than ownership does: how fast a deleted record has to disappear, how stale an answer may be, and what infrastructure you actually have. Answer what you know &mdash; the first hard gate to fire wins, and the rest becomes watch-outs.</p>
     </div>
 
@@ -921,6 +921,16 @@
           <label><input type="radio" name="gov" value="none"><span>No &mdash; the provider&rsquo;s model and its update cadence are acceptable</span></label>
         </div>
         <p class="qnote">This is model-risk governance, not data governance, and it is the reason a bank ends up hosting its own application when every data answer pointed at M365. No M365 surface lets you pin a model version or hold it still while you evaluate it.</p>
+      </fieldset>
+
+      <fieldset class="q">
+        <legend><span class="qn">Q14</span> Whose retrieval has to be good enough?</legend>
+        <div class="opts">
+          <label><input type="radio" name="ret" value="own"><span>Ours &mdash; chunking, embeddings, hybrid search and reranking are things we must tune</span></label>
+          <label><input type="radio" name="ret" value="tune"><span>We need to influence relevance, but not own the pipeline</span></label>
+          <label><input type="radio" name="ret" value="default"><span>The platform&rsquo;s retrieval is fine if the right content is in scope</span></label>
+        </div>
+        <p class="qnote">A Graph connector gives you <em>its</em> retrieval, not yours. What you can change is the schema, the semantic labels and which content is in scope &mdash; not how a document is chunked, what embeds it, or how results are reranked. If retrieval quality is the thing being judged, that is an application you host.</p>
       </fieldset>
 
     </form>
@@ -1197,6 +1207,19 @@
             <td><span class="mark m-full">&#9679;</span></td>
           </tr>
           <tr class="new">
+            <th class="rowhead" scope="row">You choose the retrieval<sup class="fn">4</sup></th>
+            <td class="val">&ndash;</td>
+            <td class="val">&ndash;</td>
+            <td class="val">&ndash;</td>
+            <td class="val">&ndash;</td>
+            <td class="val">&#9686;</td>
+            <td class="val">&ndash;</td>
+            <td class="val">&ndash;</td>
+            <td class="val">&ndash;</td>
+            <td class="val">&ndash;</td>
+            <td class="val">&#9679;</td>
+          </tr>
+          <tr class="new">
             <th class="rowhead" scope="row">Initial build effort</th>
             <td class="val pos">none</td>
             <td class="val pos">none</td>
@@ -1349,6 +1372,17 @@
             <td class="val">a host for the server</td>
             <td class="val">a host &mdash; yours or theirs</td>
             <td class="val neg">Azure subscription, network, ops</td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Retrieval you control<br><span class="note">chunking, embeddings, reranking</span></th>
+            <td class="val neg">&ndash;&nbsp; Microsoft&rsquo;s</td>
+            <td class="val">&#9686;&nbsp; schema and labels only</td>
+            <td class="val">&#9686;&nbsp; schema and labels only</td>
+            <td class="val neg">&ndash;&nbsp; it queries a model</td>
+            <td class="val">&#9686;&nbsp; you choose what the call returns</td>
+            <td class="val">&#9686;&nbsp; you choose what the call returns</td>
+            <td class="val neg">&ndash;&nbsp; theirs</td>
+            <td class="val pos">&#9679;&nbsp; entirely yours</td>
           </tr>
 
           <tr class="group-row"><th colspan="9" scope="colgroup">Cost</th></tr>
@@ -1551,7 +1585,7 @@
 (function () {
   "use strict";
 
-  var FIELDS = ["reach","own","access","kind","fresh","del","infra","src","vol","reuse","iso","model","gov"];
+  var FIELDS = ["reach","own","access","kind","fresh","del","infra","src","vol","reuse","iso","model","gov","ret"];
 
   var ROUTES = {
     gallery: {
@@ -1637,6 +1671,9 @@
 
     gate(a.reach === "outside", "foundry",
       "The askers are outside the tenant. M365 Copilot is not reachable by people without an Entra identity in it, however well a connector would have worked.");
+
+    gate(a.ret === "own", "foundry",
+      "Retrieval itself is what has to be good, and a connector gives you its retrieval rather than yours. Chunking, embeddings, hybrid search and reranking are only yours to tune in an application you host.");
 
     gate(a.gov === "pinned", "foundry",
       "The model itself has to be pinned and validated. No M365 surface lets you fix a model version or hold it still while you evaluate it — the model changes on Microsoft's cadence, which is the thing model-risk governance will not accept.");
@@ -1799,8 +1836,8 @@
     if (route === "foundry") {
       w.push("You are taking on a production AI application: evaluation regression, model updates, incident response and its own audit trail. Name the team that owns it before the build starts.");
     }
-    if (route !== "foundry" && route !== "blocked" && a.iso !== "vnet" && a.reach !== "outside") {
-      w.push("<strong>Retrieval you control is the one reason to host your own application that this tool never asks about.</strong> Your own chunking, embeddings, hybrid search and reranking — a Graph connector gives you <em>its</em> retrieval, not yours. If the quality of retrieval is the thing being judged here, that argues for Foundry however the questions above came out.");
+    if (route !== "foundry" && route !== "blocked" && a.ret === "tune") {
+      w.push("<strong>You said relevance matters but the pipeline need not be yours, and this route gives you three levers.</strong> The schema you register, the semantic labels on it, and which content is in scope. You cannot change how a document is chunked, what embeds it, or how results are reranked — so if the answers come back plausible but wrong, the fix is narrowing what is indexed rather than tuning how it is searched.");
     }
     if (route !== "foundry" && route !== "blocked" && a.gov === "evidence") {
       w.push("<strong>You asked for evidence of model behaviour, and this route gives you somebody else’s.</strong> Prompt and response logging, a held-out evaluation set, and notice before the model changes are all things you own in your own application and receive as a service anywhere else. Confirm what the surface actually retains, for how long, and whether you are told when the model updates — before an audit asks you.");
