@@ -83,6 +83,20 @@ would still choose retrieval versus invocation, with your own index and your own
 tools. It appears in the drawing because "the askers are not M365 users" is a
 real branch, not because it is a peer of a connector.
 
+**Four things force it, and only two of them are questions in the tool.**
+
+| Forcing condition | Why nothing in M365 answers it |
+|---|---|
+| The askers have no Entra identity in the tenant | M365 Copilot is not reachable by them at any price |
+| Network isolation — VNet, private endpoint | No M365 surface offers one. Note that Power BI Copilot is **explicitly unsupported** with Private Link and in closed networks, so it is not the fallback either |
+| You must pin and validate the model | Under model-risk governance an assistant whose model changes on Microsoft's cadence is hard to attest to. Foundry is the only route where you choose the model and its version |
+| You need retrieval you control | Your own chunking, embeddings, hybrid search and reranking. A Graph connector gives you *its* retrieval, not yours |
+
+Two more reasons argue for it without forcing it: a **per-token cost model**
+rather than per-seat, which flips the arithmetic at both very low and very high
+user counts; and **prompt-and-response logging into your own SIEM**, where the
+M365 audit trail gives you what Microsoft chooses to give you.
+
 ---
 
 ## The interactive version
