@@ -1,5 +1,12 @@
 # Troubleshooting — the direct push path (`SqlGraphPush`)
 
+> **Reading this for the Cloudera CDP connector?** `CdpGraphPush` shares this
+> engine, so the exit codes, the schema rules and the redaction behaviour here
+> all apply to it — but its sources fail in ways SQL Server cannot, and Ranger
+> decides what it may index at all. Those are in
+> [`TROUBLESHOOTING-CDP.md`](TROUBLESHOOTING-CDP.md).
+
+
 The other pipeline has an agent between the connector and Microsoft Graph. This
 one does not: `SqlGraphPush` reads SQL and calls Graph itself. That removes four
 failure modes and introduces five, so this is a separate document rather than a
