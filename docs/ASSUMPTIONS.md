@@ -114,6 +114,73 @@ Found by the new tests, not by inspection:
 
 ## 5. Later changes
 
+- **A third CDP connector, for the Atlas catalogue, on 2026-08-26.** The other
+  two index what is *in* the lake. `cdpatlascatalog` indexes what the lake
+  *contains*: one external item per Apache Atlas entity — `hive_db` and
+  `hive_table` by default, `hdfs_path` optionally — carrying the entity's name,
+  qualified name, owner, description, columns, Atlas classifications, glossary
+  terms, one hop of lineage each way, and a modified timestamp. Its
+  configuration is `src/CdpGraphPush/appsettings.cdpatlascatalog.json` and it
+  holds its own Graph connection, so it can be deployed or removed without
+  touching the other two.
+
+  **The access decision is the part worth reviewing, because it departs from the
+  cluster in both directions.** Atlas authorises through its own Ranger service,
+  separate from Hadoop SQL, and CDP ships it with a policy called `public`
+  granting every authenticated user read on every entity — which is also why a
+  Hadoop SQL deny does not hide a table's metadata in Atlas. **This connector
+  refuses to inherit that policy.** An entry is granted to exactly the groups
+  Ranger grants select on the table it describes
+  (`RoutingEvaluator.EvaluateCatalogueEntry`) and skipped when that is nobody.
+  "Everyone with a cluster account" and "everyone in the Microsoft 365 tenant"
+  are different populations, and inheriting the first would publish the shape of
+  the lake — table names, column names, owners — to people who cannot reach the
+  cluster at all. Narrower than the source is the safe direction to be wrong in.
+  A deny refuses the entry outright, because a description of a table is still a
+  disclosure about it, and a column-scoped grant narrows what is described
+  rather than refusing it, because a column name discloses by existing.
+
+  **In the other direction, a row filter or a column mask does not refuse an
+  entry, where it does refuse the data.** This is the single most important
+  thing to understand about the connector, and the one place in the repository
+  where a description of data is indexed although the data is not. A filter
+  governs which rows a person sees and a mask which values; neither hides a
+  table's existence, its columns or its owner from somebody granted select, who
+  sees all of that the moment they query. So the entry is indexed for exactly
+  those people and tells them nothing new, while the rows stay out of the index
+  under the rule that has always governed them. The tables whose data can never
+  be indexed are frequently the ones most worth cataloguing.
+
+  **`Settings:AtlasBaseUrl` is required with no default**, and is rejected
+  unless it is absolute, `https`, and free of an `/api/atlas` suffix the client
+  appends itself. There is no defensible default port: Atlas answers on 31443 in
+  a stock CDP 7.1.9 install (31000 without TLS, which this connector refuses),
+  on 21443 upstream, and on the Knox gateway's own port and path when Knox
+  fronts it. A guessed default that happens to be wrong produces a connection
+  error at the least helpful moment, so the operator states it. `AtlasTypes`
+  defaults to `hive_db;hive_table`, `AtlasPageSize` to 100 against an Atlas cap
+  of 10,000, and `AtlasIncludeLineage` to true at the cost of one extra request
+  per entity.
+
+  **The search is a `GET`, not a `POST`.** Atlas installs its own CSRF filter in
+  front of non-`GET` REST calls, and whether it demands a header depends on
+  `atlas.rest-csrf.enabled` at the cluster — configuration this connector cannot
+  see and should not depend on. The `GET` form of the basic search takes the
+  same parameters, so nothing is given up. Authentication is SPNEGO as the
+  service account and the client never sends an `Authorization: Basic` header,
+  because Atlas's filter prefers Basic over Kerberos and would authenticate as
+  whatever that header claimed.
+
+  **The catalogue is fully enumerated every run, and that is accepted rather
+  than worked around.** Atlas 2.1.0, which CDP 7.1.9 ships, cannot filter a
+  basic search by modification time, so there is no incremental read to be had
+  and pretending otherwise would only hide the cost. The watermark therefore
+  spares the **Graph writes**, not the Atlas reads. A catalogue is thousands of
+  entities rather than millions, so the full enumeration is cheap; the same
+  property means `Settings:FullRecrawlEveryRuns` governs how often every entry's
+  ACL is re-derived rather than how much is read, and it remains the ACL
+  staleness bound described further down this section.
+
 - **Twelve defects found by an adversarial review of the CDP connector, fixed
   before it was ever published (2026-08-26).** The connector was reviewed by
   six independent readers, each attacking one failure mode, and every candidate

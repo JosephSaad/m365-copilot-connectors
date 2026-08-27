@@ -4,6 +4,10 @@ For the team that keeps this running at 03:00. Certificate rotation, secret
 rotation, where the logs are, and the five failures you are most likely to meet,
 each with the line in the log that identifies it.
 
+Sections 0 to 5 are the agent-hosted connector and the SQL push tools. The
+Cloudera CDP connectors are **section 6**: a different host, a different
+identity, and a failure vocabulary of their own.
+
 ---
 
 ## 0. Quick reference
@@ -230,6 +234,10 @@ property value, any connection string, any secret. That is a control, not an
 oversight — see `docs/SECURITY.md` LOG-3. To investigate a specific item, use its
 item ID (`ticket1234`) and query SQL directly.
 
+**The push tools log somewhere else.** They are not this service and they do not
+write to this file. `SqlGraphPush` and `SqlHierarchyPush` write beside their own
+executables, and the CDP connectors are covered in section 6.2.
+
 ---
 
 ## 4. The five most likely failures
@@ -414,10 +422,13 @@ above applies to it. It has its own end-to-end instructions in
 [`HIERARCHY-DEPLOYMENT.md`](HIERARCHY-DEPLOYMENT.md), and when it misbehaves the
 guide is [`TROUBLESHOOTING-DIRECT-PUSH.md`](TROUBLESHOOTING-DIRECT-PUSH.md).
 
-**Both push tools run on one engine**, `PushCore`, so they fail the same way
-and the same exit codes mean the same things. Another SQL source is a class and
-a configuration file rather than a third program to learn:
-[`ADDING-A-PUSH-CONNECTOR.md`](ADDING-A-PUSH-CONNECTOR.md).
+**Every push tool runs on one engine**, `PushCore` — `SqlGraphPush`,
+`SqlHierarchyPush` and `CdpGraphPush` — so they fail the same way and the same
+exit codes mean the same things. Another SQL source is a class and a
+configuration file rather than another program to learn:
+[`ADDING-A-PUSH-CONNECTOR.md`](ADDING-A-PUSH-CONNECTOR.md). The cluster ones
+have their own section below, because their identity and their failures are
+different: section 6.
 
 Three things about it are worth knowing at 03:00, because they look like faults
 and are not:
@@ -446,3 +457,268 @@ and are not:
 ```
 
 followed either by `Server started.` or by a `Fatal` listing every problem.
+
+---
+
+## 6. The CDP connectors (`CdpGraphPush`)
+
+A different deployment from everything above. `CdpGraphPush` is a console tool
+started by a scheduled task, **not** a Windows service: nothing restarts it,
+nothing polls it, and the only thing watching it is the task's **Last Run
+Result**, which is the process exit code. It runs on a host that can reach the
+Cloudera cluster and `graph.microsoft.com`, under a service account the cluster
+already trusts.
+
+Its deployment is [`CDP-DEPLOYMENT.md`](CDP-DEPLOYMENT.md) and its stage-by-stage
+diagnosis is [`TROUBLESHOOTING-CDP.md`](TROUBLESHOOTING-CDP.md). What follows is
+what an operator needs without reading either.
+
+| Code | Means | Page it as |
+|---|---|---|
+| `0` | The crawl completed and the watermark advanced over what was written | Nothing. Check `skipped=` is what you expect |
+| `2` | Configuration invalid. Nothing opened a socket | A deployment fault, not an incident |
+| `3` | A credential was rejected — by **Entra** or by **the cluster** | Credential rotation. Never fold this in with `4` |
+| `4` | Ingestion failed part-way | The data path |
+
+### 6.1 Three connectors, one executable
+
+One `CdpGraphPush.exe`, three connectors, chosen by argument. Each has its own
+Graph connection and its own configuration file, and the connector key is what
+picks the file, so none of them can read another's settings. A file naming
+another connector's `Graph:ConnectionId` is rejected at startup rather than
+allowed to overwrite its items.
+
+| Connector | Indexes | Connection | Configuration |
+|---|---|---|---|
+| `cdphdfsdocs` | Files under `Settings:HdfsRoots`, over HttpFS or WebHDFS. Each item carries the grants derived from that file's own POSIX ACL and Ranger | `cdphdfsdocs` | `appsettings.cdphdfsdocs.json` |
+| `cdphivecontracts` | Rows of `Source:ItemView`, over ODBC | `cdphivecontracts` | `appsettings.cdphivecontracts.json` |
+| `cdpatlascatalog` | The Apache Atlas catalogue. One item per entity — `hive_db` and `hive_table` by default, `hdfs_path` if `Settings:AtlasTypes` asks — carrying name, qualified name, owner, description, columns, Atlas classifications, glossary terms, one hop of lineage each way, and a modified timestamp | `cdpatlascatalog` | `appsettings.cdpatlascatalog.json` |
+
+```powershell
+.\CdpGraphPush.exe --connector cdpatlascatalog
+```
+
+**The catalogue describes data it may not index, and that is deliberate.** A
+table Ranger row-filters or masks never reaches the index as rows, because one
+indexed copy cannot show two people different rows or different values. Its
+name, its columns and its owner are a different matter: everybody granted select
+on that table already sees all three the moment they query it, so its catalogue
+entry is indexed for exactly those people and nobody else. The tables whose data
+can never be indexed are frequently the ones most worth cataloguing. If somebody
+asks why a table nobody can search the contents of is nevertheless findable by
+name, that is the answer.
+
+What still refuses a catalogue entry is a **deny** — a description of a table is
+still a disclosure about it — and a table no group is granted select on, because
+an entry granted to nobody is indexed and then returned to nobody. A
+**column-scoped** grant narrows rather than refuses: only the columns the grant
+names are described, since a column name discloses by existing.
+
+The connector is deliberately **stricter than the cluster**. CDP ships Atlas
+with a Ranger policy called `public` that grants every authenticated user read on
+every entity, and Atlas's authorisation is a separate Ranger service (`cm_atlas`)
+from Hadoop SQL (`cm_hive`), so a deny on a table's data does not hide that
+table's metadata in Atlas. None of
+that is mirrored here. "Everyone with a cluster account" and "everyone in the
+Microsoft 365 tenant" are different populations, and inheriting the first would
+publish the shape of the lake — table names, column names, owners — to people who
+cannot reach the cluster at all.
+
+### 6.2 Where the logs and the checkpoints are
+
+| | |
+|---|---|
+| Log file | `Logs\CdpGraphPush.log` beside the executable, for example `C:\Connectors\Cdp\Logs\CdpGraphPush.log`. Rolls at 10 MB, 30 files kept, `Information` and above |
+| Console | The same lines. A scheduled task discards them, so the file is what you read afterwards |
+| Checkpoints | `Settings:CheckpointDirectory`, default `state`, relative to the executable unless rooted |
+
+The log file is named after the **executable**, not the connector, so all three
+connectors write to one file and an existing deployment's log path does not move
+when a connector is added to it. Each run names the connector it is running:
+
+```
+02:00:04 [INF] CdpGraphPush starting connector cdpatlascatalog (CDP Atlas catalogue) against
+               connection cdpatlascatalog, configuration C:\Connectors\Cdp\appsettings.cdpatlascatalog.json.
+```
+
+If the `Logs` directory is not writable, the tool says so on stderr at startup
+rather than leaving an empty folder to be discovered during an incident.
+
+One checkpoint per connector, named for the connector key:
+
+```
+C:\Connectors\Cdp\state\cdphdfsdocs.watermark.json
+C:\Connectors\Cdp\state\cdphivecontracts.watermark.json
+C:\Connectors\Cdp\state\cdpatlascatalog.watermark.json
+```
+
+Each is written temp-then-rename, so a process killed mid-write leaves the old
+checkpoint or the new one and never half of either. An absent, unreadable or
+unparseable file is treated as **absent**, and absent means the next run re-reads
+and re-writes everything. That is safe, because every write is an upsert, but it
+is not free — and it resets `runCount`, which restarts the full-recrawl cadence
+in 6.5. Back the `state` directory up with the host, and do not put it anywhere a
+cleanup job treats as scratch.
+
+The marker only ever moves to an item whose write returned, so a failed run
+cannot advance it past something the index does not have. Re-running resumes; it
+does not duplicate.
+
+**The catalogue's checkpoint records where a run reached rather than limiting
+what it reads.** Atlas 2.1.0, which is what CDP 7.1.9 ships, cannot filter a
+basic search by modification time, so the catalogue is enumerated in full every
+run. That is affordable because a catalogue is thousands of entities rather than
+millions, and it is stated here plainly rather than left to be inferred from a
+run time.
+
+### 6.3 Kerberos and the gMSA — there is no secret to rotate
+
+That is the point of the design, and it is why this section is short. Everything
+`CdpGraphPush` does against the cluster — HttpFS or WebHDFS, HiveServer2, Ranger
+Admin, Atlas — is Kerberos over SSPI as the identity the process already runs as,
+a group managed service account for preference. Active Directory owns that
+account's password and rotates it on its own schedule; the process never sees it,
+no operator ever types it, and there is nothing on disk for a backup or a support
+bundle to leak. Sections 2 and 2a have no cluster equivalent because there is no
+stored value to change.
+
+Two things can still break, and neither of them is a rotation:
+
+1. **The host stops being able to obtain a ticket for the account.** A rebuilt or
+   renamed host that is no longer in the group named by
+   `-PrincipalsAllowedToRetrieveManagedPassword` cannot retrieve the gMSA's
+   password, and clock skew beyond the domain's tolerance — five minutes by
+   default — invalidates every ticket it does obtain. Check both from the
+   connector host:
+
+   ```powershell
+   Test-ADServiceAccount -Identity svc-cdp
+   w32tm /stripchart /computer:dc01.corp.example /samples:3 /dataonly
+   ```
+
+2. **The realm trust stops accepting it.** The connector obtains its ticket from
+   Windows, so the cluster's Kerberos realm must trust the Active Directory
+   domain — a cross-realm trust, or a cluster whose Kerberos is AD-integrated. If
+   that trust or a service principal changes, the ticket is still issued and the
+   cluster refuses it. That is a cluster-side change, not a connector one.
+
+Both present the same way, and it is the same exit code as an expired
+certificate, deliberately — this identity is no longer accepted, whoever is
+refusing it:
+
+```
+[FTL] The source rejected this identity.
+```
+
+Exit `3`. The Entra half says `The credential was rejected by Entra ID.` or
+`Graph rejected the caller (401)` instead, which is how you tell the two apart
+without leaving the log.
+
+**The Entra credential is still a certificate, and section 1 still applies** —
+with two differences. `Auth:CertificateStoreLocation` is `LocalMachine`, because
+this runs as a service account rather than as a person, and the gMSA needs
+**Read** on the private key. A certificate in `CurrentUser\My` is invisible to it
+and produces exit code `3` for a certificate you can plainly see in
+`certmgr.msc`.
+
+**The one mode with a secret at rest is `Settings:KerberosMode: MitKeytab`**, for
+a cluster whose realm has no trust to Active Directory. A keytab is a credential
+on disk, so it is opt-in, and it becomes an operator's rotation job: re-provision
+it whenever the principal's password changes, because nothing in this deployment
+warns you that it has stopped working. Note also that SSPI cannot consume an MIT
+ticket cache — the two modes are alternatives, not layers.
+
+### 6.4 When Ranger or Atlas is down, the run stops
+
+Deliberately, and for the same reason in both cases. Ranger is what decides which
+tables and paths may be copied into an index at all; Atlas is the catalogue
+itself. A run that carried on without either would publish part of the answer and
+report it as all of it.
+
+```
+[FTL] Ingestion failed.
+Ranger Admin at https://ranger01.corp.example:6182 could not be reached, so which tables and paths may be indexed is unknown. The run stops rather than indexing a source whose access policies it cannot read.
+```
+
+```
+[FTL] Ingestion failed.
+Atlas at https://atlas01.corp.example:31443 returned 503, so the catalogue cannot be read. The run stops rather than indexing part of it. Check that the Atlas service is healthy - /api/atlas/admin/status answers without authentication and returns ACTIVE on a working instance - and that this host may reach it.
+```
+
+There is nothing to change on the connector side of either. Confirm the service
+is healthy and that this host can reach it, then re-run: the writes are upserts
+and the watermark only moved over items whose write returned, so a re-run resumes
+rather than starting again.
+
+Atlas answers a status probe **without authentication**, which makes it the
+cheapest first check and one you can run as yourself rather than as the service
+account:
+
+```powershell
+Invoke-RestMethod https://atlas01.corp.example:31443/api/atlas/admin/status   # expect ACTIVE
+```
+
+A healthy instance returns `ACTIVE`. If it does and the run still fails, the
+fault is authentication rather than availability, and the exit code says so: a
+401 or 403 from Atlas or from Ranger is exit `3`, not `4`, because it is this
+identity being refused rather than the service being unwell. Atlas is reached
+with SPNEGO as the service account and this connector holds no password to offer
+it, so the fix is on the cluster or in the ticket, never in a configuration file.
+
+`Settings:AtlasBaseUrl` is the other thing worth checking before blaming the
+service, because it has no default on purpose. Atlas answers on 31443 in a stock
+CDP 7.1.9 install, on 21443 upstream, and on Knox's own port and path when Knox
+fronts it, and the setting is the base URL **without** `/api/atlas` — the
+connector appends the API path itself, which is what lets a Knox path work. A
+plain-HTTP URL is refused at startup rather than used.
+
+One Atlas failure is not fatal: a single entity deleted between the search and
+the read answers 404, and the connector indexes what it already has and carries
+on. That is the only status from Atlas that does not stop the run.
+
+### 6.5 The ACL staleness bound (`Settings:FullRecrawlEveryRuns`)
+
+Default `7`. This is the number to have in the deployment's risk register, and
+the reason it exists is worth stating precisely.
+
+**A permission change does not alter a file's modification time.** Revoke a
+group's read on a file at the source and the file looks untouched to every
+incremental pass, so its item keeps the ACL it was written with, and the people
+whose access was revoked keep finding it. The periodic full recrawl is the only
+thing in the HDFS crawl that re-derives item ACLs, which makes this setting the
+documented **upper bound on ACL staleness**: at a daily schedule and the default
+of 7, a revocation at the source can take up to seven days to reach the index.
+The log says which runs are full recrawls:
+
+```
+[INF] Run 8 is a full recrawl (every 7 runs). Every file is re-read, which is what re-derives
+      item ACLs after a permission change at the source and picks up files moved into scope
+      with older timestamps.
+```
+
+Lower it and pay for it in cluster reads and item writes; if a revocation has to
+be immediate, the answer is a live-query surface for that data rather than a
+smaller number here.
+
+**`0` does not start.** It would disable the full recrawl, and with it the only
+thing that re-derives item ACLs, so startup refuses the configuration with exit
+code `2` rather than letting an unbounded ACL staleness arrive by way of an edit
+nobody reviewed:
+
+```
+[FTL] Configuration in C:\Connectors\Cdp\appsettings.cdphdfsdocs.json is invalid. 1 problem(s):
+Settings:FullRecrawlEveryRuns: is 0, which disables the periodic full recrawl. That is also the only thing that re-derives item ACLs after a permission change at the source, because a permission change does not alter a file's modification time. Set it to the number of runs you are willing to have stale ACLs for, or record the decision in the deployment's risk register and set it to 1.
+```
+
+The three connectors are not bound by it equally, and an operator asked "how
+stale can this be" needs the distinction:
+
+- **`cdphdfsdocs`** — bounded by `Settings:FullRecrawlEveryRuns`, exactly as
+  above.
+- **`cdpatlascatalog`** — the catalogue is enumerated in full every run and every
+  entry's grants are re-derived from Ranger on each of them, so its bound is the
+  **schedule**: one run.
+- **`cdphivecontracts`** — a crawl watermarked on `Settings:HiveWatermarkColumn`
+  reads only new rows, so rows already indexed keep the ACL they were written
+  with. Clearing that setting reads the table whole every run, which is the
+  trade to make when a table's grants change more often than its rows do.

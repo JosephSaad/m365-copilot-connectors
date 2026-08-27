@@ -1,146 +1,185 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 910" width="1440" height="910" role="img" aria-labelledby="diagramTitle diagramDesc">
-  <title id="diagramTitle">SQL Server to Microsoft 365 Copilot data flow</title>
-  <desc id="diagramDesc">Rows are read from dbo.Tickets by SqlTicketsConnector, streamed over gRPC on loopback to the Microsoft Graph connector agent, ingested into Microsoft Graph as external items, indexed in the Copilot semantic index, and returned to users as grounded, security-trimmed answers in Copilot. Two optional operator-run tools, SqlGraphPush and SqlHierarchyPush, bypass the agent and write to Microsoft Graph directly.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" role="img" aria-labelledby="diagramTitle diagramDesc">
+  <title id="diagramTitle">Three sources, two paths, one index</title>
+  <desc id="diagramDesc">SQL Server and a Cloudera CDP cluster feed Microsoft 365 Copilot by two routes. The agent-hosted route runs a gRPC connector behind the Microsoft Graph connector agent and never calls Microsoft Graph itself. The direct push route runs console tools that call the Graph external items API themselves. Everything read from CDP passes a Ranger gate first, which decides whether a table or path may be indexed at all or must be left to a live query. Both routes write into one external index that Copilot and Microsoft Search read.</desc>
 
-  <rect x="0" y="0" width="1440" height="910" fill="#ffffff"/>
+  <rect x="0" y="0" width="1600" height="1000" fill="#ffffff"/>
 
-  <text x="40" y="46" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="600" fill="#1f2328">SQL Server to Microsoft 365 Copilot — data flow</text>
-  <text x="40" y="74" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#57606a">The connector never calls Microsoft Graph. The agent holds the tenant relationship and does all ingestion.</text>
+  <text x="40" y="46" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="600" fill="#1f2328">Three sources, two paths, one index</text>
+  <text x="40" y="74" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#57606a">The agent-hosted connector never calls Microsoft Graph. The direct push tools do, and hold the tenant relationship themselves.</text>
 
-  <!-- ============ zones ============ -->
-  <rect x="40" y="100" width="640" height="762" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <!-- ON PREMISES -->
+  <rect x="40" y="100" width="1000" height="850" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5" stroke-dasharray="6 5"/>
   <text x="64" y="128" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.4" fill="#57606a">ON-PREMISES — YOUR NETWORK</text>
 
-  <rect x="760" y="100" width="640" height="762" rx="12" fill="#f2f8ff" stroke="#b6d3f5" stroke-width="1.5" stroke-dasharray="6 5"/>
-  <text x="784" y="128" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.4" fill="#0a5ca8">MICROSOFT 365 CLOUD</text>
+  <text x="72" y="164" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.2" fill="#8c959f">SOURCES</text>
+  <text x="404" y="164" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.2" fill="#8c959f">WHAT MAY BE INDEXED</text>
+  <text x="660" y="164" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.2" fill="#8c959f">WHAT READS IT</text>
 
-  <!-- ============ A. SQL Server ============ -->
-  <rect x="72" y="158" width="290" height="106" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
-  <rect x="72" y="158" width="6" height="106" rx="3" fill="#6e7781"/>
-  <text x="96" y="186" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">SQL Server</text>
-  <text x="96" y="212" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="13" fill="#0550ae">dbo.Tickets</text>
-  <text x="96" y="234" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">SELECT only, least-privilege grant</text>
-  <text x="96" y="252" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">IsDeleted marks soft deletes</text>
+  <!-- SQL Server -->
+  <rect x="72" y="182" width="290" height="128" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <rect x="72" y="182" width="6" height="128" rx="3" fill="#6e7781"/>
+  <text x="96" y="210" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">SQL Server</text>
+  <text x="96" y="236" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">dbo.Tickets</text>
+  <text x="96" y="256" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">dbo.vwExternalItems</text>
+  <text x="96" y="280" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">SELECT only, least-privilege grant.</text>
+  <text x="96" y="298" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Views, so the filter cannot be edited out.</text>
 
-  <!-- arrow 1: SQL to connector -->
-  <line x1="217" y1="264" x2="217" y2="301" stroke="#57606a" stroke-width="2"/>
-  <polygon points="211,301 223,301 217,311" fill="#57606a"/>
-  <circle cx="247" cy="277" r="11" fill="#57606a"/>
-  <text x="247" y="282" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" fill="#ffffff">1</text>
-  <text x="266" y="275" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">Rows after the watermark,</text>
-  <text x="266" y="291" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">ordered by (LastModified, TicketId)</text>
+  <!-- CDP cluster -->
+  <rect x="72" y="336" width="290" height="288" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <rect x="72" y="336" width="6" height="288" rx="3" fill="#bc4c00"/>
+  <text x="96" y="364" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Cloudera CDP 7.1.9</text>
+  <text x="96" y="384" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Kerberised. Reached as the service account,</text>
+  <text x="96" y="402" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">with no credential held by the connector.</text>
 
-  <!-- ============ B. Connector ============ -->
-  <rect x="72" y="311" width="576" height="212" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="2"/>
-  <rect x="72" y="311" width="6" height="212" rx="3" fill="#0969da"/>
-  <text x="96" y="339" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#0550ae">SqlTicketsConnector · Windows service · gRPC on loopback</text>
+  <rect x="96" y="418" width="242" height="58" rx="6" fill="#fff8f2" stroke="#e5b489" stroke-width="1.2"/>
+  <text x="112" y="440" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">HDFS / HttpFS</text>
+  <text x="112" y="460" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Documents. Per-file POSIX ACLs.</text>
 
-  <text x="96" y="367" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">• Streams rows and checkpoints a composite watermark</text>
-  <text x="96" y="389" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">• Stamps the ACL: an Entra group object ID, per item</text>
-  <text x="96" y="411" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">• Truncates content at 4 MB on a UTF-8 boundary</text>
-  <text x="96" y="433" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">• Redacts row values before anything reaches a log</text>
-  <text x="96" y="455" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">• Emits DeletedItem for rows marked IsDeleted</text>
+  <rect x="96" y="486" width="242" height="58" rx="6" fill="#fff8f2" stroke="#e5b489" stroke-width="1.2"/>
+  <text x="112" y="508" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Hive / Impala</text>
+  <text x="112" y="528" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Tables, over ODBC with SSPI.</text>
 
-  <line x1="96" y1="472" x2="624" y2="472" stroke="#d0d7de" stroke-width="1"/>
-  <text x="96" y="493" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Identity: certificate, managed identity, or client secret from Credential Manager —</text>
-  <text x="96" y="511" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">used for Azure Key Vault only. No Graph permission is held here.</text>
+  <rect x="96" y="554" width="242" height="58" rx="6" fill="#fff8f2" stroke="#e5b489" stroke-width="1.2"/>
+  <text x="112" y="576" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Apache Atlas</text>
+  <text x="112" y="596" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">The catalogue: owners, lineage, tags.</text>
 
-  <!-- arrow 2: connector to agent -->
-  <line x1="217" y1="523" x2="217" y2="561" stroke="#57606a" stroke-width="2"/>
-  <polygon points="211,561 223,561 217,571" fill="#57606a"/>
-  <circle cx="247" cy="537" r="11" fill="#57606a"/>
-  <text x="247" y="542" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" fill="#ffffff">2</text>
-  <text x="266" y="535" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">CrawlStreamBit per item, over loopback.</text>
-  <text x="266" y="551" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">Never leaves the machine.</text>
+  <!-- Ranger gate -->
+  <rect x="404" y="336" width="212" height="288" rx="8" fill="#fff5f5" stroke="#cf222e" stroke-width="1.6"/>
+  <rect x="404" y="336" width="6" height="288" rx="3" fill="#cf222e"/>
+  <text x="428" y="364" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Apache Ranger</text>
+  <text x="428" y="386" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Read before anything else.</text>
+  <text x="428" y="404" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Unreachable stops the run.</text>
 
-  <!-- ============ C. Agent ============ -->
-  <rect x="72" y="571" width="576" height="152" rx="8" fill="#ffffff" stroke="#8250df" stroke-width="2"/>
-  <rect x="72" y="571" width="6" height="152" rx="3" fill="#8250df"/>
-  <text x="96" y="599" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#6639ba">Microsoft Graph connector agent</text>
-  <text x="96" y="625" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">• Schedules full and incremental crawls, and calls the connector</text>
-  <text x="96" y="647" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">• Hashes items to skip unchanged ones; detects duplicates</text>
-  <text x="96" y="669" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">• Detects deletions from what a full crawl no longer returns</text>
-  <text x="96" y="691" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">• Holds the tenant relationship and ingests into Microsoft Graph</text>
-  <text x="96" y="713" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Runs as NT Service\GcaHostService</text>
+  <text x="428" y="436" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#cf222e">Never indexed</text>
+  <text x="428" y="456" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• a row filter or column mask</text>
+  <text x="428" y="474" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• a deny, ever mirrored</text>
+  <text x="428" y="492" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• a column-scoped grant</text>
+  <text x="428" y="512" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Routed to a live query instead.</text>
 
-  <!-- ============ D. the direct push tools (optional) ============ -->
-  <rect x="72" y="756" width="576" height="98" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 4"/>
-  <text x="96" y="781" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="600" fill="#57606a">Direct push tools — optional, operator-run</text>
-  <text x="96" y="805" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12" fill="#57606a">SqlGraphPush</text>
-  <text x="216" y="805" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">dbo.Tickets — one flat table</text>
-  <text x="96" y="825" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12" fill="#57606a">SqlHierarchyPush</text>
-  <text x="216" y="825" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Customer &#8250; Engagement &#8250; TimeEntry, flattened in SQL views</text>
-  <text x="96" y="845" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Both bypass the agent. Separate connection IDs — one app owns what it creates.</text>
+  <text x="428" y="546" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#1a7f37">Indexed</text>
+  <text x="428" y="566" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Table-wide grants, with the</text>
+  <text x="428" y="584" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">granted groups becoming the</text>
+  <text x="428" y="602" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">item's ACL. No group, no item.</text>
 
-  <!-- ============ arrow 3: agent to Graph (elbow) ============ -->
-  <polyline points="648,640 702,640 702,196 782,196" fill="none" stroke="#57606a" stroke-width="2"/>
-  <polygon points="782,190 782,202 792,196" fill="#57606a"/>
-  <circle cx="702" cy="418" r="11" fill="#57606a"/>
-  <text x="702" y="423" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" fill="#ffffff">3</text>
-  <text x="716" y="400" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="600" fill="#1f2328">HTTPS 443</text>
-  <text x="716" y="445" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">outbound</text>
-  <text x="716" y="461" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">only</text>
+  <!-- Agent-hosted path -->
+  <rect x="660" y="182" width="352" height="180" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <rect x="660" y="182" width="6" height="180" rx="3" fill="#6e7781"/>
+  <text x="684" y="210" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">SqlTicketsConnector</text>
+  <text x="684" y="230" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Windows service, gRPC on loopback.</text>
+  <text x="684" y="254" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#bc4c00">Never calls Microsoft Graph.</text>
+  <text x="684" y="276" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• streams rows, checkpoints a watermark</text>
+  <text x="684" y="294" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• stamps the ACL, truncates at 4 MB</text>
+  <text x="684" y="312" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• redacts row values before any log</text>
+  <text x="684" y="330" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• emits DeletedItem for soft deletes</text>
+  <text x="684" y="352" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" font-style="italic" fill="#8c959f">The agent detects deletes and skips unchanged items.</text>
 
-  <!-- arrow: SqlGraphPush direct (dashed) -->
-  <polyline points="648,805 736,805 736,238 782,238" fill="none" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 4"/>
-  <polygon points="782,232 782,244 792,238" fill="#8c959f"/>
+  <!-- Direct push path -->
+  <rect x="660" y="392" width="352" height="232" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <rect x="660" y="392" width="6" height="232" rx="3" fill="#0969da"/>
+  <text x="684" y="420" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Direct push tools</text>
+  <text x="684" y="440" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Console apps. One line of Main each.</text>
 
-  <!-- ============ E. Microsoft Graph ============ -->
-  <rect x="792" y="158" width="576" height="118" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="2"/>
-  <rect x="792" y="158" width="6" height="118" rx="3" fill="#0969da"/>
-  <text x="816" y="186" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#0550ae">Microsoft Graph — Copilot connectors API</text>
-  <text x="816" y="212" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12" fill="#0550ae">PUT /external/connections/{id}/items/{itemId}</text>
-  <text x="816" y="236" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">externalItem: id, properties (flat), content, acl</text>
-  <text x="816" y="258" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Schema registered once, per connection</text>
+  <rect x="684" y="454" width="304" height="44" rx="6" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.2"/>
+  <text x="700" y="472" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">SqlGraphPush</text>
+  <text x="700" y="490" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">one flat table</text>
 
-  <!-- arrow 4 -->
-  <line x1="1080" y1="276" x2="1080" y2="322" stroke="#57606a" stroke-width="2"/>
-  <polygon points="1074,322 1086,322 1080,332" fill="#57606a"/>
-  <circle cx="1050" cy="299" r="11" fill="#57606a"/>
-  <text x="1050" y="304" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" fill="#ffffff">4</text>
-  <text x="1100" y="304" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">Indexed with its ACL attached</text>
+  <rect x="684" y="506" width="304" height="44" rx="6" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.2"/>
+  <text x="700" y="524" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">SqlHierarchyPush</text>
+  <text x="700" y="542" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">customer, engagement, time entry</text>
 
-  <!-- ============ F. Semantic index ============ -->
-  <rect x="792" y="332" width="576" height="118" rx="8" fill="#ffffff" stroke="#1a7f37" stroke-width="2"/>
-  <rect x="792" y="332" width="6" height="118" rx="3" fill="#1a7f37"/>
-  <text x="816" y="360" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#116329">Copilot semantic index</text>
-  <text x="816" y="386" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">Full-text and semantic representation of each item</text>
-  <text x="816" y="408" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">Stored in your tenant's region; counts against item quota</text>
-  <text x="816" y="432" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Deletions arrive here two ways — see the note below</text>
+  <rect x="684" y="558" width="304" height="52" rx="6" fill="#f2f8ff" stroke="#b6d3f5" stroke-width="1.4"/>
+  <text x="700" y="576" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">CdpGraphPush</text>
+  <text x="700" y="594" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">HDFS documents · Hive tables · Atlas catalogue</text>
 
-  <!-- arrow 5 -->
-  <line x1="1080" y1="450" x2="1080" y2="492" stroke="#57606a" stroke-width="2"/>
-  <polygon points="1074,492 1086,492 1080,502" fill="#57606a"/>
-  <circle cx="1050" cy="471" r="11" fill="#57606a"/>
-  <text x="1050" y="476" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" fill="#ffffff">5</text>
-  <text x="1100" y="476" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">Retrieved and security-trimmed per user</text>
+  <!-- Shared core -->
+  <rect x="72" y="664" width="940" height="118" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1.5"/>
+  <rect x="72" y="664" width="6" height="118" rx="3" fill="#0969da"/>
+  <text x="96" y="692" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">PushCore — the shared engine, which names no source technology</text>
+  <text x="96" y="716" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Connection and schema registration · truncation · ACLs · the PUT with backoff · exit codes 0/2/3/4 · redaction</text>
+  <text x="96" y="738" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">A connector supplies a schema and an IPushSource. Only the engine may say an item counted, and only after the write</text>
+  <text x="96" y="756" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">returned — which is what makes it impossible for a failed crawl to advance a watermark.</text>
+  <text x="96" y="776" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8c959f">PushCore.Sql adds the SQL half · CdpConnector.Source adds the Cloudera half · Connector.Security is shared by all</text>
 
-  <!-- ============ G. Copilot ============ -->
-  <rect x="792" y="502" width="576" height="130" rx="8" fill="#ffffff" stroke="#bf3989" stroke-width="2"/>
-  <rect x="792" y="502" width="6" height="130" rx="3" fill="#bf3989"/>
-  <text x="816" y="530" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#99286e">Microsoft 365 Copilot · Copilot Chat · Search</text>
-  <text x="816" y="556" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">Grounds its answer in the retrieved items</text>
-  <text x="816" y="578" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">Cites each one, linking back to the ticket in the source system</text>
-  <text x="816" y="602" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">A user sees an item only if they are in the group its ACL grants</text>
+  <!-- Not indexed / live query -->
+  <rect x="72" y="806" width="940" height="112" rx="8" fill="#fffbf0" stroke="#d4a72c" stroke-width="1.5"/>
+  <rect x="72" y="806" width="6" height="112" rx="3" fill="#d4a72c"/>
+  <text x="96" y="834" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">What deliberately does not go into the index</text>
+  <text x="96" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">A row-filtered or masked table is a per-user view of the data, and an index holds one copy — so it is queried live instead.</text>
+  <text x="96" y="878" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">A file whose groups resolve to no Entra group is skipped, never written with a fallback grant. Fact tables, event streams</text>
+  <text x="96" y="898" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">and raw landing zones are analytics assets, not knowledge assets. The catalogue is indexed even when its tables are not.</text>
 
-  <!-- arrow 6 both ways -->
-  <line x1="1062" y1="632" x2="1062" y2="672" stroke="#57606a" stroke-width="2"/>
-  <polygon points="1056,672 1068,672 1062,682" fill="#57606a"/>
-  <line x1="1098" y1="682" x2="1098" y2="642" stroke="#57606a" stroke-width="2"/>
-  <polygon points="1092,642 1104,642 1098,632" fill="#57606a"/>
-  <circle cx="1020" cy="657" r="11" fill="#57606a"/>
-  <text x="1020" y="662" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" fill="#ffffff">6</text>
-  <text x="1120" y="662" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">Question, then a cited answer</text>
+  <!-- CLOUD -->
+  <rect x="1080" y="100" width="480" height="850" rx="12" fill="#f2f8ff" stroke="#b6d3f5" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="1104" y="128" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.4" fill="#0a5ca8">MICROSOFT 365 CLOUD</text>
 
-  <!-- ============ H. Users ============ -->
-  <rect x="792" y="682" width="576" height="104" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
-  <circle cx="836" cy="726" r="13" fill="#57606a"/>
-  <path d="M 818 760 a 18 16 0 0 1 36 0 z" fill="#57606a"/>
-  <text x="874" y="722" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Your users</text>
-  <text x="874" y="746" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#1f2328">"What did we tell Contoso about the payment gateway outage?"</text>
-  <text x="874" y="768" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">No access to SQL Server, and none needed</text>
+  <rect x="1112" y="182" width="416" height="112" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <rect x="1112" y="182" width="6" height="112" rx="3" fill="#6e7781"/>
+  <text x="1136" y="210" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Graph connector agent</text>
+  <text x="1136" y="232" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Holds the tenant relationship for the</text>
+  <text x="1136" y="250" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">agent-hosted route, and does its ingestion.</text>
+  <text x="1136" y="274" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Hashes items, detects deletions.</text>
 
-  <!-- ============ footnote ============ -->
-  <line x1="40" y1="878" x2="1400" y2="878" stroke="#d0d7de" stroke-width="1"/>
-  <text x="40" y="898" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Deletions: an incremental crawl sends DeletedItem for a row marked IsDeleted, within minutes. A full crawl omits it, and the agent removes what it no longer sees. Both paths end at the semantic index.</text>
+  <rect x="1112" y="392" width="416" height="112" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1.5"/>
+  <rect x="1112" y="392" width="6" height="112" rx="3" fill="#0969da"/>
+  <text x="1136" y="420" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Copilot connectors API</text>
+  <text x="1136" y="444" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12" fill="#0550ae">PUT /external/connections/{id}</text>
+  <text x="1136" y="462" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12" fill="#0550ae">     /items/{itemId}</text>
+  <text x="1136" y="486" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">One connection per connector. Append-only schema.</text>
+
+  <rect x="1112" y="560" width="416" height="106" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <rect x="1112" y="560" width="6" height="106" rx="3" fill="#6e7781"/>
+  <text x="1136" y="588" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">The external index</text>
+  <text x="1136" y="612" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Security-trimmed per item, by Entra group.</text>
+  <text x="1136" y="632" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">An item granted to nobody is returned to</text>
+  <text x="1136" y="650" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">nobody — which is why none is ever written.</text>
+
+  <rect x="1112" y="716" width="416" height="90" rx="8" fill="#ffffff" stroke="#8250df" stroke-width="1.6"/>
+  <rect x="1112" y="716" width="6" height="90" rx="3" fill="#8250df"/>
+  <text x="1136" y="744" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Microsoft 365 Copilot</text>
+  <text x="1136" y="768" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">and Microsoft Search, grounded on what</text>
+  <text x="1136" y="786" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">the asker is entitled to see, and nothing else.</text>
+
+  <!-- EDGES -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#57606a"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0969da"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#cf222e"/>
+    </marker>
+  </defs>
+
+  <!-- SQL Server to the agent-hosted connector -->
+  <path d="M362,224 L660,224" fill="none" stroke="#57606a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="420" y="216" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">rows after the watermark</text>
+
+  <!-- SQL Server to the direct push tools -->
+  <path d="M362,272 L628,272 L628,478 L684,478" fill="none" stroke="#0969da" stroke-width="1.6" marker-end="url(#arrowBlue)"/>
+
+  <!-- CDP to Ranger -->
+  <path d="M362,480 L404,480" fill="none" stroke="#cf222e" stroke-width="1.8" marker-end="url(#arrowRed)"/>
+
+  <!-- Ranger to the CDP tool -->
+  <path d="M616,480 L648,480 L648,584 L684,584" fill="none" stroke="#0969da" stroke-width="1.6" marker-end="url(#arrowBlue)"/>
+  <text x="470" y="638" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" font-style="italic" fill="#8c959f">only what the policies permit</text>
+
+  <!-- Agent-hosted to the agent -->
+  <path d="M1012,238 L1112,238" fill="none" stroke="#57606a" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- Agent to the API -->
+  <path d="M1320,294 L1320,392" fill="none" stroke="#57606a" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- Direct push to the API -->
+  <path d="M1012,508 L1112,458" fill="none" stroke="#0969da" stroke-width="1.8" marker-end="url(#arrowBlue)"/>
+  <text x="1014" y="546" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" fill="#0969da">HTTPS 443</text>
+  <text x="1014" y="562" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" fill="#0969da">outbound only</text>
+
+  <!-- API to index to Copilot -->
+  <path d="M1320,504 L1320,560" fill="none" stroke="#0969da" stroke-width="1.6" marker-end="url(#arrowBlue)"/>
+  <path d="M1320,666 L1320,716" fill="none" stroke="#8250df" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <text x="40" y="978" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#8c959f">Adding a source is a class and a configuration file. Nothing in PushCore changes, and no existing connector is touched or even rebuilt differently.</text>
 </svg>

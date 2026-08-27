@@ -14,17 +14,23 @@ separate document rather than a section in
                       └──────┬───────┘
                              │ SPNEGO
   ┌────────────┐   ┌─────────┴────────┐   ┌────────────┐        ┌──────────────────┐
-  │ HDFS       │ 1 │ CdpGraphPush     │ 3 │ Graph      │ ┌──4───→│ Microsoft Search │
+  │ HDFS       │ 1 │ CdpGraphPush     │ 4 │ Graph      │ ┌──5───→│ Microsoft Search │
   │ HttpFS     │──→│ Windows Server   │──→│ ingestion  │─┤       └──────────────────┘
   ├────────────┤   │ running as gMSA  │   └────────────┘ │       ┌──────────────────┐
-  │ Hive/Impala│ 2 │                  │                  └──5───→│ Copilot semantic │
+  │ Hive/Impala│ 2 │                  │                  └──6───→│ Copilot semantic │
   │ ODBC       │──→│                  │                          │ index            │
-  └────────────┘   └──────────────────┘                          └──────────────────┘
+  ├────────────┤   │                  │                          └──────────────────┘
+  │ Atlas      │ 3 │                  │
+  │ REST       │──→│                  │
+  └────────────┘   └──────────────────┘
 ```
 
-**Two identities, one process.** Hops 1 and 2 are Kerberos as the Windows
+The same picture with both delivery paths on it, and a panel on what
+deliberately never reaches the index, is [`architecture.png`](architecture.png).
+
+**Two identities, one process.** Hops 1 to 3 are Kerberos as the Windows
 account the process runs as — a gMSA, over SSPI and HTTP Negotiate, with no
-password and no keytab anywhere. Hop 3 is the Entra app registration and its
+password and no keytab anywhere. Hop 4 is the Entra app registration and its
 certificate. They fail independently and for unrelated reasons, and the exit
 code deliberately does not distinguish them; see
 [stage 1](#stage-1--the-two-rejections-that-share-exit-3).
@@ -34,26 +40,39 @@ policies are read, and an unreadable Ranger fails the run. That is the single
 behaviour most often reported as a defect, and it is
 [stage 2](#stage-2--ranger-and-why-an-unreachable-one-stops-the-run).
 
+**The catalogue connector is stricter than the cluster, on purpose.** CDP ships
+Atlas with a Ranger policy that lets every authenticated user read every entity,
+and `cdpatlascatalog` does not mirror it. That, and the row-filtered table whose
+catalogue entry is indexed while its rows are not, are
+[stage 8](#stage-8--the-catalogue-connector).
+
 ---
 
-## The two connectors
+## The three connectors
 
-One executable hosts both. Each has its own connection, its own schema and its
-own checkpoint file, and they must never share a connection ID.
+One executable hosts all three. Each has its own connection, its own schema and
+its own checkpoint file, and they must never share a connection ID.
 
-| | `cdphdfsdocs` | `cdphivecontracts` |
-|---|---|---|
-| Run | `CdpGraphPush.exe --connector cdphdfsdocs` | `CdpGraphPush.exe --connector cdphivecontracts` |
-| Configuration | `appsettings.cdphdfsdocs.json` | `appsettings.cdphivecontracts.json` |
-| Source | HttpFS or WebHDFS at `Settings:HdfsBaseUrl` | Hive or Impala over ODBC |
-| Ranger service | `Settings:RangerHdfsService` (`cm_hdfs`) | `Settings:RangerSqlService` (`cm_hive`) |
-| Watermark | (modification time, path) | (`HiveWatermarkColumn`, `HiveKeyColumn`) |
-| Checkpoint | `state\cdphdfsdocs.watermark.json` | `state\cdphivecontracts.watermark.json` |
-| Item ID | `h` + SHA-256 of the path | `t` + SHA-256 of table + key |
+| | `cdphdfsdocs` | `cdphivecontracts` | `cdpatlascatalog` |
+|---|---|---|---|
+| Run | `CdpGraphPush.exe --connector cdphdfsdocs` | `CdpGraphPush.exe --connector cdphivecontracts` | `CdpGraphPush.exe --connector cdpatlascatalog` |
+| Configuration | `appsettings.cdphdfsdocs.json` | `appsettings.cdphivecontracts.json` | `appsettings.cdpatlascatalog.json` |
+| Source | HttpFS or WebHDFS at `Settings:HdfsBaseUrl` | Hive or Impala over ODBC | Atlas REST at `Settings:AtlasBaseUrl` |
+| Indexes | file content | rows | metadata about databases, tables and paths |
+| Ranger service | `Settings:RangerHdfsService` (`cm_hdfs`) | `Settings:RangerSqlService` (`cm_hive`) | `Settings:RangerSqlService` (`cm_hive`), for who may see an entry |
+| Watermark | (modification time, path) | (`HiveWatermarkColumn`, `HiveKeyColumn`) | (Atlas modification time, entity GUID) |
+| Checkpoint | `state\cdphdfsdocs.watermark.json` | `state\cdphivecontracts.watermark.json` | `state\cdpatlascatalog.watermark.json` |
+| Item ID | `h` + SHA-256 of the path | `t` + SHA-256 of table + key | `a` + the Atlas GUID with its hyphens removed |
+
+The catalogue's item ID is the only one that is not a hash, because it does not
+need to be: an Atlas GUID is a UUID, so stripping its hyphens leaves 32
+characters that are already ASCII alphanumeric and well inside the 128 Graph
+allows. Hashing it would only make it unreadable in a log, and the ID is what
+lets an entry be found in Graph from the GUID Atlas shows in its own UI.
 
 The configuration file is resolved as `appsettings.{connector key}.json` beside
 the executable, falling back to `appsettings.json`. The log is named after the
-**executable**, so both connectors write `Logs\CdpGraphPush.log`.
+**executable**, so all three connectors write `Logs\CdpGraphPush.log`.
 
 `--dry-run` builds the schema, checks the connection is not another connector's
 with read-only GETs, reads the source and maps every item, and writes nothing.
@@ -80,6 +99,13 @@ command after any configuration change.
 | An item is still visible after access was revoked at the source | [6](#stage-6--the-watermark-and-the-acl-staleness-bound) — **this one matters** |
 | A file moved or renamed into a crawled directory never appears | [6](#a-file-renamed-into-scope) |
 | A deleted file or dropped row is still returned | [7](#stage-7--a-push-never-deletes) |
+| Exit 3, "Atlas refused this identity" | [8](#exit-3-and-the-ranger-service-that-is-not-hadoop-sql) — `cm_atlas`, which is not the Hadoop SQL service |
+| Exit 4, "Atlas at ... could not be reached" or "... returned N" | [8](#an-atlas-that-cannot-be-read-stops-the-run) |
+| A table has no catalogue entry in search | [8](#an-entry-missing-from-search) — four causes, only one of which logs |
+| A catalogue entry exists but the table's rows are not indexed | [8](#the-entry-is-there-and-the-data-is-not) — **correct, and not a defect** |
+| A catalogue entry describes fewer columns than the table has | [8](#fewer-columns-described-than-the-table-has) |
+| A catalogue entry with no lineage on it | [8](#an-entry-with-no-lineage) |
+| The catalogue connector re-reading everything every run | [8](#every-run-reads-the-whole-catalogue) — expected, and cheap |
 | In search but not in Copilot | [`TROUBLESHOOTING.md` stage 7](TROUBLESHOOTING.md#stage-7--copilot-grounds-on-them) — shared with every path |
 
 ---
@@ -134,10 +160,12 @@ Two of its findings are written for `SqlGraphPush` and are expected here:
 - It warns that `Auth:CertificateStoreLocation` is not `CurrentUser`.
   `SqlGraphPush` runs as a person; these connectors run as a service, so
   `LocalMachine` is correct.
-- It fails `Acl:GrantGroupObjectIds` for being empty. Empty is correct for both
-  CDP connectors: every item carries the grants HDFS and Ranger give it, so a
-  connection-wide grant would be wrong for almost every item, and a file whose
-  groups cannot be resolved is skipped rather than granted that list.
+- It fails `Acl:GrantGroupObjectIds` for being empty. Empty is correct for all
+  three CDP connectors: every item carries the grants HDFS and Ranger give it —
+  for a catalogue entry, the groups Ranger grants select on the table it
+  describes — so a connection-wide grant would be wrong for almost every item,
+  and an item whose groups cannot be resolved is skipped rather than granted
+  that list.
 
 Everything else it reports — placeholders, the certificate, the token, the roles
 actually consented, connection ownership and state — applies unchanged.
@@ -169,6 +197,11 @@ The ones that are refused for a reason worth knowing:
 | `Settings:RangerBaseUrl` | it is empty | "is required. Ranger decides which tables and paths may be indexed at all ... and this connector will not index a source whose policies it cannot read." |
 | `Settings:HiveUseSsl` | it is `false` | "is false. A Kerberised HiveServer2 endpoint in a regulated deployment is TLS terminated; turning this off puts every row this connector reads on the wire in clear." |
 | `Settings:HiveTransport` | it is anything else | "must be one of [http, sasl]; found 'binary'." |
+| `Settings:AtlasBaseUrl` | it is empty | "is required but was empty." — there is no default, for the reason at [stage 8](#why-atlasbaseurl-has-no-default) |
+| `Settings:AtlasBaseUrl` | the scheme is not https | "must be https. Kerberos on Atlas requires TLS in CDP, and the catalogue describes the shape of the lake - table names, column names and owners - which is not something to put on the wire in clear." |
+| `Settings:AtlasBaseUrl` | it contains `/api/atlas` | "must be the base URL only, without /api/atlas. The connector appends the API path itself, which is also what makes a Knox gateway path work." |
+| `Settings:AtlasTypes` | it is empty | "must list at least one Atlas entity type, separated by semicolons, for example hive_db;hive_table." |
+| `Settings:AtlasPageSize` | it is outside 1 to 10000 | "must be between 1 and 10000; found 25000." Atlas caps a page at `atlas.search.maxlimit`, which is 10,000 by default |
 
 ### Why `HiveExtraOptions` is inspected keyword by keyword
 
@@ -250,6 +283,17 @@ the REST API with basic authentication against local Ranger users rather than
 SPNEGO.** This client does Kerberos only, on purpose, because a password here
 would be a secret in a configuration file. Enabling Kerberos authentication on
 the Ranger Admin API is a cluster-side change, not a connector change.
+
+**Atlas**, on the catalogue connector only:
+
+```
+Atlas refused this identity with 403. The service account needs read access to the entities it is
+to catalogue, and Atlas must accept Kerberos - this connector holds no password to offer it.
+```
+
+Atlas authorises through a Ranger service of its own, which is not the one that
+decides what may be indexed, and a 401 and a 403 here mean different things.
+Both are at [stage 8](#exit-3-and-the-ranger-service-that-is-not-hadoop-sql).
 
 ### What to check, in order
 
@@ -361,7 +405,11 @@ its own tenant ceiling halfway through a crawl leaves a half-populated index and
 no clear answer about what is in it. The budget turns that into a refusal with
 the real count, before anything is written. `Settings:ItemBudget` is enforced by
 the HDFS crawl; the Hive path is bounded by `Source:MaxItems`, which becomes a
-`LIMIT` on the query.
+`LIMIT` on the query. The catalogue crawl enforces neither — the setting is
+still range-checked at stage 0, and the catalogue is thousands of entities
+rather than millions, so the only cap that acts on it is
+`Settings:MaxItemsPerRun`, which on that connector has a consequence worth
+reading first at [stage 8](#every-run-reads-the-whole-catalogue).
 
 A budget outside 0 to 100000000 is a configuration error at
 [stage 0](#stage-0--configuration) instead: "must be between 0 and 100000000".
@@ -813,6 +861,344 @@ same directory twice by two different names.
 
 ---
 
+## Stage 8 — the catalogue connector
+
+`cdpatlascatalog` indexes what the lake **contains** rather than what is in it:
+one item per Atlas entity — `hive_db` and `hive_table` by default, `hdfs_path`
+when `Settings:AtlasTypes` asks for it — carrying the name, the qualified name,
+the owner, the description, the columns, Atlas's classifications and glossary
+terms, one hop of lineage each way, and a modified timestamp. It is the only
+connector here that can describe data it may not index, and most of what gets
+reported against it comes from that one sentence.
+
+**Two Ranger services are involved, and they decide different things.** Atlas
+authorises through a Ranger service of its own, separate from Hadoop SQL.
+Confusing the two accounts for more time lost on this connector than everything
+else in this stage put together.
+
+| Service | Decides |
+|---|---|
+| `cm_atlas` | whether the **service account** may read an entity out of Atlas at all |
+| `Settings:RangerSqlService` (`cm_hive`) | who a catalogue entry is **granted to** once it has been read |
+
+A deny in Hadoop SQL does not hide a table's metadata in Atlas — Atlas never
+consults that service, and on a stock cluster the "public" policy in `cm_atlas`
+lets every authenticated user read every entity. It is this connector, not the
+cluster, that refuses to publish such an entry, and
+[why](#who-an-entry-is-granted-to-and-why-it-is-narrower-than-the-cluster) is
+the part worth reviewing.
+
+### Exit 3, and the Ranger service that is not Hadoop SQL
+
+The run-level line is the shared one, `The source rejected this identity.`, and
+the exception it wraps names Atlas:
+
+```
+Atlas refused this identity with 403. The service account needs read access to the entities it is
+to catalogue, and Atlas must accept Kerberos - this connector holds no password to offer it.
+```
+
+The status code separates two different faults:
+
+- **401** is Atlas not accepting the Kerberos exchange at all. Same question as
+  every other 401 on this path — which account is the process running as, and
+  does it hold a ticket for the cluster's realm. Work through
+  [stage 1's list](#what-to-check-in-order); nothing about it is
+  Atlas-specific.
+- **403** is Kerberos having worked and the account not being granted. The
+  service account needs **entity-read in the `cm_atlas` Ranger service**. That
+  is a different policy list from the one deciding which tables may be indexed,
+  and an account holding every Hadoop SQL grant in the cluster can still be
+  refused by it. Grant it under `cm_atlas`, not under `cm_hive`.
+
+Authentication is SPNEGO as the service account, exactly as it is for HDFS, Hive
+and Ranger. The client sends no `Authorization` header of its own and must not:
+Atlas's authentication filter prefers basic authentication over Kerberos when
+both are enabled, so a password put in a header would quietly replace the
+identity the rest of this path uses — and it would be a secret in a
+configuration file, which stage 0 already refuses on the ODBC side for the same
+reason.
+
+One further Atlas-specific detail: the catalogue is read with `GET
+/api/atlas/v2/search/basic` rather than the POST form. Atlas installs its own
+CSRF filter in front of non-GET REST calls, and whether that filter demands a
+header depends on `atlas.rest-csrf.enabled` at the cluster — a setting this
+connector cannot see and should not depend on. The GET form takes the same
+parameters, so a CSRF configuration change on the cluster cannot break this run.
+
+### An Atlas that cannot be read stops the run
+
+Two messages, both exit 4, both fatal. The first is a connection that never
+completed:
+
+```
+Atlas at https://atlas01.corp.example:31443 could not be reached, so the catalogue cannot be read.
+Check the base URL - Atlas's port differs between CDP topologies and again when Knox fronts it -
+and that this host can reach it.
+```
+
+The second is Atlas answering with something that is not a success:
+
+```
+Atlas at https://atlas01.corp.example:31443 returned 503, so the catalogue cannot be read. The run
+stops rather than indexing part of it. Check that the Atlas service is healthy -
+/api/atlas/admin/status answers without authentication and returns ACTIVE on a working instance -
+and that this host may reach it.
+```
+
+**Why a partial read is refused** is the same argument as the unreachable Ranger
+at [stage 2](#stage-2--ranger-and-why-an-unreachable-one-stops-the-run), and it
+is sharper here. A catalogue read that half worked publishes a partial map of
+the lake and presents it as the whole one. Nothing in the index distinguishes a
+table Atlas failed to return from a table that does not exist, so somebody
+searching for a dataset that is missing concludes it is not there and builds a
+second copy of it. An index whose gaps are invisible is worse than no index.
+
+A **404 is not fatal**, and the asymmetry is deliberate: an entity deleted
+between the search and the detail read is normal in a live catalogue, so that
+one entity is indexed from what the search already returned rather than failing
+the run.
+
+**The preflight is one command and needs no credential:**
+
+```powershell
+curl.exe -sk https://atlas01.corp.example:31443/api/atlas/admin/status
+```
+
+`/api/atlas/admin/status` answers without authentication, and a healthy instance
+returns `ACTIVE`. That makes it the fastest way to separate the three faults
+that look identical from the log: no answer at all means the host, port or
+firewall is wrong; `PASSIVE` means this is the standby of an HA pair and the
+active one is elsewhere; `ACTIVE` means Atlas is healthy and the problem is the
+identity, which is exit 3 rather than exit 4.
+
+Neither message carries a response body, and that is on purpose. An Atlas error
+body echoes the request and a Java stack trace, and neither belongs in a log a
+wider group can read than can read the catalogue.
+
+### Why `AtlasBaseUrl` has no default
+
+Every other URL setting on this path has a shape that can be guessed;
+`Settings:AtlasBaseUrl` does not. Atlas answers on **31443** in a stock CDP 7.1.9
+install (31000 without TLS, which this connector refuses), on **21443** in
+upstream Atlas, and on the **Knox gateway's own port and path** when Knox fronts
+it. A default that happens to be wrong for the topology in front of you produces
+a connection error at the least helpful moment — during the first run, on a
+Kerberised host, where every other explanation is more plausible than a guessed
+port. So the operator states it, and an empty value is exit 2 at
+[stage 0](#stage-0--configuration).
+
+The value must be the base URL **without** `/api/atlas`. The connector appends
+the API path itself, which is also what lets a Knox gateway path work: with the
+gateway's path in the base URL and the API path appended to it, one setting
+covers both topologies. Pasting a full API URL out of a browser is the common
+mistake, and it is refused at startup rather than producing a 404 halfway
+through a run.
+
+### Who an entry is granted to, and why it is narrower than the cluster
+
+An entry is granted to **exactly the groups Ranger grants select on the table it
+describes**, and skipped when that is nobody. It does not inherit Atlas's own
+answer, which on a stock CDP cluster is "everyone with an account".
+
+"Everyone with a cluster account" and "everyone in the Microsoft 365 tenant" are
+different populations. Inheriting the first into the second would publish the
+shape of the lake — table names, column names, owners, what is classified as PII
+— to people who cannot reach the cluster at all, and who would have no way of
+knowing the search result they are reading describes data they may not see.
+Narrower than the source is the safe direction to be wrong in, and this is the
+one connector where the source is deliberately not followed.
+
+The four symptoms that follow are all that decision, seen from the outside.
+
+### An entry missing from search
+
+Four causes, and **only the first logs anything per entity.** Check them in this
+order.
+
+1. **The table's groups did not resolve.** The only per-entity line there is:
+
+   ```
+   The catalogue entry for contracts.contract@cm resolves to no Entra group and is not indexed.
+   ```
+
+   Ranger granted select to a group, and the group mapped to nothing. Same cause
+   and same fix as [stage 4](#1-the-group-did-not-resolve):
+   `Settings:EntraGroupMap`, or `Settings:ResolveGroupsFromDirectory`. An
+   unresolved group is dropped rather than guessed at, here as everywhere else.
+
+2. **No Ranger policy grants select on the table to any group.** There is nobody
+   to grant the entry to, and an entry granted to nobody is indexed and then
+   returned to no one.
+
+3. **A deny covers the table.** A deny refuses the catalogue entry as well as
+   the rows, because **a description of a table is still a disclosure about
+   it**: the column list of `contracts.contract_ppi` says what the cluster holds
+   about people even to somebody who can never read a row of it. Deny rules are
+   not mirrored into the index anywhere in this connector, for the reason at
+   [stage 3](#stage-3--a-table-that-returns-no-rows) — a mirrored deny that
+   drifts fails open — so the entry is simply not written.
+
+4. **Atlas scrubbed the entity before the connector saw it.** Ranger's plugin
+   inside Atlas does not remove a search hit the caller may not read: it **blanks
+   the header in place and sets its GUID to `-1`**, so the page length is
+   unchanged and the entity arrives as an empty shell. Those are dropped, since
+   indexing one would put a nameless item in the catalogue. This is the
+   `cm_atlas` service refusing the **service account**, not a routing decision.
+
+**Telling case 4 apart from cases 2 and 3** is a counting exercise, and the log
+has the count. Every type logs one line:
+
+```
+Atlas returned 412 live hive_table entit(y/ies).
+```
+
+That number is what Atlas was willing to show the service account. Compare it
+with the number of tables Atlas reports to an administrator in its own UI.
+
+| What you see | Where the entity was lost |
+|---|---|
+| The count is **short** | Scrubbed by Atlas, or the type is not in `Settings:AtlasTypes`. The service account is missing entity-read in `cm_atlas` |
+| The count is **right**, entries still missing, `skipped=` in the run summary is large | Refused after the read, by the Hadoop SQL policies — cause 2 or 3 |
+| The count is right and the per-entity warning above is in the log | Cause 1, the group mapping |
+
+Causes 2 and 3 log nothing per entity; they show only in the run summary's
+`skipped=` count, alongside entities of a type this connector does not describe:
+
+```
+Ingestion complete. 412 row(s) processed (catalogue=412) for connection cdpatlascatalog;
+412 distinct item(s). truncated=0 skipped=1,180 duplicates=0 throttleWaits=0
+```
+
+`Test-RangerRouting.ps1` will tell you which of 2 and 3 applies, because a deny
+and an ungranted table both name their reason and their policy IDs there. Read
+its verdicts with the caveat in the next section: **its `LIVE QUERY` is the
+verdict for the table's data, not for its catalogue entry**, and for a filtered
+or masked table the two deliberately disagree.
+
+### The entry is there and the data is not
+
+**This is correct. Do not fix it.** A table that
+[stage 3](#stage-3--a-table-that-returns-no-rows) routes to a live query, because
+Ranger applies a row-level filter or a column mask to it, still has a catalogue
+entry in the index — and it is meant to.
+
+A filter governs which **rows** a person sees. A mask governs which **values**
+they see. Neither hides the table's existence, its column names or its owner
+from somebody granted select on it: they see all of that the moment they run
+`DESCRIBE`. So the entry discloses nothing to those people that the cluster does
+not already show them, while the rows — the thing the filter and the mask
+actually protect — are never read at all.
+
+The tables hardest to index are frequently the ones a catalogue is most needed
+for, precisely because their contents can never be indexed. A row-filtered
+patient table that nobody can find is a table somebody rebuilds from scratch
+rather than requesting access to.
+
+The entry carries no rows and no values: the body is the name, the owner, the
+description, the column names, the classifications, the glossary terms and one
+hop of lineage. Nothing filtered and nothing masked is in it.
+
+What this looks like when it is misread as a fault:
+
+```
+contracts.contract_ppi   LIVE QUERY  Ranger applies a row-level filter
+```
+
+That is `Test-RangerRouting.ps1` reporting the **data** verdict, and it is
+correct. The catalogue rule is a different rule with a different answer, and the
+five Atlas tests pinned in `ControlEvidenceTests` exist so that a well-meant
+"fix" aligning the two fails the build rather than quietly removing the entries.
+If the catalogue entry for a filtered table has genuinely gone missing, it is
+cause 1, 2, 3 or 4 in the previous section — not the filter.
+
+### Fewer columns described than the table has
+
+A **column-scoped Ranger grant narrows rather than refuses**. Where a grant
+names specific columns instead of `*`, only the named columns are described, and
+`columnCount` on the item counts what was described rather than what the table
+holds.
+
+A column name discloses. One called `hiv_status` says something by existing, and
+somebody granted three columns of a table has not been shown the other forty. So
+the entry is written for exactly what the grant covers, which is narrower than
+refusing the entry outright and much narrower than describing the whole table.
+
+The tell is `columnCount` and the `Columns:` line in the body being short
+against the real table. Check the policy's column resource in Ranger; a grant
+naming `*`, or naming no column at all, constrains nothing and every column is
+described. No Atlas setting changes this, and `Settings:AtlasTypes` is not
+involved — a `hive_column` entity is never an item of its own, because a column
+is described as part of its table and one item per column would multiply the
+item count by fifty for no new answer.
+
+### An entry with no lineage
+
+Two causes, and nothing else.
+
+- **`Settings:AtlasIncludeLineage` is `false`.** It defaults to true and costs
+  one extra request per entity written, so it is the first thing turned off
+  while proving the rest of the pipeline works, and the first thing forgotten
+  afterwards.
+- **The entity genuinely has none.** Lineage exists only where something
+  recorded it — a Hive query through the Atlas hook, a Spark job, a Sqoop import
+  — and a table loaded by a process that does not report to Atlas has no
+  upstream to describe. Its lineage tab in Atlas is empty too, which is the
+  check that separates the two causes in a minute.
+
+`upstream` and `downstream` are omitted from the item rather than written empty,
+so both causes look the same on the item itself. Only one hop each way is read
+(`direction=BOTH&depth=1`): a second-hop entity that the depth allows through is
+not named, because "what feeds this" is a useful answer and "the transitive
+closure of what feeds this" is a graph nobody reads in a search result.
+
+### Every run reads the whole catalogue
+
+Expected, and not worth investigating. **Atlas 2.1.0 — the version CDP 7.1.9
+ships — cannot filter a basic search by modification time**, so there is no
+incremental read to ask Atlas for. Every run enumerates every entity of every
+type in `Settings:AtlasTypes`, orders them by (Atlas modification time, GUID) so
+that the checkpoint means the same thing it means everywhere else here, and
+writes the entries the routing check allows. Writes are upserts, so an entry
+written again is an entry corrected, not a duplicate.
+
+This is affordable because a catalogue is small — thousands of entities, not
+millions — and it is stated plainly rather than dressed up as an optimisation.
+The cost is one search request per `Settings:AtlasPageSize` entities, plus one
+detail request per entry written, plus one lineage request when
+`Settings:AtlasIncludeLineage` is true. Only entries that pass the routing check
+pay the second and third.
+
+Two consequences follow, and both are good news for a reviewer:
+
+1. **Every run re-derives every entry's ACL** from Ranger's current answer, so
+   the ACL staleness bound at [stage 6](#stage-6--the-watermark-and-the-acl-staleness-bound)
+   is one run for this connector rather than `Settings:FullRecrawlEveryRuns`
+   runs — as long as the table is still granted to somebody.
+2. **When a table's grant is removed entirely, or a deny is added, the entry
+   stops being written rather than being rewritten.** A push never deletes
+   ([stage 7](#stage-7--a-push-never-deletes)), so the item stays in the index
+   with the ACL it last had. This is the one revocation on this path that a
+   later run cannot repair, and the remedy is to delete the item — which is
+   straightforward here, because the ID is derivable from the GUID Atlas shows:
+   `a` followed by the GUID with its hyphens removed, deleted against
+   `v1.0/external/connections/cdpatlascatalog/items/{itemId}`.
+
+**Leave `Settings:MaxItemsPerRun` at 0 on this connector.** Because the run is
+not filtered by the watermark, a cap does not defer the rest to the next run —
+it reads the same oldest N entries every time, and entries beyond the cap are
+never written at all. The warning names the count that was left:
+
+```
+Stopping at Settings:MaxItemsPerRun (500). 1,180 catalogue entr(y/ies) were not read this run.
+```
+
+On the HDFS and Hive connectors that line means "resumed next run". Here it
+means "not indexed", and it should be read as a configuration mistake rather
+than as progress.
+
+---
+
 ## Traps that cost an afternoon
 
 | Trap | Presents as |
@@ -834,6 +1220,13 @@ same directory twice by two different names.
 | Two connectors pointed at one connection | Refused: "is the connection belonging to the 'cdphivecontracts' connector" |
 | A connection created by another connector | "carries a schema this connector did not register" |
 | A push never deleting | Deleted files cited by Copilot indefinitely |
+| A Hadoop SQL deny assumed to hide a table from Atlas | It does not. Atlas authorises through `cm_atlas`, and it is this connector that refuses the entry |
+| A `cm_hive` grant assumed to let the service account read Atlas | It does not either; the read needs entity-read in `cm_atlas`, and its absence is exit 3 |
+| `Settings:AtlasBaseUrl` pasted with `/api/atlas` on the end | Exit 2 at startup, before anything is read |
+| A row-filtered table's catalogue entry read as a leak | Correct behaviour; those people already see the table's shape when they query it |
+| `Test-RangerRouting.ps1` `LIVE QUERY` read as "no catalogue entry" | That is the verdict for the data; the catalogue rule deliberately differs |
+| The whole catalogue re-read every run | Expected: Atlas 2.1.0 cannot filter a basic search by modification time |
+| `Settings:MaxItemsPerRun` set on the catalogue connector | Entries beyond the cap are never written, not deferred to the next run |
 
 ---
 
@@ -852,9 +1245,20 @@ never reached that line failed before the crawl started, which halves the search
 immediately. As with every other path here, the single most useful sentence is
 which stage was the **last one that passed**.
 
-None of those four files contains file content, a row value, a credential or a
+For the catalogue connector, add two more things: the `Atlas returned N live
+{type} entit(y/ies)` line for every type, which is what Atlas was willing to
+show the service account, and the output of the unauthenticated status check,
+which needs no credential and separates an unreachable Atlas from a refused
+identity before anybody looks at Kerberos.
+
+```powershell
+curl.exe -sk https://atlas01.corp.example:31443/api/atlas/admin/status > atlas-status.txt
+```
+
+None of those files contains file content, a row value, a credential or a
 keytab path. The log writes item IDs, paths, counts and byte sizes only, by
-design; WebHDFS error bodies are deliberately dropped rather than logged,
-because they echo the path and a Java stack trace into a file a wider group can
-read than can read the cluster. `klist` prints principal names and ticket
-lifetimes, not keys.
+design; WebHDFS and Atlas error bodies are deliberately dropped rather than
+logged, because they echo the request and a Java stack trace into a file a wider
+group can read than can read the cluster. `klist` prints principal names and
+ticket lifetimes, not keys, and the Atlas status document is a service state,
+not a catalogue: it names no database, table or column.

@@ -116,6 +116,41 @@ EOF
 )"
 
 # --------------------------------------------------------------------------
+# 2b. The grant the row filter narrows.
+#
+# A row filter on its own grants nothing - it restricts what an existing select
+# grant returns. Without this policy nobody can query contract_ppi at all, the
+# connector finds no group to put on its items, and the interesting case never
+# arises: the table would be refused for having no grant rather than for being
+# filtered, which is a different reason and proves nothing.
+#
+# It also makes the CATALOGUE case testable. contract_ppi's rows are never
+# indexed, but its description is indexed for exactly the group named here.
+# --------------------------------------------------------------------------
+post_policy "$HIVE_SERVICE" "caseworks-contract-ppi-select" "$(cat <<EOF
+{
+  "service": "$HIVE_SERVICE",
+  "name": "caseworks-contract-ppi-select",
+  "description": "Select on the row-filtered table. Its rows are never indexed; its catalogue entry is.",
+  "isEnabled": true,
+  "policyType": 0,
+  "resources": {
+    "database": { "values": ["contracts"],    "isExcludes": false, "isRecursive": false },
+    "table":    { "values": ["contract_ppi"], "isExcludes": false, "isRecursive": false },
+    "column":   { "values": ["*"],            "isExcludes": false, "isRecursive": false }
+  },
+  "policyItems": [
+    {
+      "groups": ["$CONTRACTS_GROUP"],
+      "accesses": [{ "type": "select", "isAllowed": true }],
+      "delegateAdmin": false
+    }
+  ]
+}
+EOF
+)"
+
+# --------------------------------------------------------------------------
 # 3. HDFS read, on top of the files' own permissions.
 # --------------------------------------------------------------------------
 post_policy "$HDFS_SERVICE" "caseworks-hdfs-documents-read" "$(cat <<EOF
@@ -160,4 +195,14 @@ and then:
 Expect the contract rows listed. Point Source:ItemView at contracts.contract_ppi
 and re-run: the connector must read NO rows and log why. If it reads them, the
 routing rule has regressed and that is a finding, not a configuration problem.
+
+Then run hadoop/04-create-atlas-test-metadata.sh and the catalogue connector:
+
+    .\\CdpGraphPush.exe --connector cdpatlascatalog --dry-run
+
+Expect BOTH tables to appear, contract_ppi included. Its ROWS are refused and
+its DESCRIPTION is not, because a row filter hides rows rather than the
+existence of the table, and the people granted select above already see its
+name, its columns and its owner whenever they query it. A catalogue entry
+missing for contract_ppi means the data rule has been applied to metadata.
 EOF

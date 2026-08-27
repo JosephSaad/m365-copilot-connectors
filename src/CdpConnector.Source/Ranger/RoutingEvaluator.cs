@@ -213,6 +213,111 @@ public sealed class RoutingEvaluator
             groups);
     }
 
+    /// <summary>
+    /// Decides who may see the CATALOGUE ENTRY for a table - its name, its
+    /// columns, its owner and its lineage - as opposed to its rows.
+    ///
+    /// This deliberately answers differently from <see cref="EvaluateTable"/>,
+    /// and the difference is the point of having a catalogue at all.
+    ///
+    /// A row filter governs which ROWS a person sees; a column mask governs
+    /// which VALUES they see. Neither hides the table's existence, its column
+    /// names or its owner from somebody granted select - they see all of that
+    /// the moment they query it. So the metadata of a filtered or masked table
+    /// is indexable for exactly the people Ranger grants select, even though its
+    /// data is not. Those are frequently the tables a catalogue is most needed
+    /// for, because their contents cannot be indexed at all.
+    ///
+    /// What still refuses: a deny, and a table nobody is granted. A deny is not
+    /// mirrored anywhere in this connector, and a catalogue entry granted to
+    /// nobody is indexed and returned to nobody.
+    ///
+    /// A column-scoped grant does NOT refuse here either, but it narrows: only
+    /// the columns the grant names are described, because a column name can
+    /// disclose as much as a value - a column called "hiv_status" says
+    /// something by existing - and somebody granted three columns of a table
+    /// has not been shown the other forty.
+    /// </summary>
+    /// <param name="database">The database name.</param>
+    /// <param name="table">The table name.</param>
+    /// <returns>The decision. Groups are who may see the entry; empty means nobody, so no entry.</returns>
+    public RoutingDecision EvaluateCatalogueEntry(string database, string table)
+    {
+        string resource = database + "." + table;
+
+        List<RangerPolicy> relevant = this.policies
+            .Where(policy => policy.Enabled)
+            .Where(policy => policy.Covers("database", database) && policy.Covers("table", table))
+            .ToList();
+
+        List<RangerPolicy> denies = relevant.Where(policy => policy.Deny.Count > 0).ToList();
+
+        if (denies.Count > 0)
+        {
+            return new RoutingDecision(
+                resource,
+                RoutingVerdict.LiveQuery,
+                "Ranger denies access to this table for at least one principal, so its catalogue entry is not " +
+                "indexed either. Deny rules are not mirrored, and a description of a table is still a " +
+                "disclosure about it.",
+                denies.Select(policy => policy.Id).ToList(),
+                Array.Empty<string>());
+        }
+
+        List<string> groups = relevant
+            .Where(policy => policy.PolicyType == RangerPolicyType.Access)
+            .SelectMany(policy => policy.Allow.Where(item => item.GrantsRead).SelectMany(item => item.Groups))
+            .Where(group => !string.IsNullOrWhiteSpace(group))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (groups.Count == 0)
+        {
+            return new RoutingDecision(
+                resource,
+                RoutingVerdict.LiveQuery,
+                "No Ranger policy grants select on this table to any group, so there is nobody to grant its " +
+                "catalogue entry to.",
+                relevant.Select(policy => policy.Id).ToList(),
+                Array.Empty<string>());
+        }
+
+        bool transformed = relevant.Any(
+            policy => policy.PolicyType is RangerPolicyType.RowFilter or RangerPolicyType.Masking);
+
+        return new RoutingDecision(
+            resource,
+            RoutingVerdict.Index,
+            transformed
+                ? "Select granted to " + groups.Count + " group(s). The table's ROWS are row-filtered or masked " +
+                  "and are not indexed, but its description is what those people already see when they query it."
+                : "Select granted to " + groups.Count + " group(s).",
+            relevant.Select(policy => policy.Id).ToList(),
+            groups);
+    }
+
+    /// <summary>
+    /// The columns of a table a catalogue entry may describe, given its
+    /// policies. Empty means every column.
+    /// </summary>
+    /// <param name="database">The database name.</param>
+    /// <param name="table">The table name.</param>
+    /// <returns>The column names the grants name, or empty for all of them.</returns>
+    public IReadOnlyList<string> CatalogueColumns(string database, string table)
+    {
+        List<string> named = this.policies
+            .Where(policy => policy.Enabled && policy.PolicyType == RangerPolicyType.Access)
+            .Where(policy => policy.Covers("database", database) && policy.Covers("table", table))
+            .Where(policy => policy.Allow.Any(item => item.GrantsRead))
+            .SelectMany(policy => policy.Resource("column"))
+            .ToList();
+
+        // A grant naming every column, or naming none, constrains nothing.
+        return named.Count == 0 || named.Contains("*")
+            ? Array.Empty<string>()
+            : named.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
     /// <summary>Decides what should happen to one HDFS path.</summary>
     /// <param name="path">The absolute path.</param>
     /// <returns>The decision, whose Groups are the Ranger-granted groups to add to the file's own ACL.</returns>

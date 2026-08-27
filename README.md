@@ -13,7 +13,7 @@ Generated against the contracts extracted from `GraphConnectorsTemplate.vsix`
 `src/SqlTicketsConnector/Contracts/` are Microsoft's originals, copied byte for
 byte and unmodified.
 
-![Data flow from SQL Server through the connector and agent to Microsoft Graph, the semantic index, and Copilot](docs/architecture.png)
+![Three sources, two paths, one index: SQL Server and a Cloudera CDP cluster holding HDFS, Hive/Impala and Apache Atlas, everything from the cluster passing a Ranger gate that decides what may be indexed at all; then two routes to Microsoft 365 — a gRPC connector behind the Graph connector agent, and console tools pushing straight to the Copilot connectors API — over PushCore as the shared engine, into one security-trimmed external index that Copilot and Microsoft Search read, with a panel naming what deliberately stays out of the index](docs/architecture.png)
 
 | Project | Model | Runs where |
 |---|---|---|
@@ -23,8 +23,8 @@ byte and unmodified.
 | `PushCore.Sql` | The SQL Server half of the engine: `ISqlPushConnector`, a query and a row mapping become a source | Class library, referenced only by the SQL push tools |
 | `SqlGraphPush` | Direct `PUT /external/connections/{id}/items/{itemId}` — one flat table | Operator workstation or jump box with outbound HTTPS to Graph |
 | `SqlHierarchyPush` | The same, for a three level hierarchy: Customer → Engagement → TimeEntry | Same |
-| `CdpGraphPush` | The same, for Cloudera CDP 7.1.9: HDFS documents and Hive tables, with per-file ACLs and Ranger routing | Windows host with Kerberos to the cluster and outbound HTTPS to Graph |
-| `CdpConnector.Source` | HttpFS/WebHDFS, Hive over ODBC, Ranger policies, ACL mapping, watermarks | Class library, referenced by `CdpGraphPush` |
+| `CdpGraphPush` | The same, for Cloudera CDP 7.1.9. **Three connectors in one executable**, each with its own connection and configuration file: HDFS documents (`cdphdfsdocs`), Hive tables (`cdphivecontracts`) and the Apache Atlas catalogue (`cdpatlascatalog`), with per-item ACLs and Ranger routing | Windows host with Kerberos to the cluster and outbound HTTPS to Graph |
+| `CdpConnector.Source` | HttpFS/WebHDFS, Hive over ODBC, the Atlas catalogue over SPNEGO, Ranger policies, ACL mapping, watermarks | Class library, referenced by `CdpGraphPush` |
 | `CdpConnector.Extraction` | File bytes to indexable text: text formats and Open XML with the BCL, PDF behind a build flag | Class library, referenced by `CdpGraphPush` |
 
 Connector ID: `9e5e2b95-e7ab-4266-98c7-4f7868d377bf`
@@ -121,17 +121,22 @@ deploy/
   Watch-SchemaRegistration.ps1         The draft to ready wait, every state explained, the schema printed
   Compare-SourceToIndex.ps1            Reconcile SQL against the index; finds the orphans a push leaves behind
   Test-HierarchySearch.ps1             Proves a customer search returns engagement and time entry items too
+  Test-CdpSource.ps1                   Cluster pre-flight as the service identity: Kerberos, HttpFS, Ranger, ODBC
+  Test-RangerRouting.ps1               Per table: indexed or routed to a live query, and which policy decided it
   CustomConnectorPortMap.json          Reference copy of the agent port map entry
   Manifest.json                        Uploaded in the admin center wizard
   ConnectionInfo.json                  TestApp input, no credentials
 docs/
-  architecture.png / .svg              The data flow drawing embedded above (PNG embedded; SVG is the editable source)
+  architecture.png / .svg              "Three sources, two paths, one index" — the drawing embedded above
+                                       (PNG embedded; SVG is the editable source)
   hierarchy-flow.png / .svg            How the three level source is flattened into flat index items
   SECURITY.md                          Control mapping for the security reviewer
   APP-REGISTRATION.md                  Entra apps, permission by permission, cert and secret
-  RUNBOOK.md                           Rotation, log locations, five failure modes
+  RUNBOOK.md                           Rotation, log locations, failure modes, the CDP connectors on call
   TROUBLESHOOTING.md                   Stage by stage, SQL to Copilot, when you do not yet know what broke
   TROUBLESHOOTING-DIRECT-PUSH.md       The same for SqlGraphPush, which fails differently
+  CDP-DEPLOYMENT.md                    Deploying CdpGraphPush: the gMSA, Ranger routing, group mapping, scheduling
+  TROUBLESHOOTING-CDP.md               The same stage-by-stage treatment for the cluster path
   HIERARCHY-TEST-CASE.md               The three level test case: why a flat index needs flattening, and how
   HIERARCHY-DEPLOYMENT.md              Step-by-step deployment of the three level connector, net10 and net9
   ASSUMPTIONS.md                       Decisions, deviations, open questions
@@ -186,10 +191,13 @@ src/
   CdpGraphPush/
     HdfsDocumentsConnector.cs          Files under the HDFS roots, each with its own ACL
     HiveContractsConnector.cs          One Hive table, and the template for the next
-    appsettings.cdphdfsdocs.json, appsettings.cdphivecontracts.json
+    AtlasCatalogueConnector.cs         The data catalogue: one item per database, table or path described
+    appsettings.cdphdfsdocs.json, appsettings.cdphivecontracts.json,
+    appsettings.cdpatlascatalog.json
   CdpConnector.Source/
     Hdfs/                              WebHDFS and HttpFS over Negotiate, the ordered crawl
     Hive/                              ODBC reader, composed connection string, the table source
+    Atlas/                             The catalogue client, its entities, and who may see an entry
     Ranger/                            Policy client, and the rules deciding what may be indexed at all
     Acl/                               Cluster groups to Entra grants, fail closed
     Watermark/                         The composite marker and its atomic checkpoint file
@@ -199,8 +207,17 @@ hadoop/
   00-create-hdfs-test-data.sh          Documents with three different permission shapes
   01-create-hive-test-data.hql         One indexable table, one that must never be indexed
   02-create-ranger-test-policies.sh    The grant, the row filter, and the HDFS read policy
+  03-Start-LocalWebHdfsStub.ps1        A loopback-only WebHDFS test double, for a laptop with no cluster
+  04-create-atlas-test-metadata.sh     Descriptions, owners, classifications and terms for the catalogue to find
 tests/
-  SqlTicketsConnector.Tests/           225 tests, no live tenant, vault, database or cluster
+  SqlTicketsConnector.Tests/           No live tenant, vault, database or cluster. 225 tests before the
+                                       Atlas suite; CI reports the current total
+    CdpAclMaskTests.cs                 The POSIX ACL mask, where this connector's worst over-grant lived
+    CdpRangerFidelityTests.cs          Reading a Ranger policy the way Ranger reads it
+    CdpHiveWatermarkTests.cs           The Hive marker, round tripped through a checkpoint into the next query
+    CdpCrawlResilienceTests.cs         The three ways the HDFS crawl used to lose files while reporting success
+    CdpAtlasTests.cs                   The catalogue's two deliberate departures from every other source here
+    ControlEvidenceTests.cs            Tripwire over the thirty-six tests that exist as control evidence
 ```
 
 ---

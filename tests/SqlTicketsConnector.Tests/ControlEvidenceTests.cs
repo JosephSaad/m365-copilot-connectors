@@ -74,6 +74,17 @@ namespace SqlTicketsConnector.Tests
             new[] { "SqlTicketsConnector.Tests.CdpRangerFidelityTests", "A_non_recursive_path_grant_stops_at_the_directory_it_names" },
             new[] { "SqlTicketsConnector.Tests.CdpRangerFidelityTests", "A_row_filter_named_with_a_leading_wildcard_still_refuses_the_table" },
             new[] { "SqlTicketsConnector.Tests.CdpRangerFidelityTests", "A_non_recursive_deny_still_covers_everything_beneath_it" },
+
+            // The catalogue. Its access rules deliberately differ from every
+            // other source here - stricter than the cluster, and indexing the
+            // description of a table whose data may never be indexed - so both
+            // directions are pinned. Getting either backwards publishes the
+            // shape of the lake to people who cannot reach the lake.
+            new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_row_filtered_table_is_still_catalogued_even_though_its_rows_are_not" },
+            new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_denied_table_is_not_catalogued_either" },
+            new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_table_nobody_is_granted_has_no_catalogue_entry" },
+            new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_column_scoped_grant_narrows_what_may_be_described_rather_than_refusing_it" },
+            new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_scrubbed_entity_is_not_indexed_as_a_nameless_item" },
         };
 
         [Fact]
