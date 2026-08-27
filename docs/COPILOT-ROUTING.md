@@ -160,6 +160,16 @@ The same shape resolves a Power BI semantic model (index the measure
 definitions and ownership, call `executeQueries` for the numbers, and RLS stays
 enforced by Power BI) and a Fabric warehouse.
 
+**A data catalogue is the clearest case, and this repository now implements
+it.** Which database holds which table, who owns it, what it is tagged with and
+what feeds it is knowledge — asked in words, about named things, by people who
+do not know where to look. The rows underneath are analytics, and belong in a
+query. So indexing is right here even where the data described can never be
+indexed: a table Ranger row-filters is refused by the data connector and
+described by the catalogue one, for exactly the people already granted select on
+it. `src/CdpGraphPush/AtlasCatalogueConnector.cs` is that connector, and
+`docs/SECURITY.md` sets out the access rules it turns on.
+
 ---
 
 ## Caveats

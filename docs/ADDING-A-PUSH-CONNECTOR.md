@@ -217,6 +217,18 @@ policy client, an ACL builder, an extractor set and a checkpoint store into an `
 It is 128 lines including the header, and none of them are about credentials, throttling or
 retries.
 
+[`AtlasCatalogueConnector.cs`](../src/CdpGraphPush/AtlasCatalogueConnector.cs) is the second, and
+worth reading for a different reason: it shows how far a connector's *own* rules can differ from
+its neighbours' without the core noticing. It indexes the Atlas catalogue, and it decides who may
+see an entry by a rule none of the others use — the groups Ranger grants `select` on the table an
+entry describes, which is deliberately stricter than the cluster's own default. It also indexes
+descriptions of tables whose *data* is refused, because a row filter hides rows rather than the
+existence of the table. All of that lives in the connector and its source. `PushCore` knows only
+that it was handed a schema and an `IPushSource`.
+
+That is the property to test a new connector against: if your source's access rules need a change
+to `PushCore`, they are probably in the wrong place.
+
 ### Four rules the compiler and the tests will hold you to
 
 1. **`isSearchable` and `isRefinable` are mutually exclusive.** `PushSchema.Prop`

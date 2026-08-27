@@ -107,6 +107,32 @@ public sealed class CdpSettings
     /// <summary>Gets the Ranger service name for Hive and Impala policies. One definition covers both.</summary>
     public string RangerSqlService { get; private init; } = string.Empty;
 
+    /// <summary>
+    /// Gets the Apache Atlas base URL, without the /api/atlas suffix.
+    ///
+    /// Required with no default on purpose. Atlas answers on 31000 or 31443 in
+    /// a stock CDP 7.1.9 install, on 21000 in upstream Atlas, and on the Knox
+    /// gateway's port and path when Knox fronts it. A guessed default that
+    /// happens to be wrong produces a connection error at the least helpful
+    /// moment, so the operator states it.
+    /// </summary>
+    public string AtlasBaseUrl { get; private init; } = string.Empty;
+
+    /// <summary>Gets the Atlas entity types to catalogue.</summary>
+    public IReadOnlyList<string> AtlasTypes { get; private init; } = Array.Empty<string>();
+
+    /// <summary>Gets how many entities to ask Atlas for per page. Atlas caps this at 10,000.</summary>
+    public int AtlasPageSize { get; private init; }
+
+    /// <summary>
+    /// Gets a value indicating whether to read one hop of lineage per entity.
+    ///
+    /// It is the most useful field in a catalogue and the most expensive: one
+    /// extra request per entity. Worth it for a few thousand tables, and worth
+    /// turning off while proving the rest of the pipeline works.
+    /// </summary>
+    public bool AtlasIncludeLineage { get; private init; }
+
     /// <summary>Gets how a cluster group name becomes a principal.</summary>
     public GroupMappingMode GroupMapping { get; private init; }
 
@@ -215,6 +241,11 @@ public sealed class CdpSettings
             RangerHdfsService = options.Setting("RangerHdfsService", "cm_hdfs"),
             RangerSqlService = options.Setting("RangerSqlService", "cm_hive"),
 
+            AtlasBaseUrl = options.Setting("AtlasBaseUrl").TrimEnd('/'),
+            AtlasTypes = SplitList(options.Setting("AtlasTypes", "hive_db;hive_table")),
+            AtlasPageSize = options.Setting("AtlasPageSize", 100),
+            AtlasIncludeLineage = options.Setting("AtlasIncludeLineage", true),
+
             GroupMapping = string.Equals(
                 options.Setting("GroupMappingMode", "EntraByName"), "ExternalGroups", StringComparison.OrdinalIgnoreCase)
                 ? GroupMappingMode.ExternalGroups
@@ -259,15 +290,23 @@ public sealed class CdpSettings
 
         if (this.FullRecrawlEveryRuns == 0)
         {
-            // Not an error - some deployments genuinely re-create the connection
-            // instead - but it disables the ACL staleness bound, and that is not
-            // a thing to turn off by accident.
+            // Refused, not warned. There is no warning channel in
+            // ValidationErrors - anything added fails startup with exit 2 - and
+            // that is the right outcome here: the periodic full recrawl is the
+            // ONLY thing that re-derives item ACLs after a permission change at
+            // the source, because such a change does not alter a file's
+            // modification time. Turning it off silently would leave a
+            // deployment with no bound on ACL staleness and nothing saying so.
+            //
+            // A deployment that genuinely wants it effectively never sets a
+            // large number rather than zero, which leaves the bound stated.
             errors.Add(
                 "Settings:FullRecrawlEveryRuns",
-                "is 0, which disables the periodic full recrawl. That is also the only thing that re-derives " +
-                "item ACLs after a permission change at the source, because a permission change does not alter " +
-                "a file's modification time. Set it to the number of runs you are willing to have stale ACLs " +
-                "for, or record the decision in the deployment's risk register and set it to 1.");
+                "is 0, which would disable the periodic full recrawl - the only thing that re-derives item " +
+                "ACLs after a permission change at the source, because such a change does not alter a file's " +
+                "modification time. It is refused rather than warned about: a deployment with no bound on ACL " +
+                "staleness should not start by accident. Set the number of runs you are willing to have stale " +
+                "ACLs for, up to 365, and record it in the deployment's risk register.");
         }
 
         if (this.GroupMapping == GroupMappingMode.EntraByName &&
@@ -345,6 +384,47 @@ public sealed class CdpSettings
             {
                 errors.Add("Settings:HdfsRoots", $"'{root}' contains '..', which is not a path this will follow.");
             }
+        }
+    }
+
+    /// <summary>Adds a message for every problem in the Atlas catalogue settings.</summary>
+    /// <param name="errors">Accumulator.</param>
+    public void ValidateAtlas(ValidationErrors errors)
+    {
+        ArgumentNullException.ThrowIfNull(errors);
+
+        errors.RequireNonEmpty("Settings:AtlasBaseUrl", this.AtlasBaseUrl);
+        errors.RequireRange("Settings:AtlasPageSize", this.AtlasPageSize, 1, 10000);
+
+        if (!string.IsNullOrWhiteSpace(this.AtlasBaseUrl))
+        {
+            if (!Uri.TryCreate(this.AtlasBaseUrl, UriKind.Absolute, out Uri? parsed))
+            {
+                errors.Add("Settings:AtlasBaseUrl", "must be an absolute URL.");
+            }
+            else if (parsed.Scheme != Uri.UriSchemeHttps)
+            {
+                errors.Add(
+                    "Settings:AtlasBaseUrl",
+                    "must be https. Kerberos on Atlas requires TLS in CDP, and the catalogue describes the " +
+                    "shape of the lake - table names, column names and owners - which is not something to put " +
+                    "on the wire in clear.");
+            }
+            else if (this.AtlasBaseUrl.Contains("/api/atlas", StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add(
+                    "Settings:AtlasBaseUrl",
+                    "must be the base URL only, without /api/atlas. The connector appends the API path itself, " +
+                    "which is also what makes a Knox gateway path work.");
+            }
+        }
+
+        if (this.AtlasTypes.Count == 0)
+        {
+            errors.Add(
+                "Settings:AtlasTypes",
+                "must list at least one Atlas entity type, separated by semicolons, for example " +
+                "hive_db;hive_table.");
         }
     }
 

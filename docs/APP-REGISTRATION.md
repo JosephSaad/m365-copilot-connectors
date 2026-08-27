@@ -5,7 +5,7 @@ has to approve them. Every permission is listed with why it is needed and what
 happens without it. Both credential types are specified: certificate and client
 secret.
 
-**There are up to four identities in this deployment, and they are not
+**There are up to five identities in this deployment, and they are not
 interchangeable.** The most common failure in setting this up is granting one
 identity's permissions to another.
 
@@ -15,15 +15,24 @@ identity's permissions to another.
 | 2 | **SqlTicketsConnector** (this service) | Azure Key Vault only | **None. Ever.** |
 | 3 | **SqlGraphPush** (optional operator tool) | Microsoft Graph directly | Two, below |
 | 4 | **SqlHierarchyPush** (optional operator tool) | Microsoft Graph directly | The same two — and it may share identity 3 |
+| 5 | **CdpGraphPush** (optional, three connectors) | Microsoft Graph directly, and the Cloudera cluster over Kerberos | The same two, plus one conditional permission — §3.4 |
 
 Identity 2 never calls Microsoft Graph. If you find yourself adding
 `ExternalItem.ReadWrite.OwnedBy` to it, stop: the agent does the ingestion, and
 granting Graph access to the connector widens the blast radius of a service that
 runs unattended on a domain-joined server for no functional gain.
 
-Identities 3 and 4 are only needed if you use a direct push tool. Skip section 3
-otherwise. They need identical permissions, so **one registration can serve
-both** — see §3.3, which is the decision that matters and is easy to get wrong.
+Identities 3, 4 and 5 are only needed if you use a direct push tool. Skip
+section 3 otherwise. Their Graph permissions are the same two, so **one
+registration can serve all of them** — see §3.3, which is the decision that
+matters and is easy to get wrong. The one permission that is not shared is in
+§3.4, and it is granted only if a specific setting is switched on.
+
+Identity 5 holds no cluster credential of any kind. Everything `CdpGraphPush`
+does against HDFS, Hive, Ranger and Atlas is Kerberos as the account the process
+runs as — a gMSA — so there is nothing to register in Entra for the cluster half
+and nothing on disk to rotate. `docs/RUNBOOK.md` §6.3 is the operational side of
+that.
 
 ---
 
@@ -283,12 +292,14 @@ and no expiry warning.
 ## 3. The direct push tools (optional)
 
 Only if you use an operator-run push path. These call Microsoft Graph directly
-and need no agent. There are two of them and their requirements are identical:
+and need no agent. There are three of them, and their Graph requirements are
+identical apart from the conditional permission in §3.4:
 
 | Tool | Source | Connection ID |
 |---|---|---|
 | `SqlGraphPush` | `dbo.Tickets` — one flat table | `sqltickets` |
 | `SqlHierarchyPush` | `Customers` → `Engagements` → `TimeEntries` | `consultingwork` |
+| `CdpGraphPush` | Cloudera CDP 7.1.9, three connectors in one executable: HDFS documents, one Hive table, and the Apache Atlas catalogue | `cdphdfsdocs`, `cdphivecontracts`, `cdpatlascatalog` — one each, never shared |
 
 ### 3.1 Permissions
 
@@ -299,8 +310,15 @@ and need no agent. There are two of them and their requirements are identical:
 | `ExternalConnection.ReadWrite.OwnedBy` | Application | Create the connection and register its schema | `.All` would let this tool rewrite connections owned by other teams |
 | `ExternalItem.ReadWrite.OwnedBy` | Application | Write and delete items in its own connection | Same |
 
-Grant admin consent. Nothing else — no `Directory.Read.All` here: this tool
-sends group object IDs it was configured with and resolves nothing.
+Grant admin consent. Nothing else — no `Directory.Read.All` here: these tools
+send group object IDs they were configured with. `CdpGraphPush` can be told to
+resolve group names in the directory instead, and that one case is §3.4; with it
+off, which is the default, this table is the whole list for all three tools.
+
+Both permissions are needed by each of the three CDP connectors for the same
+reasons as the SQL ones: `ExternalConnection.ReadWrite.OwnedBy` because the first
+run creates the connection and registers its schema, and
+`ExternalItem.ReadWrite.OwnedBy` because every run after that writes items.
 
 ### 3.2 Credentials
 
@@ -308,36 +326,95 @@ Certificate, per §1.3, with the public key uploaded to this registration and th
 private key in `CurrentUser\My` on the operator's workstation or jump box —
 `CurrentUser`, not `LocalMachine`, because it runs as a person, not a service.
 
-Client secret is supported the same way as §2.4 if certificates are not
-available. This applies to both tools.
+`CdpGraphPush` is the exception, because it runs as a service account rather
+than as a person: its `Auth:CertificateStoreLocation` is **`LocalMachine`** in
+all three shipped configuration files, and the gMSA needs **Read** on the private
+key. A certificate in `CurrentUser\My` is invisible to it and produces exit code
+`3` for a certificate you can plainly see in `certmgr.msc`.
 
-### 3.3 One registration or two — and why it matters
+Client secret is supported the same way as §2.4 if certificates are not
+available. This applies to all three tools.
+
+### 3.3 One registration or several — and why it matters
 
 `OwnedBy` means *connections owned by the application making the call*. Whichever
 app registration creates a connection is the only one that can ever manage it.
 Three consequences follow, and the first two are how this goes wrong:
 
-1. **The two tools must not share a connection ID.** They register different
-   schemas, and a registered schema cannot be changed. The engine enforces this
-   for every push connector at once: a connection whose registered schema
-   carries properties the running connector does not build is refused, with the
-   foreign properties named.
+1. **No two connectors may share a connection ID**, and there are five of them
+   across the three tools. They register different schemas, and a registered
+   schema cannot be changed. The engine enforces this for every push connector at
+   once: a connection whose registered schema carries properties the running
+   connector does not build is refused, with the foreign properties named.
 2. **The Graph connector agent's connections are not yours to push to.** If the
    agent created a connection, a push tool gets a bare 403 on every call against
    it — and cannot create its own, because the ID is taken.
-3. **Neither tool can manage a connection the other created**, unless they share
-   a registration.
+3. **No tool can manage a connection another one created**, unless they share a
+   registration.
 
 | | One shared registration | A registration per tool |
 |---|---|---|
-| Setup | One consent, one certificate, one credential to rotate | Two of everything |
-| Blast radius | A leaked credential reaches both connections | Contained to one |
-| Managing the other's connection | Possible — useful for a clean-up script | Not possible |
-| Recommended for | Most deployments, and every proof of concept | A production tenant where the two datasets have different owners |
+| Setup | One consent, one certificate, one credential to rotate | One of each per tool |
+| Blast radius | A leaked credential reaches every connection | Contained to one tool's |
+| Managing another's connection | Possible — useful for a clean-up script | Not possible |
+| Recommended for | Most deployments, and every proof of concept | A production tenant where the datasets have different owners |
 
 Name it for what it reaches rather than for one tool — `CopilotConnectors-Push-Prod`
 rather than `SqlGraphPush-Prod` — so a second tool arriving later does not read
 as a misuse of the first one's identity.
+
+There is one reason to give `CdpGraphPush` a registration of its own even where
+the SQL tools share one: it is the only tool that might hold `GroupMember.Read.All`,
+and a separate registration keeps that permission off the identity that pushes
+the SQL data. That is a decision for §3.4.
+
+### 3.4 `GroupMember.Read.All` — only when `Settings:ResolveGroupsFromDirectory` is on
+
+**Grant this deliberately or not at all.** It is a tenant-wide read of group
+membership, nothing else in this repository uses it, and it is the one permission
+here that a reviewer should expect to see justified in writing rather than
+inherited from a copied list.
+
+The CDP connectors put **Entra group object IDs** on every item, derived from the
+cluster groups Ranger grants. The cluster knows group *names*, and there are two
+ways to turn a name into an object ID:
+
+| Way | Setting | Graph permission |
+|---|---|---|
+| The written-down map | `Settings:EntraGroupMap`, semicolon-separated `name=objectId` pairs | **None** |
+| The directory lookup | `Settings:ResolveGroupsFromDirectory: true` | `GroupMember.Read.All`, application |
+
+**Prefer the map.** It needs no permission at all, and it is reviewable: the
+statement "`hadoop-analysts` means this Entra group" sits in a configuration file
+where changing it is a change under review, rather than in a lookup nobody sees
+happen. In a regulated deployment that is the whole argument.
+
+The lookup exists for a cluster whose Kerberos is AD-integrated, where the group
+names *are* AD group names and Entra carries them as `onPremisesSamAccountName`.
+It resolves only what the map does not already cover.
+
+| Permission | Type | Required | Why | Without it |
+|---|---|---|---|---|
+| `GroupMember.Read.All` | Application | **Only when `Settings:ResolveGroupsFromDirectory` is `true`** | Look a cluster group name up in Entra by `onPremisesSamAccountName` when the map does not name it | The lookup is refused and the run stops with exit code `3`, naming this permission |
+
+The failure is loud rather than quiet, which is the behaviour to expect if you
+leave the setting on and the permission off:
+
+```
+[FTL] The source rejected this identity.
+Graph refused a group lookup. Settings:ResolveGroupsFromDirectory needs the GroupMember.Read.All application permission, which the rest of this connector does not use - grant it deliberately, or map the groups in Settings:EntraGroupMap instead.
+```
+
+If you do not grant it, leave `Settings:ResolveGroupsFromDirectory` at `false`,
+which is the shipped value in all three configuration files. Both configurations
+are safe in the same direction: a cluster group that resolves to nothing produces
+no grant, and an item left with no grants is skipped rather than written with a
+wider one. The failure mode is items missing from search, never items visible to
+the wrong people.
+
+A name matching two Entra groups also resolves to nothing, and that is
+deliberate: picking one of them would be picking an audience. Name the group in
+`Settings:EntraGroupMap` to settle it.
 
 ---
 
@@ -400,7 +477,10 @@ review:
   connector project has no Graph SDK reference to make it possible.
 - **No identity here needs `ExternalItem.Read.All`,
   `Directory.ReadWrite.All`, `Application.ReadWrite.All`, or any `.All` write
-  permission** beyond the `Directory.Read.All` decision in §1.2.
+  permission** beyond the `Directory.Read.All` decision in §1.2. The only other
+  tenant-wide read on this page is `GroupMember.Read.All`, and it belongs on one
+  identity, only when `Settings:ResolveGroupsFromDirectory` is `true`, and only
+  with the decision recorded — §3.4. Nothing else in this repository uses it.
 - **No delegated permissions anywhere.** Every identity here is app-only. A delegated
   permission on these registrations means someone has misunderstood the flow.
 - **No certificate private key in Entra.** Upload `.cer`, never `.pfx`.
