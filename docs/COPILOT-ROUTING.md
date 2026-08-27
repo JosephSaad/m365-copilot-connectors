@@ -30,35 +30,52 @@ attributed, timestamped, and never stored.
 
 ## The tree
 
-![Decision tree: a question for Copilot routes first on whether the askers hold M365 licences, then on who owns the data. Owned content with group-shaped access must also clear a freshness and deletion-SLA gate before it is indexed by a Graph connector; everything else, including almost all vendor-licensed data, is fetched by a live tool call. Each leaf carries its build effort and running meter.](copilot-route-decision-tree.png)
+![Decision tree: a question for Copilot routes first on whether the askers hold M365 licences, then on who owns the data. Owned content with group-shaped access must also clear a freshness and deletion-SLA gate before it is indexed by a Graph connector, which splits into an agent-hosted connector and a direct push. Data that is row-level secured or computed, and that models cleanly, goes to a Power BI semantic model. Everything else, including almost all vendor-licensed data, is fetched by a live tool call: an API action, an MCP server you build, or a ready-made one somebody publishes. Each leaf carries its build effort and running meter.](copilot-route-decision-tree.png)
 
-Four gates. The first is about reach, the second about ownership, and the last
-two are the ones that actually decide. The dashed path is the only route that
-puts licensed content into an index — it exists, but it needs a rider your
-market-data team has to negotiate.
+Four gates and three outcomes. The first gate is about reach, the second about
+ownership, and the last two are the ones that actually decide. The dashed path
+is the only route that puts licensed content into an index — it exists, but it
+needs a rider your market-data team has to negotiate.
+
+**`MODEL IT` is the third outcome, and it is not a flavour of the other two.** A
+semantic model holds a copy the way an index does, and computes per user with
+row-level security enforced at query time the way a live call does. It is the
+right answer when the question is a number computed across rows, or when RLS has
+to survive into the answer. It is the wrong answer for a catalogue: descriptive
+metadata is a search problem over names and descriptions, so it belongs in the
+index however structured it looks.
 
 The editable source of the drawing is
 [`copilot-route-decision-tree.svg`](copilot-route-decision-tree.svg); the PNG
-above (2000×1660) is what the markdown embeds, so the picture renders
+above (2480×1692) is what the markdown embeds, so the picture renders
 identically everywhere — including viewers that do not rasterise SVG. A
 dark-theme render of the same drawing ships as
 [`copilot-route-decision-tree-dark.png`](copilot-route-decision-tree-dark.png)
 for decks and dark documents.
 
-**Read the two `CALL IT` leaves as wire protocols, not deployables.** An API
+**Read the three `CALL IT` leaves as wire protocols, not deployables.** An API
 action is an OpenAPI spec and a manifest that a declarative agent or a Copilot
 Studio agent hosts; you never deploy one on its own, and its cost is *on top of*
 whatever the host agent already meters. An MCP server is a process, but a client
-still has to be wired to it. A Graph connector is the odd one out and that is
-its main advantage: publish once, and every M365 surface picks it up with
-nothing told to it.
+still has to be wired to it. A **ready-made** MCP server is the same thing with
+somebody else's name on it: you inherit its tool surface, whose identity it acts
+as, and its release cadence, so review all three before connecting it. A Graph
+connector is the odd one out and that is its main advantage: publish once, and
+every M365 surface picks it up with nothing told to it.
+
+**The two `INDEX IT` custom leaves are one decision you do not get to make on
+preference.** Agent-hosted needs a Windows host and crawls incrementally, which
+is what lets it delete; direct push runs anywhere with outbound HTTPS and never
+deletes anything. So the deletion SLA picks it, and hosting picks it when the
+SLA does not care.
 
 Three axes are in play, and only same-axis choices are alternatives:
 
 | Axis | Choices |
 |---|---|
-| How the data reaches the model | pre-indexed retrieval · live invocation |
-| How a live tool is exposed | API action · MCP server |
+| How the data reaches the model | pre-indexed retrieval · semantic model · live invocation |
+| Which custom connector, once indexing | agent-hosted · direct push |
+| How a live tool is exposed | API action · MCP server · ready-made MCP server |
 | Where the whole thing runs | M365 surfaces · an application you host |
 
 **Azure AI Foundry sits on the third axis, not the first two.** Inside it you
