@@ -134,8 +134,78 @@ namespace SqlTicketsConnector.Tests
                 new[] { "contract_ref", "status" },
                 evaluator.CatalogueColumns("contracts", "contract").ToArray());
 
-            // A grant over every column constrains nothing.
-            Assert.Empty(new RoutingEvaluator(new[] { GrantPolicy() }).CatalogueColumns("contracts", "contract"));
+            // A grant over every column constrains nothing, and null is how that
+            // is said. An EMPTY list is the opposite answer - "no column may be
+            // described" - so the two must not be spelled the same way.
+            Assert.Null(new RoutingEvaluator(new[] { GrantPolicy() }).CatalogueColumns("contracts", "contract"));
+        }
+
+        [Fact]
+        public void Column_grants_intersect_across_policies_rather_than_union()
+        {
+            // One item carries one set of column names and the union of every
+            // granting policy's groups, so a column named by any one policy
+            // would be shown to every group on the item. Two ordinary policies -
+            // ward-admin granted the identifiers, clinicians granted the
+            // diagnosis - would tell ward-admin that a column called hiv_status
+            // exists. That is the exact disclosure the narrowing prevents.
+            var wardAdmin = new RangerPolicy { Id = 10, Enabled = true, PolicyType = RangerPolicyType.Access };
+            wardAdmin.SetResource("database", new List<string> { "contracts" });
+            wardAdmin.SetResource("table", new List<string> { "patient" });
+            wardAdmin.SetResource("column", new List<string> { "patient_id", "admission_date" });
+            wardAdmin.Allow.Add(Item(new[] { "ward-admin" }, "select"));
+
+            var clinicians = new RangerPolicy { Id = 11, Enabled = true, PolicyType = RangerPolicyType.Access };
+            clinicians.SetResource("database", new List<string> { "contracts" });
+            clinicians.SetResource("table", new List<string> { "patient" });
+            clinicians.SetResource("column", new List<string> { "patient_id", "hiv_status" });
+            clinicians.Allow.Add(Item(new[] { "clinicians" }, "select"));
+
+            var evaluator = new RoutingEvaluator(new[] { wardAdmin, clinicians });
+
+            // Both groups are on the entry, so only what BOTH grants cover may
+            // be named on it.
+            Assert.Equal(
+                new[] { "ward-admin", "clinicians" },
+                evaluator.EvaluateCatalogueEntry("contracts", "patient").Groups.ToArray());
+
+            Assert.Equal(
+                new[] { "patient_id" },
+                evaluator.CatalogueColumns("contracts", "patient").ToArray());
+
+            // Disjoint grants describe nothing rather than everything. An entry
+            // that under-describes is a search that misses; one that
+            // over-describes is a leak.
+            clinicians.SetResource("column", new List<string> { "hiv_status" });
+
+            Assert.Empty(new RoutingEvaluator(new[] { wardAdmin, clinicians })
+                .CatalogueColumns("contracts", "patient"));
+        }
+
+        [Fact]
+        public void A_database_entry_is_granted_to_whoever_may_read_anything_in_it()
+        {
+            // Asking EvaluateCatalogueEntry(database, "*") asks about a table
+            // whose NAME is "*", which matches a policy written over "*" and no
+            // other. A cluster whose policies name their tables one at a time -
+            // the ordinary arrangement, where a database holds tables of
+            // different sensitivities - catalogued no databases at all.
+            var perTable = new RangerPolicy { Id = 20, Enabled = true, PolicyType = RangerPolicyType.Access };
+            perTable.SetResource("database", new List<string> { "contracts" });
+            perTable.SetResource("table", new List<string> { "contract" });
+            perTable.Allow.Add(Item(new[] { "analysts" }, "select"));
+
+            var evaluator = new RoutingEvaluator(new[] { perTable });
+
+            Assert.False(evaluator.EvaluateCatalogueEntry("contracts", "*").MayIndex);
+
+            RoutingDecision decision = evaluator.EvaluateDatabaseEntry("contracts");
+
+            Assert.True(decision.MayIndex);
+            Assert.Equal(new[] { "analysts" }, decision.Groups.ToArray());
+
+            // A database nobody is granted anything in still has no entry.
+            Assert.False(evaluator.EvaluateDatabaseEntry("finance").MayIndex);
         }
 
         [Fact]
@@ -168,16 +238,97 @@ namespace SqlTicketsConnector.Tests
             Assert.Equal("contracts", table.Properties["databaseName"]);
             Assert.Equal("cm", table.Properties["clusterName"]);
             Assert.Equal("priya.raman", table.Properties["ownerName"]);
-            Assert.Equal("PII", table.Properties["classifications"]);
-            Assert.Equal("Contract", table.Properties["glossaryTerms"]);
+
+            // Collections, not joined strings: both are refiners, and a refiner
+            // buckets on the whole stored value.
+            Assert.Equal(new[] { "PII" }, Assert.IsType<List<string>>(table.Properties["classifications"]));
+            Assert.Equal(new[] { "Contract" }, Assert.IsType<List<string>>(table.Properties["glossaryTerms"]));
+
+            // The lineage walk went THROUGH the hive_process to the tables on
+            // its far side. Naming the process would have put its own name -
+            // the query text - in the index instead.
             Assert.Equal("raw_contracts", table.Properties["upstream"]);
             Assert.Equal("contract_mart", table.Properties["downstream"]);
+            Assert.DoesNotContain("insert overwrite", table.Content, StringComparison.OrdinalIgnoreCase);
 
             // The body reads as sentences, because "which table holds the
             // counterparty" is a question asked in words.
             Assert.Contains("Owned by priya.raman", table.Content, StringComparison.Ordinal);
             Assert.Contains("Produced from raw_contracts", table.Content, StringComparison.Ordinal);
             Assert.Contains("counterparty", table.Content, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task A_database_is_never_asked_for_lineage()
+        {
+            // The defect this pins made the SHIPPED configuration unable to
+            // finish a crawl. Atlas serves lineage for entities deriving from
+            // DataSet or Process; a hive_db derives from neither, so a healthy
+            // Atlas answers 400 - and the client treated anything that was not a
+            // 404 as fatal. AtlasTypes ships as "hive_db;hive_table" with
+            // lineage on, so the first database killed every run part-way,
+            // leaving a permanently partial index and blaming Atlas's health.
+            var atlas = new FakeAtlas();
+
+            List<PushItem> items = await this.CatalogueAsync(atlas: atlas);
+
+            Assert.Contains(items, i => (string)i.Properties["entityKind"] == "database");
+            Assert.DoesNotContain(FakeAtlas.DbGuid, atlas.LineageRequests);
+            Assert.Contains(FakeAtlas.TableGuid, atlas.LineageRequests);
+        }
+
+        [Fact]
+        public async Task A_lineage_400_is_not_fatal_even_for_a_type_that_should_have_had_lineage()
+        {
+            // The second line, for a type this code does not know is not a
+            // DataSet. A customer type that turns out not to be one must cost
+            // that entry's lineage, not the crawl.
+            var atlas = new FakeAtlas { LineageStatus = HttpStatusCode.BadRequest };
+
+            List<PushItem> items = await this.CatalogueAsync(atlas: atlas);
+
+            PushItem table = Assert.Single(items, i => (string)i.Properties["entityKind"] == "table");
+
+            Assert.False(table.Properties.ContainsKey("upstream"));
+            Assert.Equal("contract", table.Properties["title"]);
+        }
+
+        [Fact]
+        public async Task A_lineage_neighbour_nobody_on_this_entry_may_read_is_not_named()
+        {
+            // A neighbour's NAME is a disclosure. "Produced from hr.salaries_raw"
+            // tells everybody granted the downstream table that a table of
+            // salaries exists and what it is called, and this entry's ACL has
+            // nothing to do with who may read that one. Atlas will not stop it:
+            // on a stock cluster its own policy shows every authenticated user
+            // every entity, which is why the check is here.
+            var atlas = new FakeAtlas { DownstreamQualifiedName = "hr.salaries_raw@cm" };
+
+            List<PushItem> items = await this.CatalogueAsync(atlas: atlas);
+
+            PushItem table = Assert.Single(items, i => (string)i.Properties["entityKind"] == "table");
+
+            // Upstream sits in the granted database and is still named.
+            Assert.Equal("raw_contracts", table.Properties["upstream"]);
+
+            Assert.False(table.Properties.ContainsKey("downstream"));
+            Assert.DoesNotContain("salaries", table.Content, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task A_whole_page_of_scrubbed_entities_does_not_end_the_catalogue()
+        {
+            // "This page added nothing new" has two causes that look identical
+            // and are opposite. A server ignoring the offset must stop the
+            // pager; a page of entities this caller may not read must not,
+            // because the offset advanced correctly and the rest of the lake is
+            // still to come. Conflating them truncated the catalogue silently
+            // and still reported a clean crawl.
+            var atlas = new FakeAtlas { ScrubbedFirstPage = true };
+
+            List<PushItem> items = await this.CatalogueAsync(atlas: atlas);
+
+            Assert.Single(items, i => (string)i.Properties["entityKind"] == "table");
         }
 
         [Fact]
@@ -263,11 +414,32 @@ namespace SqlTicketsConnector.Tests
             Assert.True(after.HasMarker, "the first run must leave a marker");
             Assert.Equal(1, after.RunCount);
 
-            // Nothing in the fake changed, so a second run has nothing after
-            // the marker and writes nothing - rather than re-pushing the lot.
-            List<PushItem> second = await this.CatalogueAsync();
+            // Nothing in the fake changed, so a second run has nothing strictly
+            // after the marker and writes nothing - rather than re-pushing the
+            // lot. Slack is off here so the filter itself is what is pinned.
+            List<PushItem> second = await this.CatalogueAsync(slackSeconds: 0);
 
             Assert.Empty(second);
+        }
+
+        [Fact]
+        public async Task An_entity_inside_the_slack_window_is_re_read_rather_than_left_stale()
+        {
+            // Each entity's timestamp is read by its own detail call, so the
+            // timestamps in one run are snapshots taken minutes apart across the
+            // enrich loop rather than at one instant. An entity altered after
+            // its own snapshot, but before a later entity pushed the marker past
+            // it, would be filtered out on every later incremental run and would
+            // sit stale - content AND ACL - until the next full recrawl.
+            //
+            // The slack is the same one the HDFS source applies, and re-reading
+            // a few entities is upsert-cheap. Not reading a changed one for a
+            // week is not.
+            await this.CatalogueAsync(complete: true);
+
+            List<PushItem> second = await this.CatalogueAsync();
+
+            Assert.NotEmpty(second);
         }
 
         [Fact]
@@ -297,6 +469,14 @@ namespace SqlTicketsConnector.Tests
         [InlineData("AtlasBaseUrl", "https://atlas01.corp:31443/api/atlas", "without /api/atlas")]
         [InlineData("AtlasBaseUrl", "", "required")]
         [InlineData("AtlasTypes", ";;", "at least one Atlas entity type")]
+
+        // A type this connector has no shape for enumerates and details every
+        // one of its entities and then describes none of them: a full crawl, a
+        // clean run, and nothing written. hive_column is the tempting one, and
+        // is deliberately absent because a column is described as part of its
+        // table.
+        [InlineData("AtlasTypes", "hive_db;hive_column", "cannot describe")]
+        [InlineData("AtlasTypes", "HiveTable", "cannot describe")]
         public void An_atlas_setting_that_would_fail_at_runtime_fails_at_startup(
             string key, string value, string expected)
         {
@@ -372,7 +552,11 @@ namespace SqlTicketsConnector.Tests
         // ------------------------------------------------------------------
 
         private async Task<List<PushItem>> CatalogueAsync(
-            FakeAtlas atlas = null, RangerPolicy grant = null, RangerPolicy[] extraPolicies = null, bool complete = false)
+            FakeAtlas atlas = null,
+            RangerPolicy grant = null,
+            RangerPolicy[] extraPolicies = null,
+            bool complete = false,
+            int? slackSeconds = null)
         {
             atlas ??= new FakeAtlas();
 
@@ -385,6 +569,12 @@ namespace SqlTicketsConnector.Tests
 
             PushOptions options = AtlasOptions();
             options.Settings["CheckpointDirectory"] = this.stateDirectory;
+
+            if (slackSeconds.HasValue)
+            {
+                options.Settings["ScanSlackSeconds"] = slackSeconds.Value.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture);
+            }
 
             var source = new AtlasPushSource(
                 CdpSettings.From(options),
@@ -542,13 +732,29 @@ namespace SqlTicketsConnector.Tests
         /// <summary>An Atlas made of canned JSON, in the shapes Atlas 2.1.0 returns.</summary>
         private sealed class FakeAtlas : HttpMessageHandler
         {
-            private const string TableGuid = "a1b2c3d4-e5f6-4789-abcd-0123456789ab";
-            private const string DbGuid = "b1b2c3d4-e5f6-4789-abcd-0123456789ab";
+            internal const string TableGuid = "a1b2c3d4-e5f6-4789-abcd-0123456789ab";
+            internal const string DbGuid = "b1b2c3d4-e5f6-4789-abcd-0123456789ab";
+
+            /// <summary>How many entities a full page holds, matching AtlasPageSize in the test options.</summary>
+            private const int PageSize = 100;
 
             public HttpStatusCode Status { get; set; } = HttpStatusCode.OK;
 
             /// <summary>When true the table hit comes back scrubbed, as Ranger blanks it.</summary>
             public bool Scrubbed { get; set; }
+
+            /// <summary>What the lineage endpoint answers, for a type Atlas will not serve it for.</summary>
+            public HttpStatusCode LineageStatus { get; set; } = HttpStatusCode.OK;
+
+            /// <summary>
+            /// When true the first page of tables is entirely scrubbed and the
+            /// real table is on the second, which is what a restricted database
+            /// whose tables sort together looks like.
+            /// </summary>
+            public bool ScrubbedFirstPage { get; set; }
+
+            /// <summary>How many lineage requests were made, and for what.</summary>
+            public List<string> LineageRequests { get; } = new List<string>();
 
             protected override Task<HttpResponseMessage> SendAsync(
                 HttpRequestMessage request, CancellationToken cancellationToken)
@@ -565,10 +771,24 @@ namespace SqlTicketsConnector.Tests
                 if (path.EndsWith("/search/basic", StringComparison.Ordinal))
                 {
                     bool tables = query.Contains("hive_table", StringComparison.Ordinal);
+                    bool firstPage = query.Contains("offset=0", StringComparison.Ordinal);
 
-                    // A second page must come back empty, or the pager loops.
-                    if (query.Contains("offset=0", StringComparison.Ordinal) == false)
+                    if (tables && this.ScrubbedFirstPage)
                     {
+                        // A whole page of entities this caller may not read,
+                        // then the real one. A pager that reads "this page added
+                        // nothing" as "the catalogue ends here" stops on the
+                        // first and never sees the second.
+                        body = firstPage
+                            ? "{\"entities\":[" + string.Join(",", Enumerable.Repeat(Scrub(), PageSize)) + "]}"
+                            : query.Contains("offset=" + PageSize, StringComparison.Ordinal)
+                                ? "{\"entities\":[" +
+                                  Header(TableGuid, "hive_table", "contract", "contracts.contract@cm") + "]}"
+                                : "{\"entities\":[]}";
+                    }
+                    else if (!firstPage)
+                    {
+                        // A second page must come back empty, or the pager loops.
                         body = "{\"entities\":[]}";
                     }
                     else if (!tables)
@@ -577,8 +797,7 @@ namespace SqlTicketsConnector.Tests
                     }
                     else if (this.Scrubbed)
                     {
-                        body = "{\"entities\":[{\"guid\":\"-1\",\"typeName\":\"hive_table\"," +
-                               "\"attributes\":{},\"classificationNames\":[],\"meaningNames\":[]}]}";
+                        body = "{\"entities\":[" + Scrub() + "]}";
                     }
                     else
                     {
@@ -588,12 +807,45 @@ namespace SqlTicketsConnector.Tests
                 }
                 else if (path.Contains("/lineage/", StringComparison.Ordinal))
                 {
+                    string guid = path[(path.LastIndexOf('/') + 1) ..];
+
+                    this.LineageRequests.Add(guid);
+
+                    // Atlas serves lineage for entities deriving from DataSet or
+                    // Process. A hive_db derives from neither, so a perfectly
+                    // healthy Atlas answers 400 - which is the shape that made
+                    // the shipped configuration unable to finish a crawl.
+                    if (string.Equals(guid, DbGuid, StringComparison.Ordinal) ||
+                        this.LineageStatus != HttpStatusCode.OK)
+                    {
+                        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+                        {
+                            Content = new StringContent(
+                                "{\"errorCode\":\"ATLAS-400-00-06D\",\"errorMessage\":\"Invalid lineage entity type\"}",
+                                Encoding.UTF8,
+                                "application/json"),
+                        });
+                    }
+
+                    // Hive does not join two tables directly: it records
+                    // table -> hive_process -> table, and the process's name is
+                    // the query text. A walk that stops at the first neighbour
+                    // names the SQL rather than the table.
                     body = "{\"baseEntityGuid\":\"" + TableGuid + "\",\"guidEntityMap\":{" +
-                           "\"up-1\":{\"displayText\":\"raw_contracts\"}," +
-                           "\"down-1\":{\"displayText\":\"contract_mart\"}}," +
+                           "\"proc-in\":{\"typeName\":\"hive_process\",\"displayText\":" +
+                           "\"insert overwrite table contracts.contract select * from contracts.raw_contracts\"," +
+                           "\"attributes\":{\"qualifiedName\":\"contracts.contract@cm:1699\"}}," +
+                           "\"proc-out\":{\"typeName\":\"hive_process\",\"displayText\":\"create table mart\"," +
+                           "\"attributes\":{\"qualifiedName\":\"mart.contract_mart@cm:1700\"}}," +
+                           "\"up-1\":{\"typeName\":\"hive_table\",\"displayText\":\"raw_contracts\"," +
+                           "\"attributes\":{\"qualifiedName\":\"contracts.raw_contracts@cm\"}}," +
+                           "\"down-1\":{\"typeName\":\"hive_table\",\"displayText\":\"contract_mart\"," +
+                           "\"attributes\":{\"qualifiedName\":\"" + this.DownstreamQualifiedName + "\"}}}," +
                            "\"relations\":[" +
-                           "{\"fromEntityId\":\"up-1\",\"toEntityId\":\"" + TableGuid + "\"}," +
-                           "{\"fromEntityId\":\"" + TableGuid + "\",\"toEntityId\":\"down-1\"}]}";
+                           "{\"fromEntityId\":\"up-1\",\"toEntityId\":\"proc-in\"}," +
+                           "{\"fromEntityId\":\"proc-in\",\"toEntityId\":\"" + TableGuid + "\"}," +
+                           "{\"fromEntityId\":\"" + TableGuid + "\",\"toEntityId\":\"proc-out\"}," +
+                           "{\"fromEntityId\":\"proc-out\",\"toEntityId\":\"down-1\"}]}";
                 }
                 else if (path.Contains("/entity/guid/", StringComparison.Ordinal))
                 {
@@ -621,6 +873,20 @@ namespace SqlTicketsConnector.Tests
                 {
                     Content = new StringContent(body, Encoding.UTF8, "application/json"),
                 });
+            }
+
+            /// <summary>
+            /// Where the downstream neighbour lives. In the granted database by
+            /// default; a test moves it out to prove the neighbour check bites.
+            /// </summary>
+            public string DownstreamQualifiedName { get; set; } = "contracts.contract_mart@cm";
+
+            private static string Scrub()
+            {
+                // Atlas blanks a hit the caller may not read and leaves it in
+                // the array with guid "-1", rather than removing it.
+                return "{\"guid\":\"-1\",\"typeName\":\"hive_table\"," +
+                       "\"attributes\":{},\"classificationNames\":[],\"meaningNames\":[]}";
             }
 
             private static string Header(string guid, string type, string name, string qualifiedName)

@@ -36,6 +36,46 @@ public enum AtlasEntityKind
     Path = 3,
 }
 
+/// <summary>
+/// One dataset on the other end of a lineage hop, before anything decides
+/// whether the reader of this entry may be told it exists.
+///
+/// It carries the qualified name rather than only the display name because that
+/// is what the Ranger check needs: a name alone cannot be split into a database
+/// and a table, and a neighbour that cannot be checked is a neighbour that must
+/// be dropped.
+/// </summary>
+public sealed class AtlasNeighbour
+{
+    /// <summary>Gets or sets the neighbour's Atlas GUID.</summary>
+    public string Guid { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets its Atlas type name.</summary>
+    public string TypeName { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets its display name, which is what a reader is shown.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets its qualified name, which is what Ranger is asked about.</summary>
+    public string QualifiedName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets a value indicating whether this node is an ETL step rather than a
+    /// dataset, and so something to walk THROUGH rather than name.
+    ///
+    /// Hive lineage does not join two tables directly: it records
+    /// table -> hive_process -> table, and the process's name is the query text
+    /// that produced it. Naming the process instead of the table it read would
+    /// put raw SQL in the index, and that SQL names tables of its own - which is
+    /// the disclosure the neighbour check exists to prevent, arriving inside a
+    /// string nobody thought to check. Impala and Spark interpose their own
+    /// equivalents, and column-level lineage interposes another again.
+    /// </summary>
+    public bool IsTransformation =>
+        this.TypeName.Contains("process", StringComparison.OrdinalIgnoreCase) ||
+        this.TypeName.Contains("lineage", StringComparison.OrdinalIgnoreCase);
+}
+
 /// <summary>One Atlas entity, reduced to what a catalogue entry needs.</summary>
 public sealed class AtlasEntity
 {

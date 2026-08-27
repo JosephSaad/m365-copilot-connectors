@@ -28,6 +28,12 @@ using Serilog;
 /// <summary>Reads entities and lineage from Apache Atlas.</summary>
 public sealed class AtlasClient : IDisposable
 {
+    /// <summary>A ceiling on the pager, so a server that ignores the offset cannot spin for ever.</summary>
+    private const int MaxEntitiesScanned = 1_000_000;
+
+    /// <summary>How far to walk a lineage graph: table, the step that wrote it, and the table that fed the step.</summary>
+    private const int LineageDepth = 2;
+
     private readonly HttpClient http;
     private readonly string baseUrl;
     private readonly ILogger log;
@@ -90,7 +96,8 @@ public sealed class AtlasClient : IDisposable
                 break;
             }
 
-            int before = found.Count;
+            int readable = 0;
+            int added = 0;
 
             foreach (JsonElement element in entities.EnumerateArray())
             {
@@ -101,22 +108,61 @@ public sealed class AtlasClient : IDisposable
                 // and sets its GUID to "-1", so the array length is unchanged
                 // and an unreadable entity arrives as an empty shell. Indexing
                 // one would put a nameless item in the catalogue.
-                //
-                // The GUID set additionally stops a server that ignores the
-                // offset from turning this loop into a spin on page one.
-                if (entity.Guid.Length > 0 &&
-                    !string.Equals(entity.Guid, "-1", StringComparison.Ordinal) &&
-                    entity.IsActive &&
-                    seen.Add(entity.Guid))
+                if (entity.Guid.Length == 0 || string.Equals(entity.Guid, "-1", StringComparison.Ordinal))
                 {
+                    continue;
+                }
+
+                readable++;
+
+                if (entity.IsActive && seen.Add(entity.Guid))
+                {
+                    added++;
                     found.Add(entity);
                 }
             }
 
             int returned = entities.GetArrayLength();
 
-            if (returned < limit || found.Count == before)
+            if (returned == 0)
             {
+                break;
+            }
+
+            // These two conditions look alike and are not, and conflating them
+            // truncates the catalogue silently.
+            //
+            // A page that returned entities THIS CALLER MAY READ and yet added
+            // nothing new is a server ignoring the offset - the loop would spin
+            // on page one for ever - so it stops.
+            //
+            // A page that added nothing because every entity in it was scrubbed
+            // is the opposite: the offset advanced correctly and the pages after
+            // it are still to come. One restricted database whose tables sort
+            // together fills a whole page that way, and stopping there would
+            // drop the rest of the lake while reporting a clean crawl.
+            if (readable > 0 && added == 0)
+            {
+                break;
+            }
+
+            if (returned < limit)
+            {
+                break;
+            }
+
+            // A server that answers every offset with a full page of scrubbed
+            // entities satisfies neither stop condition. Nothing on a real
+            // cluster does that, which is exactly why it is worth bounding.
+            if (offset + limit >= MaxEntitiesScanned)
+            {
+                this.log.Warning(
+                    "Stopped reading {TypeName} after {Scanned} entities without reaching the end of the " +
+                    "catalogue. This is a ceiling on a runaway pager, not a real catalogue size; check " +
+                    "Atlas is honouring the offset parameter.",
+                    typeName,
+                    offset + limit);
+
                 break;
             }
         }
@@ -173,14 +219,31 @@ public sealed class AtlasClient : IDisposable
         }
     }
 
-    /// <summary>Reads one hop of lineage either side of an entity.</summary>
-    /// <param name="entity">The entity to describe. Its Upstream and Downstream are filled in.</param>
+    /// <summary>
+    /// Reads the datasets either side of an entity in the lineage graph.
+    ///
+    /// It returns NEIGHBOURS rather than names, and the caller decides which of
+    /// them the reader of this entry may be told about. That split is the point:
+    /// the names come from Atlas, which on a stock CDP cluster shows every
+    /// authenticated user every entity, and the entry they are written onto is
+    /// granted to the far smaller group Ranger allows on one table.
+    ///
+    /// The walk goes THROUGH transformation nodes rather than naming them. Hive
+    /// records table -> hive_process -> table, so the immediate neighbour of a
+    /// table is never another table; it is the step that wrote it, whose name is
+    /// the query text.
+    /// </summary>
+    /// <param name="guid">The entity to describe.</param>
     /// <param name="cancellationToken">Cancellation.</param>
-    /// <returns>A task for the operation.</returns>
-    public async Task AddLineageAsync(AtlasEntity entity, CancellationToken cancellationToken)
+    /// <returns>What feeds it and what it feeds, unfiltered.</returns>
+    public async Task<(IReadOnlyList<AtlasNeighbour> Upstream, IReadOnlyList<AtlasNeighbour> Downstream)>
+        LineageAsync(string guid, CancellationToken cancellationToken)
     {
+        var none = (Upstream: (IReadOnlyList<AtlasNeighbour>)Array.Empty<AtlasNeighbour>(),
+                    Downstream: (IReadOnlyList<AtlasNeighbour>)Array.Empty<AtlasNeighbour>());
+
         using JsonDocument? document = await this.TryGetJsonAsync(
-            $"/api/atlas/v2/lineage/{Uri.EscapeDataString(entity.Guid)}?direction=BOTH&depth=1",
+            $"/api/atlas/v2/lineage/{Uri.EscapeDataString(guid)}?direction=BOTH&depth={LineageDepth}",
             cancellationToken);
 
         if (document is null ||
@@ -188,26 +251,27 @@ public sealed class AtlasClient : IDisposable
             !document.RootElement.TryGetProperty("relations", out JsonElement relations) ||
             relations.ValueKind != JsonValueKind.Array)
         {
-            return;
+            return none;
         }
+
+        var feeds = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var fedBy = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
         foreach (JsonElement relation in relations.EnumerateArray())
         {
             string from = Text(relation, "fromEntityId");
             string to = Text(relation, "toEntityId");
 
-            // A relation pointing AT this entity is something that feeds it;
-            // one pointing away is something it feeds. Anything not touching it
-            // is a second hop the depth of 1 let through and is not described.
-            if (string.Equals(to, entity.Guid, StringComparison.Ordinal))
+            if (from.Length == 0 || to.Length == 0)
             {
-                Add(entity.Upstream, DisplayName(map, from));
+                continue;
             }
-            else if (string.Equals(from, entity.Guid, StringComparison.Ordinal))
-            {
-                Add(entity.Downstream, DisplayName(map, to));
-            }
+
+            Link(feeds, from, to);
+            Link(fedBy, to, from);
         }
+
+        return (Walk(map, fedBy, guid), Walk(map, feeds, guid));
     }
 
     /// <inheritdoc/>
@@ -250,23 +314,92 @@ public sealed class AtlasClient : IDisposable
         return entity;
     }
 
-    private static string DisplayName(JsonElement map, string guid)
+    private static void Link(Dictionary<string, List<string>> edges, string from, string to)
+    {
+        if (!edges.TryGetValue(from, out List<string>? targets))
+        {
+            targets = new List<string>();
+            edges[from] = targets;
+        }
+
+        targets.Add(to);
+    }
+
+    /// <summary>
+    /// Follows one direction of the lineage graph until it reaches datasets.
+    ///
+    /// A transformation node is stepped over rather than reported, because the
+    /// question a catalogue answers is "what data feeds this", not "which query
+    /// ran". The visited set makes a cycle - which Atlas permits, a table that
+    /// feeds a job that rewrites it - terminate rather than recur.
+    /// </summary>
+    /// <param name="map">The lineage response's guidEntityMap.</param>
+    /// <param name="edges">Adjacency in the direction being walked.</param>
+    /// <param name="start">The entity being described.</param>
+    /// <returns>The datasets reached, each named once.</returns>
+    private static IReadOnlyList<AtlasNeighbour> Walk(
+        JsonElement map, Dictionary<string, List<string>> edges, string start)
+    {
+        var found = new List<AtlasNeighbour>();
+        var visited = new HashSet<string>(StringComparer.Ordinal) { start };
+        var queue = new Queue<string>();
+
+        queue.Enqueue(start);
+
+        while (queue.Count > 0)
+        {
+            if (!edges.TryGetValue(queue.Dequeue(), out List<string>? next))
+            {
+                continue;
+            }
+
+            foreach (string guid in next)
+            {
+                if (!visited.Add(guid))
+                {
+                    continue;
+                }
+
+                AtlasNeighbour? neighbour = ReadNeighbour(map, guid);
+
+                if (neighbour is null)
+                {
+                    continue;
+                }
+
+                if (neighbour.IsTransformation)
+                {
+                    queue.Enqueue(guid);
+                }
+                else if (!found.Any(other => string.Equals(
+                    other.QualifiedName, neighbour.QualifiedName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    found.Add(neighbour);
+                }
+            }
+        }
+
+        return found;
+    }
+
+    private static AtlasNeighbour? ReadNeighbour(JsonElement map, string guid)
     {
         if (guid.Length == 0 || !map.TryGetProperty(guid, out JsonElement entity))
         {
-            return string.Empty;
+            return null;
         }
 
-        string name = Text(entity, "displayText");
-
-        if (name.Length > 0)
-        {
-            return name;
-        }
-
-        return entity.TryGetProperty("attributes", out JsonElement attributes)
+        string qualified = entity.TryGetProperty("attributes", out JsonElement attributes)
             ? Text(attributes, "qualifiedName")
             : string.Empty;
+
+        return new AtlasNeighbour
+        {
+            Guid = guid,
+            TypeName = Text(entity, "typeName"),
+            Name = FirstNonEmpty(Text(entity, "displayText"), qualified),
+            QualifiedName = qualified,
+        };
     }
 
     private static void Add(IList<string> into, string value)
@@ -325,14 +458,45 @@ public sealed class AtlasClient : IDisposable
         return string.Empty;
     }
 
+    /// <summary>
+    /// Reads a document the crawl cannot continue without.
+    ///
+    /// The 400 and 404 that <see cref="TryGetJsonAsync"/> treats as "nothing to
+    /// read" are fatal here, and translated so the operator is told what it
+    /// actually means. On the search path a 400 is almost always a type name
+    /// Atlas has never heard of, which is a configuration mistake and not an
+    /// unwell Atlas - and letting a bare HttpRequestException out would say
+    /// neither.
+    /// </summary>
+    /// <param name="path">The Atlas path to read.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The parsed document.</returns>
     private async Task<JsonDocument> GetJsonAsync(string path, CancellationToken cancellationToken)
     {
-        using HttpResponseMessage response =
-            await this.SendAsync(HttpMethod.Get, path, content: null, cancellationToken);
+        HttpResponseMessage response;
 
-        await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        try
+        {
+            response = await this.SendAsync(HttpMethod.Get, path, content: null, cancellationToken);
+        }
+        catch (HttpRequestException ex)
+            when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound)
+        {
+            throw new InvalidOperationException(
+                $"Atlas rejected a catalogue search with {(int)ex.StatusCode!}. The usual cause is a name in " +
+                "Settings:AtlasTypes that this cluster's Atlas does not define - check the spelling against " +
+                "the type list in Atlas, and remember the names are lower case with underscores, hive_table " +
+                "rather than HiveTable. The run stops rather than reporting an empty catalogue as a complete " +
+                "one.",
+                ex);
+        }
 
-        return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        using (response)
+        {
+            await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+
+            return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        }
     }
 
     private async Task<JsonDocument?> TryGetJsonAsync(string path, CancellationToken cancellationToken)
@@ -350,6 +514,24 @@ public sealed class AtlasClient : IDisposable
         {
             // An entity deleted between the search and the read. Normal in a
             // live catalogue; the caller indexes what it already has.
+            return null;
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
+        {
+            // Atlas answers 400, not 404, when it is asked for something an
+            // entity cannot have. Lineage is the case that matters: the endpoint
+            // serves entities deriving from DataSet or Process, and a hive_db
+            // derives from neither, so asking about a database is a 400 on a
+            // completely healthy cluster.
+            //
+            // The caller already declines to ask about a database. This is the
+            // second line, because the type that provokes it is a property of
+            // the cluster's own model rather than of this code: a customer type
+            // that turns out not to be a DataSet would otherwise stop a crawl
+            // with a message about Atlas's health, and describe every table it
+            // had not reached yet as absent.
+            this.log.Debug("Atlas answered 400 for {Path}; treating it as nothing to read.", path);
+
             return null;
         }
     }
@@ -390,15 +572,16 @@ public sealed class AtlasClient : IDisposable
             HttpStatusCode status = response.StatusCode;
             response.Dispose();
 
-            // A 404 stays an HttpRequestException so TryGetJsonAsync can treat
-            // one entity vanishing between the search and the read as a skip.
+            // A 404 or a 400 stays an HttpRequestException so TryGetJsonAsync
+            // can treat one entity vanishing between the search and the read, or
+            // an endpoint that does not serve this entity's type, as a skip.
             // No body in either message: an Atlas error echoes the request and a
             // Java stack trace, and neither belongs in a log a wider group can
             // read than can read the catalogue.
-            if (status == HttpStatusCode.NotFound)
+            if (status is HttpStatusCode.NotFound or HttpStatusCode.BadRequest)
             {
                 throw new HttpRequestException(
-                    $"Atlas returned 404 for {path}.", inner: null, statusCode: status);
+                    $"Atlas returned {(int)status} for {path}.", inner: null, statusCode: status);
             }
 
             // Anything else is Atlas being unwell, and it is fatal for the same

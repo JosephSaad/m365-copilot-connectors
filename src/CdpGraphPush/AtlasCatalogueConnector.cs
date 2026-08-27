@@ -78,8 +78,14 @@ public sealed class AtlasCatalogueConnector : IPushConnector
 
             // The two fields that make a catalogue worth having: what a dataset
             // is tagged with, and what it means in the business glossary.
-            PushSchema.Prop("classifications", PropertyType.String, queryable: true, retrievable: true, refinable: true),
-            PushSchema.Prop("glossaryTerms", PropertyType.String, queryable: true, retrievable: true, refinable: true),
+            //
+            // StringCollection rather than String, because both are refiners and
+            // a table carries more than one tag. A refiner buckets on the whole
+            // stored value, so a joined "PII, GDPR" becomes a bucket that
+            // filtering on PII does not match - and "show me everything tagged
+            // PII" is the question these fields are registered to answer.
+            PushSchema.Prop("classifications", PropertyType.StringCollection, queryable: true, retrievable: true, refinable: true),
+            PushSchema.Prop("glossaryTerms", PropertyType.StringCollection, queryable: true, retrievable: true, refinable: true),
 
             PushSchema.Prop("upstream", PropertyType.String, queryable: true, retrievable: true),
             PushSchema.Prop("downstream", PropertyType.String, queryable: true, retrievable: true),

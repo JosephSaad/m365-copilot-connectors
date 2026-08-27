@@ -62,7 +62,7 @@ items.
 **What the third one indexes.** One external item per Atlas entity — `hive_db`
 and `hive_table` by default, `hdfs_path` if you ask for it — carrying the
 entity's name, its qualified name, its owner, its description, its columns, its
-Atlas classifications, its glossary terms, one hop of lineage each way, and the
+Atlas classifications, its glossary terms, one dataset hop of lineage each way, and the
 time Atlas last recorded it changing. It is a searchable answer to "which table
 holds the customer's address, who owns it, and what feeds it", which today is
 usually answered by asking around.
@@ -860,12 +860,15 @@ on ACL staleness should not start by accident. A deployment that genuinely wants
 the recrawl to be effectively never sets a large number instead, up to 365, which
 leaves the bound stated rather than absent.
 
-**The catalogue is the exception, and in the safe direction.**
-`cdpatlascatalog` enumerates every entity and re-evaluates every entry against
-Ranger on every run, so its grants are re-derived every run rather than every
-seventh. Its ACL staleness bound is one run interval — a day, on the schedule
-above — and it does not depend on this setting. Record that number rather than
-assuming the seven-day one covers all three connectors.
+**The catalogue is no exception, and it is worth saying so explicitly because
+the shape of the connector suggests otherwise.** `cdpatlascatalog` does enumerate
+every entity every run — Atlas 2.1.0 cannot filter a basic search by
+modification time, so there is no incremental read to ask for — but reading
+everything is not the same as re-deciding everything. The marker filter is
+applied before the routing check, and a Ranger policy edit does not change an
+Atlas entity's modification time, so an entry whose grant changed but whose
+entity did not is dropped before any ACL is derived. Its ACL staleness bound is
+`Settings:FullRecrawlEveryRuns` runs, the same as the other two.
 
 ---
 
@@ -874,7 +877,7 @@ assuming the seven-day one covers all three connectors.
 | Code | Means | What to do |
 |---|---|---|
 | **0** | Success. The crawl completed and the watermark advanced over what was written. | Nothing. Check `skipped=` in the summary is what you expect. |
-| **2** | Configuration invalid. Nothing opened a socket. | Read the log: every problem is listed at once, each naming its setting path. Unreplaced `REPLACE-WITH` placeholders, a non-https `HdfsBaseUrl`, an `HdfsBaseUrl` not ending `/webhdfs/v1`, an empty `RangerBaseUrl`, `HiveWatermarkColumn` without `HiveKeyColumn`, a credential keyword smuggled into `HiveExtraOptions`. For the catalogue: an empty or non-https `AtlasBaseUrl`, one that includes `/api/atlas`, an `AtlasPageSize` outside 1 to 10000, an empty `AtlasTypes`. Fix and re-run. |
+| **2** | Configuration invalid. Nothing opened a socket. | Read the log: every problem is listed at once, each naming its setting path. Unreplaced `REPLACE-WITH` placeholders, a non-https `HdfsBaseUrl`, an `HdfsBaseUrl` not ending `/webhdfs/v1`, an empty `RangerBaseUrl`, `HiveWatermarkColumn` without `HiveKeyColumn`, a credential keyword smuggled into `HiveExtraOptions`. For the catalogue: an empty or non-https `AtlasBaseUrl`, one that includes `/api/atlas`, an `AtlasPageSize` outside 1 to 10000, an empty `AtlasTypes`, an `AtlasTypes` naming a type this connector cannot describe. Fix and re-run. |
 | **3** | A credential was rejected — by **Entra** or by **the source**. | Both are "this identity is no longer accepted". Entra: an expired certificate, a revoked one, missing admin consent, or a connection this app does not own. The source: a Kerberos ticket that stopped renewing, a broken realm trust, HDFS answering 401 or 403, Ranger refusing the policy read, Atlas answering 401 or 403 because the account lacks entity-read in `cm_atlas`. The log line says which — `The credential was rejected by Entra ID`, `Graph rejected the caller`, or `The source rejected this identity`. Re-run `Test-CdpSource.ps1` and `Test-GraphPushPrereqs.ps1` as the gMSA. |
 | **4** | Ingestion failed. | The run stopped part-way and the watermark is on the last item that really landed, so re-running resumes rather than restarting. Common causes are named in the log: the error budget tripped (`above Settings:MaxErrorRatePercent`), the item budget refused startup (`above the configured Settings:ItemBudget`, nothing written), a DataNode or HiveServer2 that went away, an Atlas that answered something other than 404, or a cancellation. Fix the cause and re-run; the writes are upserts. |
 
@@ -956,15 +959,26 @@ used as a synchroniser, which it is not.
 **The catalogue is fully enumerated every run.** Atlas 2.1.0 — which is what CDP
 7.1.9 ships — cannot filter a basic search by modification time, so there is no
 incremental read to be had and the connector does not pretend otherwise: every
-run asks Atlas for every entity of every type in `Settings:AtlasTypes` and
-re-evaluates every one of them against Ranger. The watermark still records where
-a run reached and how many runs have completed; what it cannot do here is spare
-the Atlas reads. This is affordable because a catalogue is small — thousands of
-entities, not the millions of files underneath them — and it is the reason the
-catalogue's ACLs are re-derived every run rather than every seventh (step 9).
-Turning `Settings:AtlasIncludeLineage` off during a first proving run is the one
-lever that materially changes the cost, because lineage is an extra request per
-entity.
+run asks Atlas for every entity of every type in `Settings:AtlasTypes`. The
+watermark still records where a run reached and how many runs have completed;
+what it cannot do here is spare the Atlas reads. This is affordable because a
+catalogue is small — thousands of entities, not the millions of files underneath
+them. Turning `Settings:AtlasIncludeLineage` off during a first proving run is
+the one lever that materially changes the cost, because lineage is an extra
+request per table.
+
+Reading everything is not the same as re-deciding everything, and step 9 sets
+out the difference: the watermark filter runs before the routing check, so the
+ACL staleness bound here is `Settings:FullRecrawlEveryRuns` runs, exactly as it
+is for the other two connectors.
+
+**`Settings:AtlasTypes` is checked at startup against the types this connector
+can describe** — `hive_db`, `hive_table`, `hive_view` and `hdfs_path`. Anything
+else, including a plausible typo like `HiveTable` and the tempting `hive_column`,
+is refused with exit code 2 rather than accepted. An unknown type is enumerated
+and detailed in full and then described not at all, which costs a whole crawl
+and reports a clean run with nothing written — a failure that looks exactly like
+an empty catalogue.
 
 **`hdfs_path` in `Settings:AtlasTypes` will usually catalogue nothing.** The
 catalogue connector reads only `Settings:RangerSqlService`, and a Hive policy

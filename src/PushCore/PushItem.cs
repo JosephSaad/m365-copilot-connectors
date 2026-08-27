@@ -92,4 +92,34 @@ public sealed class PushItem
             this.Properties[name] = value.Value;
         }
     }
+
+    /// <summary>
+    /// Adds a multi-value string property, for a schema property registered as
+    /// <see cref="Microsoft.Graph.Models.ExternalConnectors.PropertyType.StringCollection"/>.
+    ///
+    /// This is not the same as joining the values and adding the string, and the
+    /// difference is visible to the person searching. A refiner buckets on the
+    /// whole stored value, so a joined "PII, GDPR" is a bucket of its own that
+    /// filtering on "PII" does not match. A collection buckets on each element,
+    /// which is what a refiner over tags has to do to be worth registering.
+    ///
+    /// The engine adds the OData annotation Graph requires beside it; nothing
+    /// here has to remember to.
+    /// </summary>
+    /// <param name="name">Schema property name.</param>
+    /// <param name="values">The values. Empty and blank entries are dropped, and an empty result is not added.</param>
+    public void AddIfPresent(string name, IReadOnlyList<string>? values)
+    {
+        if (values is null)
+        {
+            return;
+        }
+
+        List<string> present = values.Where(value => !string.IsNullOrWhiteSpace(value)).ToList();
+
+        if (present.Count > 0)
+        {
+            this.Properties[name] = present;
+        }
+    }
 }

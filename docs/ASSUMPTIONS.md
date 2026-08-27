@@ -119,7 +119,7 @@ Found by the new tests, not by inspection:
   *contains*: one external item per Apache Atlas entity — `hive_db` and
   `hive_table` by default, `hdfs_path` optionally — carrying the entity's name,
   qualified name, owner, description, columns, Atlas classifications, glossary
-  terms, one hop of lineage each way, and a modified timestamp. Its
+  terms, one dataset hop of lineage each way, and a modified timestamp. Its
   configuration is `src/CdpGraphPush/appsettings.cdpatlascatalog.json` and it
   holds its own Graph connection, so it can be deployed or removed without
   touching the other two.
@@ -160,7 +160,20 @@ Found by the new tests, not by inspection:
   error at the least helpful moment, so the operator states it. `AtlasTypes`
   defaults to `hive_db;hive_table`, `AtlasPageSize` to 100 against an Atlas cap
   of 10,000, and `AtlasIncludeLineage` to true at the cost of one extra request
-  per entity.
+  per table. `AtlasTypes` is checked at startup against the four types the
+  connector can describe — `hive_db`, `hive_table`, `hive_view`, `hdfs_path` —
+  because a type it has no shape for is enumerated and detailed in full and then
+  described not at all, which costs a whole crawl and reports a clean run with
+  nothing written.
+
+  **A hop of lineage is a dataset hop, not a graph hop.** Hive records
+  `table → hive_process → table` and a process's own name is the query text that
+  produced it, so the walk goes *through* transformation nodes to the datasets
+  beyond them; `direction=BOTH&depth=2` is requested for what is described as
+  one hop each way. Every neighbour is then checked against Ranger and named
+  only when every group granted this entry is also granted the neighbour —
+  Atlas's own authorization cannot be leaned on for this, because CDP ships it
+  granting every authenticated user read on every entity.
 
   **The search is a `GET`, not a `POST`.** Atlas installs its own CSRF filter in
   front of non-`GET` REST calls, and whether it demands a header depends on
@@ -180,6 +193,60 @@ Found by the new tests, not by inspection:
   property means `Settings:FullRecrawlEveryRuns` governs how often every entry's
   ACL is re-derived rather than how much is read, and it remains the ACL
   staleness bound described further down this section.
+
+- **Thirteen defects found by an adversarial review of the Atlas catalogue,
+  fixed before it was ever published (2026-08-27).** The catalogue was new
+  surface and got its own review, on the same pattern as the one below: five
+  independent readers, each attacking one failure mode, and every candidate then
+  given to a skeptic prompted to refute it. Twenty-six candidates, ten distinct
+  defects confirmed and three smaller corrections found alongside them. `v1.2.19`
+  and `v1.2.18` were both deliberately left published in the meantime.
+
+  **One of them meant the shipped configuration could not finish a crawl.**
+  Atlas serves lineage only for entities deriving from `DataSet` or `Process`. A
+  `hive_db` derives from neither, so a healthy Atlas answers HTTP 400 — and the
+  client treated anything that was not a 404 as fatal. The shipped
+  `AtlasTypes` of `hive_db;hive_table` with lineage on therefore died on the
+  first database, part-way through, leaving a permanently partial index and an
+  error message pointing the operator at Atlas's health. It survived the test
+  suite because the fake answered every lineage path with a canned 200.
+
+  Three more **over-granted**, which is the direction that matters:
+
+  - **Lineage neighbour names had no access check at all.** The names came from
+    Atlas — which on a stock cluster shows every authenticated user every entity
+    — and were written onto an entry granted to one table's readers. Now a
+    neighbour is named only when every group on the entry is also granted it.
+  - **A one-hop lineage walk lands on the `hive_process`, not on a table**, and
+    a Hive process's name is the query text. `upstream` would have carried raw
+    SQL naming tables the reader had no grant on. The walk now goes through
+    transformation nodes to the datasets beyond them.
+  - **Column narrowing unioned the column grants across policies** while the ACL
+    unioned their groups, so a group granted two columns was shown a third
+    group's `hiv_status`. It is an intersection now, and disjoint grants
+    describe no columns rather than all of them.
+
+  The rest: a pager that read "this page added nothing" as "the catalogue ends
+  here", so one restricted database's worth of scrubbed entities truncated the
+  catalogue while reporting a clean crawl; a database entry routed by asking
+  Ranger about a table literally named `*`, so a cluster with per-table policies
+  catalogued no databases; the watermark filter applied with no slack window,
+  unlike its sibling, so an entity altered during the enrich loop sat stale
+  until the next full recrawl; `classifications` and `glossaryTerms` registered
+  as refinable single-value strings but written comma-joined, which makes
+  "PII, GDPR" a refiner bucket that filtering on "PII" does not match;
+  `Settings:ItemBudget` shipped and validated but enforced only by the HDFS
+  source; a `modifiedUtc` of `0001-01-01` when an entity's detail read 404s;
+  and two documents that promised a one-run ACL staleness bound the code does
+  not provide.
+
+  **The docs were wrong in the same direction twice.** `CDP-DEPLOYMENT.md` and
+  `TROUBLESHOOTING-CDP.md` both said the catalogue re-derives every entry's ACL
+  every run. It does read every entity every run — but the watermark filter runs
+  *before* the routing check, so an entry whose Ranger grant changed while its
+  Atlas entity did not is dropped before any ACL is derived. Reading everything
+  is not re-deciding everything. Both now state the real bound, which is
+  `Settings:FullRecrawlEveryRuns` runs, the same as the other two connectors.
 
 - **Twelve defects found by an adversarial review of the CDP connector, fixed
   before it was ever published (2026-08-26).** The connector was reviewed by

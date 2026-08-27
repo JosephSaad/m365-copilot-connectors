@@ -297,25 +297,114 @@ public sealed class RoutingEvaluator
     }
 
     /// <summary>
+    /// Decides who may see the catalogue entry for a DATABASE, as opposed to for
+    /// one table in it.
+    ///
+    /// A database entry names the database and nothing inside it, so the people
+    /// entitled to it are the people Ranger grants select on anything it holds.
+    /// That cannot be asked as EvaluateCatalogueEntry(database, "*"): "*" there
+    /// is a candidate table NAME, matched against each policy's table glob, so
+    /// it matches a policy written over "*" and no other. A cluster whose
+    /// policies name their tables one at a time - the ordinary arrangement where
+    /// a database holds tables of different sensitivities - would catalogue no
+    /// databases at all, silently.
+    ///
+    /// The deny rule is the table rule: a deny anywhere in the database refuses
+    /// the entry, because a deny is not mirrored anywhere in this connector.
+    /// </summary>
+    /// <param name="database">The database name.</param>
+    /// <returns>The decision. Groups are who may see the entry; empty means nobody, so no entry.</returns>
+    public RoutingDecision EvaluateDatabaseEntry(string database)
+    {
+        List<RangerPolicy> relevant = this.policies
+            .Where(policy => policy.Enabled)
+            .Where(policy => policy.Covers("database", database))
+            .ToList();
+
+        List<RangerPolicy> denies = relevant.Where(policy => policy.Deny.Count > 0).ToList();
+
+        if (denies.Count > 0)
+        {
+            return new RoutingDecision(
+                database,
+                RoutingVerdict.LiveQuery,
+                "Ranger denies access to something in this database for at least one principal, so the " +
+                "database's own catalogue entry is not indexed either. Deny rules are not mirrored.",
+                denies.Select(policy => policy.Id).ToList(),
+                Array.Empty<string>());
+        }
+
+        List<string> groups = relevant
+            .Where(policy => policy.PolicyType == RangerPolicyType.Access)
+            .SelectMany(policy => policy.Allow.Where(item => item.GrantsRead).SelectMany(item => item.Groups))
+            .Where(group => !string.IsNullOrWhiteSpace(group))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return groups.Count == 0
+            ? new RoutingDecision(
+                database,
+                RoutingVerdict.LiveQuery,
+                "No Ranger policy grants select on anything in this database to any group, so there is " +
+                "nobody to grant its catalogue entry to.",
+                relevant.Select(policy => policy.Id).ToList(),
+                Array.Empty<string>())
+            : new RoutingDecision(
+                database,
+                RoutingVerdict.Index,
+                "Select granted somewhere in this database to " + groups.Count + " group(s).",
+                relevant.Select(policy => policy.Id).ToList(),
+                groups);
+    }
+
+    /// <summary>
     /// The columns of a table a catalogue entry may describe, given its
-    /// policies. Empty means every column.
+    /// policies. Null means every column; an empty list means none.
+    ///
+    /// The rule is the INTERSECTION of what the granting policies name, not the
+    /// union, and the difference is a disclosure. One item carries one set of
+    /// column names and the union of every granting policy's groups, so a
+    /// column named by any one policy would be shown to every group on the item.
+    /// Two ordinary policies on one table - ward-admin granted
+    /// [patient_id, admission_date], clinicians granted [hiv_status] - would
+    /// then tell ward-admin that a column called hiv_status exists, which is the
+    /// exact disclosure the narrowing was written to prevent.
+    ///
+    /// So a column is described only when EVERY granting policy covers it. A
+    /// policy naming no column, or naming "*", grants all of them and therefore
+    /// narrows nothing. When the granting policies name disjoint sets the
+    /// intersection is empty and no column is described at all, which is the
+    /// right way round to be wrong: an entry that under-describes is a search
+    /// that misses, and an entry that over-describes is a leak.
     /// </summary>
     /// <param name="database">The database name.</param>
     /// <param name="table">The table name.</param>
-    /// <returns>The column names the grants name, or empty for all of them.</returns>
-    public IReadOnlyList<string> CatalogueColumns(string database, string table)
+    /// <returns>The describable column names, or null when nothing constrains them.</returns>
+    public IReadOnlyList<string>? CatalogueColumns(string database, string table)
     {
-        List<string> named = this.policies
+        List<RangerPolicy> granting = this.policies
             .Where(policy => policy.Enabled && policy.PolicyType == RangerPolicyType.Access)
             .Where(policy => policy.Covers("database", database) && policy.Covers("table", table))
             .Where(policy => policy.Allow.Any(item => item.GrantsRead))
-            .SelectMany(policy => policy.Resource("column"))
             .ToList();
 
-        // A grant naming every column, or naming none, constrains nothing.
-        return named.Count == 0 || named.Contains("*")
-            ? Array.Empty<string>()
-            : named.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        List<string>? describable = null;
+
+        foreach (RangerPolicy policy in granting)
+        {
+            IList<string> named = policy.Resource("column");
+
+            if (named.Count == 0 || named.Contains("*"))
+            {
+                continue;
+            }
+
+            describable = describable is null
+                ? named.Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                : describable.Where(column => named.Contains(column, StringComparer.OrdinalIgnoreCase)).ToList();
+        }
+
+        return describable;
     }
 
     /// <summary>Decides what should happen to one HDFS path.</summary>
