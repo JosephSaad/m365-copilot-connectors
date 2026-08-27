@@ -45,6 +45,12 @@ to survive into the answer. It is the wrong answer for a catalogue: descriptive
 metadata is a search problem over names and descriptions, so it belongs in the
 index however structured it looks.
 
+The interactive version of this page — thirteen questions that route one source
+to one delivery path, with the cost and the warnings attached — ships beside it
+as [`copilot-decision-matrix.html`](copilot-decision-matrix.html). Open it in a
+browser; it is a single self-contained file with no build step and no network
+calls.
+
 The editable source of the drawing is
 [`copilot-route-decision-tree.svg`](copilot-route-decision-tree.svg); the PNG
 above (2480×1692) is what the markdown embeds, so the picture renders
