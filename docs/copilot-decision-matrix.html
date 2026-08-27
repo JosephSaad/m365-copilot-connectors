@@ -1,10 +1,15 @@
 <title>Copilot Decision Matrix</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Spectral:wght@500;600&display=swap">
-
 <style>
   :root {
+    /* No webfont requests: this file renders identically offline, from a file://
+       path, and behind a network that does not reach Google. The three roles the
+       design needs - a neutral grotesque, a text serif for display, and a
+       monospace for labels and data - are served by whatever the platform
+       already has, in that order of preference. */
+    --sans:  system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
+    --mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
     --ground:      #F2F5F4;
     --surface:     #FBFCFC;
     --surface-alt: #E9EEEC;
@@ -69,7 +74,7 @@
     margin: 0;
     background: var(--ground);
     color: var(--ink);
-    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--sans);
     font-size: 16px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -87,7 +92,7 @@
   /* ---------- type ---------- */
 
   h1, h2, h3 {
-    font-family: Spectral, ui-serif, Georgia, serif;
+    font-family: var(--serif);
     font-weight: 600;
     text-wrap: balance;
     margin: 0;
@@ -101,7 +106,7 @@
   p { margin: 0; max-width: 68ch; }
 
   .eyebrow {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.72rem;
     font-weight: 500;
     letter-spacing: 0.14em;
@@ -121,7 +126,7 @@
   }
 
   code, .mono {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.88em;
   }
 
@@ -139,7 +144,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem 1.5rem;
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.74rem;
     letter-spacing: 0.04em;
     color: var(--ink-faint);
@@ -172,7 +177,7 @@
     caption-side: top;
     text-align: left;
     padding: 0.9rem 1rem;
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -223,7 +228,7 @@
   .group-row th {
     background: var(--ground);
     text-align: left;
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.68rem;
     letter-spacing: 0.13em;
     text-transform: uppercase;
@@ -242,7 +247,7 @@
     content: "added";
     display: block;
     margin-top: 0.2rem;
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.58rem;
     letter-spacing: 0.1em;
     font-weight: 400;
@@ -266,7 +271,7 @@
   .m-none    { color: var(--none); }
 
   td.val {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.72rem;
     line-height: 1.35;
     color: var(--ink-muted);
@@ -276,7 +281,7 @@
   td.val.neg { color: var(--risk); }
 
   sup.fn {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.62rem;
     color: var(--risk);
     font-weight: 500;
@@ -307,7 +312,7 @@
     box-shadow: var(--shadow);
   }
   .rule-card .big {
-    font-family: Spectral, ui-serif, Georgia, serif;
+    font-family: var(--serif);
     font-size: clamp(1.3rem, 3vw, 1.9rem);
     font-weight: 600;
     line-height: 1.25;
@@ -339,12 +344,12 @@
   .n-model { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.75; stroke-dasharray: 6 3; }
   .n-esc   { fill: var(--surface-alt); stroke: var(--rule-strong); stroke-width: 1.25; stroke-dasharray: 3 3; }
 
-  .t-title { fill: var(--ink); font-family: "IBM Plex Sans", sans-serif; font-size: 13px; font-weight: 600; }
-  .t-body  { fill: var(--ink); font-family: "IBM Plex Sans", sans-serif; font-size: 12.5px; }
-  .t-cost  { fill: var(--ink-muted); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; }
-  .t-edge  { fill: var(--ink-muted); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.03em; }
-  .t-accent{ fill: var(--accent); font-family: "IBM Plex Sans", sans-serif; font-size: 13.5px; font-weight: 600; letter-spacing: 0.04em; }
-  .t-risk  { fill: var(--risk); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; }
+  .t-title { fill: var(--ink); font-family: var(--sans); font-size: 13px; font-weight: 600; }
+  .t-body  { fill: var(--ink); font-family: var(--sans); font-size: 12.5px; }
+  .t-cost  { fill: var(--ink-muted); font-family: var(--mono); font-size: 10.5px; }
+  .t-edge  { fill: var(--ink-muted); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.03em; }
+  .t-accent{ fill: var(--accent); font-family: var(--sans); font-size: 13.5px; font-weight: 600; letter-spacing: 0.04em; }
+  .t-risk  { fill: var(--risk); font-family: var(--mono); font-size: 10.5px; }
 
   .edge      { stroke: var(--ink-muted); stroke-width: 1.4; fill: none; }
   .edge-risk { stroke: var(--risk); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
@@ -383,9 +388,9 @@
   }
   .panel.own  { border-top: 3px solid var(--full); }
   .panel.vend { border-top: 3px solid var(--risk); }
-  .panel h3 { font-family: "IBM Plex Sans", sans-serif; font-weight: 600; font-size: 1rem; }
+  .panel h3 { font-family: var(--sans); font-weight: 600; font-size: 1rem; }
   .panel .tag {
-    font-family: "IBM Plex Mono", monospace;
+    font-family: var(--mono);
     font-size: 0.68rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -414,7 +419,7 @@
   }
   ol.steps li::before {
     content: counter(s);
-    font-family: "IBM Plex Mono", monospace;
+    font-family: var(--mono);
     font-size: 0.78rem;
     font-weight: 500;
     color: var(--accent);
@@ -442,7 +447,7 @@
   }
   .caveats h2 { font-size: 1.15rem; }
   .caveats ol { margin: 0; padding-left: 1.3rem; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.94rem; }
-  .caveats li::marker { font-family: "IBM Plex Mono", monospace; font-size: 0.8rem; color: var(--risk); }
+  .caveats li::marker { font-family: var(--mono); font-size: 0.8rem; color: var(--risk); }
 
   /* ---------- questionnaire ---------- */
 
@@ -481,7 +486,7 @@
     line-height: 1.35;
   }
   .q .qhead .qn {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.68rem;
     font-weight: 500;
     letter-spacing: 0.1em;
@@ -519,7 +524,7 @@
     gap: 0.75rem 1.25rem;
   }
   .quiz-bar button {
-    font-family: "IBM Plex Sans", sans-serif;
+    font-family: var(--sans);
     font-size: 0.88rem;
     font-weight: 500;
     padding: 0.6rem 1.4rem;
@@ -533,7 +538,7 @@
   .quiz-bar button:hover { filter: brightness(1.08); }
   .quiz-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .quiz-bar .progress {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.76rem;
     color: var(--ink-faint);
     font-variant-numeric: tabular-nums;
@@ -552,7 +557,7 @@
   }
   .result[hidden] { display: none; }
   .result .verdict-name {
-    font-family: Spectral, ui-serif, Georgia, serif;
+    font-family: var(--serif);
     font-size: clamp(1.4rem, 3vw, 2rem);
     font-weight: 600;
     line-height: 1.2;
@@ -560,7 +565,7 @@
   }
   .result .verdict-sub { color: var(--ink-muted); font-size: 0.95rem; }
   .result h3 {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.68rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -573,7 +578,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem 2rem;
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.78rem;
     color: var(--ink-muted);
     padding: 0.75rem 0;
@@ -585,7 +590,7 @@
   .result .incomplete { color: var(--risk); font-size: 0.92rem; }
 
   .stamp {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.72rem;
     color: var(--ink-faint);
   }
@@ -1582,7 +1587,7 @@
   <footer>
     <p>Reconstructed from a photographed capability matrix and extended with the grounding, cost and data-provenance analysis from the surrounding architecture review.</p>
     <p>Microsoft's Copilot surface naming and capability boundaries move faster than anything else in this stack &mdash; particularly MCP support inside M365 and the line between declarative agents and Copilot Studio. Treat the tables as the shape of the decision, and confirm current boundaries before committing.</p>
-    <p class="stamp">Revision <strong>2026-08-27 &middot; r6</strong> &mdash; 14 questions, 10 routes. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
+    <p class="stamp">Revision <strong>2026-08-27 &middot; r7</strong> &mdash; 14 questions, 10 routes. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
   </footer>
 
 </div>
