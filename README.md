@@ -210,7 +210,7 @@ tests/
     CdpHiveWatermarkTests.cs           The Hive marker, round tripped through a checkpoint into the next query
     CdpCrawlResilienceTests.cs         The three ways the HDFS crawl used to lose files while reporting success
     CdpAtlasTests.cs                   The catalogue's two deliberate departures from every other source here
-    ControlEvidenceTests.cs            Tripwire over the forty tests that exist as control evidence
+    ControlEvidenceTests.cs            Tripwire over the forty-five tests that exist as control evidence
 ```
 
 ---

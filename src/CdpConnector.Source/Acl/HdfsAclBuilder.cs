@@ -72,7 +72,10 @@ public sealed class HdfsAclBuilder
     /// <param name="rangerGroups">Groups a Ranger path policy grants read.</param>
     /// <returns>The cluster group names, deduplicated.</returns>
     public static IReadOnlyList<string> ClusterGroups(
-        HdfsFileStatus status, HdfsAclStatus? acl, IReadOnlyList<string> rangerGroups)
+        HdfsFileStatus status,
+        HdfsAclStatus? acl,
+        IReadOnlyList<string> rangerGroups,
+        IReadOnlySet<string>? traversable = null)
     {
         var groups = new List<string>();
 
@@ -111,12 +114,67 @@ public sealed class HdfsAclBuilder
             groups.AddRange(acl.GroupsGrantedRead(status.Permission));
         }
 
-        groups.AddRange(rangerGroups);
+        // The POSIX grants above are subject to the traversal gate; the Ranger
+        // grants below are not, and the asymmetry is the point.
+        //
+        // Reading a file on HDFS needs read on the file AND execute on every
+        // directory above it, so a group holding read on a file it cannot reach
+        // holds nothing. A null gate means no ancestor restricted anybody -
+        // which is not the same as an empty one, and conflating them would
+        // strip every grant off every file.
+        //
+        // A Ranger path policy is a different mechanism: the plugin authorises
+        // the path itself rather than deferring to the POSIX walk, so a group
+        // Ranger grants is not gated by the mode bits of the directories above.
+        List<string> reachable = traversable is null
+            ? groups
+            : groups.Where(traversable.Contains).ToList();
 
-        return groups
+        reachable.AddRange(rangerGroups);
+
+        return reachable
             .Where(group => !string.IsNullOrWhiteSpace(group))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>
+    /// The cluster groups that may traverse one directory, and whether every
+    /// account may.
+    ///
+    /// The read counterpart of <see cref="ClusterGroups"/>, and it settles the
+    /// same ambiguity the same way: on a directory carrying an extended ACL the
+    /// group digit of the mode is the MASK, so the owning group's own execute
+    /// comes from its "group::" entry and every named entry is masked; without
+    /// one the digit is the owning group's, as it reads.
+    /// </summary>
+    /// <param name="status">The directory's status.</param>
+    /// <param name="acl">Its ACL as GETACLSTATUS returns it, or null.</param>
+    /// <returns>The groups that may traverse it, and whether it is world-traversable.</returns>
+    public static (IReadOnlyList<string> Groups, bool Everyone) TraverseGroups(
+        HdfsFileStatus status, HdfsAclStatus? acl)
+    {
+        var groups = new List<string>();
+
+        bool owningGroupCanTraverse = acl is not null && acl.IsExtended
+            ? HdfsAclStatus.MaskGrantsExecute(status.Permission) && acl.OwningGroupCanExecute
+            : status.GroupCanExecute;
+
+        if (owningGroupCanTraverse && !string.IsNullOrWhiteSpace(status.Group))
+        {
+            groups.Add(status.Group);
+        }
+
+        if (acl is not null)
+        {
+            groups.AddRange(acl.GroupsGrantedExecute(status.Permission));
+        }
+
+        return (
+            groups.Where(group => !string.IsNullOrWhiteSpace(group))
+                  .Distinct(StringComparer.OrdinalIgnoreCase)
+                  .ToList(),
+            status.OtherCanExecute);
     }
 
     /// <summary>Builds the grants for one file.</summary>
@@ -129,13 +187,19 @@ public sealed class HdfsAclBuilder
         HdfsFileStatus status,
         HdfsAclStatus? acl,
         IReadOnlyList<string> rangerGroups,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlySet<string>? traversable = null,
+        bool everyoneCanTraverse = true)
     {
-        IReadOnlyList<string> clusterGroups = ClusterGroups(status, acl, rangerGroups);
+        IReadOnlyList<string> clusterGroups = ClusterGroups(status, acl, rangerGroups, traversable);
 
         List<PushAclEntry> grants = await this.principals.ResolveAsync(clusterGroups, cancellationToken);
 
-        if (status.OtherCanRead && !string.IsNullOrWhiteSpace(this.otherReadableGroupId))
+        // The world-readable grant needs a world-traversable path to sit on. A
+        // file at 644 under a directory at 750 is readable by nobody outside
+        // that directory's group, and "everyone on the cluster" is emphatically
+        // outside it.
+        if (status.OtherCanRead && everyoneCanTraverse && !string.IsNullOrWhiteSpace(this.otherReadableGroupId))
         {
             // Only because an operator wrote down which group "everyone on the
             // cluster" means in this tenant.

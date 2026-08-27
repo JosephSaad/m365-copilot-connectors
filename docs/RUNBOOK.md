@@ -490,7 +490,7 @@ allowed to overwrite its items.
 
 | Connector | Indexes | Connection | Configuration |
 |---|---|---|---|
-| `cdphdfsdocs` | Files under `Settings:HdfsRoots`, over HttpFS or WebHDFS. Each item carries the grants derived from that file's own POSIX ACL and Ranger | `cdphdfsdocs` | `appsettings.cdphdfsdocs.json` |
+| `cdphdfsdocs` | Files under `Settings:HdfsRoots`, over HttpFS or WebHDFS. Each item carries the grants derived from that file's own POSIX ACL and Ranger, intersected with the groups that can traverse every directory above it | `cdphdfsdocs` | `appsettings.cdphdfsdocs.json` |
 | `cdphivecontracts` | Rows of `Source:ItemView`, over ODBC | `cdphivecontracts` | `appsettings.cdphivecontracts.json` |
 | `cdpatlascatalog` | The Apache Atlas catalogue. One item per entity — `hive_db` and `hive_table` by default, `hdfs_path` if `Settings:AtlasTypes` asks — carrying name, qualified name, owner, description, columns, Atlas classifications, glossary terms, one dataset hop of lineage each way, and a modified timestamp. A lineage neighbour is named only where everybody granted the entry is granted the neighbour too | `cdpatlascatalog` | `appsettings.cdpatlascatalog.json` |
 

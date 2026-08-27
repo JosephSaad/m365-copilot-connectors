@@ -89,6 +89,25 @@ public sealed class HdfsFileStatus
     /// </summary>
     public bool OtherCanRead => PermissionDigit(this.Permission, 2) is int digit && (digit & 4) != 0;
 
+    /// <summary>
+    /// Gets a value indicating whether the group digit carries EXECUTE, which on
+    /// a directory is the right to traverse it.
+    ///
+    /// On HDFS, as on POSIX, reading a file needs read on the file and execute
+    /// on every directory above it. A directory nobody can traverse hides
+    /// everything beneath it however permissive those files are, which is the
+    /// ordinary way a lake protects a folder: 750 on the directory, whatever the
+    /// umask gives on the files inside.
+    ///
+    /// The same digit is the ACL mask on a file with an extended ACL - see
+    /// <see cref="HdfsAclStatus.MaskGrantsExecute"/> - so which reading applies
+    /// is settled where both halves are in hand, exactly as it is for read.
+    /// </summary>
+    public bool GroupCanExecute => PermissionDigit(this.Permission, 1) is int digit && (digit & 1) != 0;
+
+    /// <summary>Gets a value indicating whether every account may traverse this directory.</summary>
+    public bool OtherCanExecute => PermissionDigit(this.Permission, 2) is int digit && (digit & 1) != 0;
+
     /// <summary>Reads one digit of a POSIX permission triple, or null when it cannot be read.</summary>
     /// <param name="permission">The triple, which may carry a leading sticky-bit digit.</param>
     /// <param name="index">0 for owner, 1 for group, 2 for other.</param>
@@ -207,6 +226,9 @@ public sealed class HdfsAclStatus
     /// </summary>
     public bool OwningGroupCanRead => GrantsRead(this.OwningGroupPermission);
 
+    /// <summary>Gets a value indicating whether the "group::" entry carries execute, before the mask.</summary>
+    public bool OwningGroupCanExecute => GrantsExecute(this.OwningGroupPermission);
+
     /// <summary>
     /// Whether the ACL mask lets read through.
     ///
@@ -222,6 +244,14 @@ public sealed class HdfsAclStatus
     public static bool MaskGrantsRead(string permission)
     {
         return HdfsFileStatus.PermissionDigit(permission, 1) is int digit && (digit & 4) != 0;
+    }
+
+    /// <summary>Whether the ACL mask lets execute through. The traversal half of <see cref="MaskGrantsRead"/>.</summary>
+    /// <param name="permission">The directory's mode, for example "750".</param>
+    /// <returns>True when the mask carries the execute bit.</returns>
+    public static bool MaskGrantsExecute(string permission)
+    {
+        return HdfsFileStatus.PermissionDigit(permission, 1) is int digit && (digit & 1) != 0;
     }
 
     /// <summary>
@@ -266,12 +296,52 @@ public sealed class HdfsAclStatus
         }
     }
 
+    /// <summary>
+    /// The names of groups granted execute by a named ACL entry, after the mask.
+    /// The traversal half of <see cref="GroupsGrantedRead"/>, and default
+    /// entries are ignored here for the same reason.
+    /// </summary>
+    /// <param name="permission">The directory's mode, whose group digit is the mask.</param>
+    /// <returns>The group names.</returns>
+    public IEnumerable<string> GroupsGrantedExecute(string permission)
+    {
+        if (!MaskGrantsExecute(permission))
+        {
+            yield break;
+        }
+
+        foreach (string entry in this.Entries)
+        {
+            string[] parts = AccessParts(entry);
+
+            if (parts.Length != 3 ||
+                !string.Equals(parts[0], "group", StringComparison.OrdinalIgnoreCase) ||
+                parts[1].Length == 0)
+            {
+                continue;
+            }
+
+            if (GrantsExecute(parts[2]))
+            {
+                yield return parts[1];
+            }
+        }
+    }
+
     /// <summary>Whether one entry's permission bits carry read.</summary>
     /// <param name="bits">The bits, for example "r-x", or null.</param>
     /// <returns>True when read is set.</returns>
     private static bool GrantsRead(string? bits)
     {
         return bits is not null && bits.Contains('r', StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Whether one entry's permission bits carry execute.</summary>
+    /// <param name="bits">The bits, for example "r-x", or null.</param>
+    /// <returns>True when execute is set.</returns>
+    private static bool GrantsExecute(string? bits)
+    {
+        return bits is not null && bits.Contains('x', StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Whether one entry describes inheritance rather than access.</summary>

@@ -96,6 +96,16 @@ namespace SqlTicketsConnector.Tests
             new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "Column_grants_intersect_across_policies_rather_than_union" },
             new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_whole_page_of_scrubbed_entities_does_not_end_the_catalogue" },
             new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_database_is_never_asked_for_lineage" },
+
+            // The three the Ranger fidelity review added. Each holds on every
+            // cluster whatever its Ranger looks like, which is what separates
+            // them from the zone and tag findings: no configuration answer can
+            // make them inert, so none of them may be renamed away quietly.
+            new[] { "SqlTicketsConnector.Tests.CdpTraverseAndPagingTests", "A_group_that_cannot_traverse_the_directory_does_not_get_the_file" },
+            new[] { "SqlTicketsConnector.Tests.CdpTraverseAndPagingTests", "A_ranger_grant_is_not_gated_by_the_directory_bits" },
+            new[] { "SqlTicketsConnector.Tests.CdpTraverseAndPagingTests", "A_null_gate_is_not_an_empty_one" },
+            new[] { "SqlTicketsConnector.Tests.CdpTraverseAndPagingTests", "The_pager_steps_by_what_a_page_held_not_by_what_it_asked_for" },
+            new[] { "SqlTicketsConnector.Tests.CdpTraverseAndPagingTests", "A_path_grant_does_not_reach_a_directory_differing_only_by_case" },
         };
 
         [Fact]

@@ -61,10 +61,23 @@ namespace SqlTicketsConnector.Tests.TestSupport
         /// <summary>Gets or sets the base URL this fake is mounted at.</summary>
         public string BaseUrl { get; set; } = "https://httpfs.test:14000/webhdfs/v1";
 
-        /// <summary>Adds a directory.</summary>
-        public FakeWebHdfs Directory(string path)
+        /// <summary>Adds a directory. 755 is world-traversable; 750 is not.</summary>
+        public FakeWebHdfs Directory(
+            string path,
+            string permission = "755",
+            string group = "hadoop-contracts-read",
+            params string[] aclEntries)
         {
-            this.entries[path] = new FakeHdfsEntry { Path = path, IsDirectory = true, Permission = "755" };
+            var entry = new FakeHdfsEntry
+            {
+                Path = path,
+                IsDirectory = true,
+                Permission = permission,
+                Group = group,
+            };
+
+            entry.AclEntries.AddRange(aclEntries);
+            this.entries[path] = entry;
             return this;
         }
 
@@ -98,6 +111,9 @@ namespace SqlTicketsConnector.Tests.TestSupport
                 this.Directory(parent);
                 parent = parent.Substring(0, parent.LastIndexOf('/'));
             }
+
+            // A parent the test configured deliberately is left exactly as it
+            // set it - the loop above only fills in the ones nobody named.
 
             return this;
         }
