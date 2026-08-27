@@ -468,7 +468,12 @@
   }
 
   .q legend {
-    padding: 0;
+    /* A fieldset's padding-top does not apply above its legend - the legend is
+       laid out at the border box's top edge - so the title sat flush against
+       the card while everything below it had the full padding, which reads as
+       the whole panel sitting low. The legend carries its own top padding
+       instead, matching the card's. */
+    padding: 1.1rem 0 0;
     display: flex;
     align-items: baseline;
     gap: 0.6rem;
