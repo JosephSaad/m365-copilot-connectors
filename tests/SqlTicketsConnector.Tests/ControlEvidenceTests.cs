@@ -85,6 +85,17 @@ namespace SqlTicketsConnector.Tests
             new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_table_nobody_is_granted_has_no_catalogue_entry" },
             new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_column_scoped_grant_narrows_what_may_be_described_rather_than_refusing_it" },
             new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_scrubbed_entity_is_not_indexed_as_a_nameless_item" },
+
+            // The four the catalogue's own adversarial review added. Each pins a
+            // way one entry could disclose more than the cluster does: a
+            // neighbour named to people not granted it, the columns of one grant
+            // shown to the holders of another, and - the one that is not a
+            // disclosure but a silence - a page of entities this caller may not
+            // read ending the enumeration and passing for a complete crawl.
+            new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_lineage_neighbour_nobody_on_this_entry_may_read_is_not_named" },
+            new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "Column_grants_intersect_across_policies_rather_than_union" },
+            new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_whole_page_of_scrubbed_entities_does_not_end_the_catalogue" },
+            new[] { "SqlTicketsConnector.Tests.CdpAtlasTests", "A_database_is_never_asked_for_lineage" },
         };
 
         [Fact]

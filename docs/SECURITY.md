@@ -313,7 +313,7 @@ identity must never be granted.
 ## 5. Running the evidence
 
 ```powershell
-dotnet test SqlTicketsConnector.sln                                  # 245 tests, no live dependencies
+dotnet test SqlTicketsConnector.sln                                  # 255 tests, no live dependencies
 dotnet build build\SecretHygiene.proj -t:ScanAppSettingsForSecrets    # configuration hygiene
 gitleaks detect --config .gitleaks.toml --redact                      # repository history
 pre-commit run --all-files                                            # the same checks a developer gets
