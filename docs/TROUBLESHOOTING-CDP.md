@@ -867,7 +867,7 @@ same directory twice by two different names.
 one item per Atlas entity — `hive_db` and `hive_table` by default, `hdfs_path`
 when `Settings:AtlasTypes` asks for it — carrying the name, the qualified name,
 the owner, the description, the columns, Atlas's classifications and glossary
-terms, one hop of lineage each way, and a modified timestamp. It is the only
+terms, one dataset hop of lineage each way, and a modified timestamp. It is the only
 connector here that can describe data it may not index, and most of what gets
 reported against it comes from that one sentence.
 
@@ -1134,23 +1134,46 @@ item count by fifty for no new answer.
 
 ### An entry with no lineage
 
-Two causes, and nothing else.
+Four causes, and nothing else. The last two are the connector working.
 
 - **`Settings:AtlasIncludeLineage` is `false`.** It defaults to true and costs
-  one extra request per entity written, so it is the first thing turned off
+  one extra request per table written, so it is the first thing turned off
   while proving the rest of the pipeline works, and the first thing forgotten
   afterwards.
 - **The entity genuinely has none.** Lineage exists only where something
   recorded it — a Hive query through the Atlas hook, a Spark job, a Sqoop import
   — and a table loaded by a process that does not report to Atlas has no
   upstream to describe. Its lineage tab in Atlas is empty too, which is the
-  check that separates the two causes in a minute.
+  check that separates the causes in a minute.
+- **The entry is for a database.** Atlas serves lineage for entities deriving
+  from `DataSet` or `Process`, and a `hive_db` derives from neither, so the
+  connector does not ask. Asking returns HTTP 400 from a completely healthy
+  Atlas — which is worth knowing, because it is what a `hive_db` in
+  `Settings:AtlasTypes` used to do to a whole run.
+- **Not everybody granted the entry is granted the neighbour.** A neighbour's
+  *name* is a disclosure: "Produced from `hr.salaries_raw`" tells everyone
+  granted the downstream table that a table of salaries exists and what it is
+  called, and this entry's ACL has nothing to do with who may read that one.
+  Atlas will not stop this — on a stock cluster its own policy shows every
+  authenticated user every entity — so the connector checks each neighbour
+  against Ranger itself and names it only when *every* group on this entry is
+  also granted it. A neighbour that is not a Hive table, or whose qualified name
+  will not parse, is dropped rather than guessed at. The count of hidden
+  neighbours is logged at debug against the entry's qualified name.
 
 `upstream` and `downstream` are omitted from the item rather than written empty,
-so both causes look the same on the item itself. Only one hop each way is read
-(`direction=BOTH&depth=1`): a second-hop entity that the depth allows through is
-not named, because "what feeds this" is a useful answer and "the transitive
-closure of what feeds this" is a graph nobody reads in a search result.
+so every cause looks the same on the item itself.
+
+**What a hop means here.** Hive does not join two tables directly: it records
+`table → hive_process → table`, and the process's own name is the query text
+that produced it. The walk therefore goes *through* transformation nodes —
+anything whose Atlas type name contains `process` or `lineage` — to the datasets
+on the far side, which is why `direction=BOTH&depth=2` is requested for what is
+described as one hop each way. Naming the immediate neighbour instead would put
+raw SQL in the index, and that SQL names tables of its own. A second dataset hop
+beyond that is not named: "what feeds this" is a useful answer and "the
+transitive closure of what feeds this" is a graph nobody reads in a search
+result.
 
 ### Every run reads the whole catalogue
 
@@ -1169,12 +1192,17 @@ detail request per entry written, plus one lineage request when
 `Settings:AtlasIncludeLineage` is true. Only entries that pass the routing check
 pay the second and third.
 
-Two consequences follow, and both are good news for a reviewer:
+Two consequences follow, and the first is a limit rather than a reassurance:
 
-1. **Every run re-derives every entry's ACL** from Ranger's current answer, so
-   the ACL staleness bound at [stage 6](#stage-6--the-watermark-and-the-acl-staleness-bound)
-   is one run for this connector rather than `Settings:FullRecrawlEveryRuns`
-   runs — as long as the table is still granted to somebody.
+1. **The ACL staleness bound is `Settings:FullRecrawlEveryRuns` runs, exactly
+   as it is for the other two connectors.** Reading every entity every run is
+   not the same as re-deriving every entry's ACL every run. The marker filter is
+   applied *before* the routing check, and a Ranger policy edit does not change
+   an Atlas entity's modification time — so an entry whose grant changed but
+   whose entity did not is dropped before any ACL is derived, and keeps the ACL
+   it last had until the next full recrawl. What the whole-catalogue read buys
+   is that nothing has to be *found* again, not that everything is re-decided.
+   Record the `FullRecrawlEveryRuns` number for this connector too.
 2. **When a table's grant is removed entirely, or a deny is added, the entry
    stops being written rather than being rewritten.** A push never deletes
    ([stage 7](#stage-7--a-push-never-deletes)), so the item stays in the index

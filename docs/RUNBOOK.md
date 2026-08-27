@@ -492,7 +492,7 @@ allowed to overwrite its items.
 |---|---|---|---|
 | `cdphdfsdocs` | Files under `Settings:HdfsRoots`, over HttpFS or WebHDFS. Each item carries the grants derived from that file's own POSIX ACL and Ranger | `cdphdfsdocs` | `appsettings.cdphdfsdocs.json` |
 | `cdphivecontracts` | Rows of `Source:ItemView`, over ODBC | `cdphivecontracts` | `appsettings.cdphivecontracts.json` |
-| `cdpatlascatalog` | The Apache Atlas catalogue. One item per entity — `hive_db` and `hive_table` by default, `hdfs_path` if `Settings:AtlasTypes` asks — carrying name, qualified name, owner, description, columns, Atlas classifications, glossary terms, one hop of lineage each way, and a modified timestamp | `cdpatlascatalog` | `appsettings.cdpatlascatalog.json` |
+| `cdpatlascatalog` | The Apache Atlas catalogue. One item per entity — `hive_db` and `hive_table` by default, `hdfs_path` if `Settings:AtlasTypes` asks — carrying name, qualified name, owner, description, columns, Atlas classifications, glossary terms, one dataset hop of lineage each way, and a modified timestamp. A lineage neighbour is named only where everybody granted the entry is granted the neighbour too | `cdpatlascatalog` | `appsettings.cdpatlascatalog.json` |
 
 ```powershell
 .\CdpGraphPush.exe --connector cdpatlascatalog
@@ -672,9 +672,17 @@ fronts it, and the setting is the base URL **without** `/api/atlas` — the
 connector appends the API path itself, which is what lets a Knox path work. A
 plain-HTTP URL is refused at startup rather than used.
 
-One Atlas failure is not fatal: a single entity deleted between the search and
-the read answers 404, and the connector indexes what it already has and carries
-on. That is the only status from Atlas that does not stop the run.
+Two Atlas failures are not fatal, and only on one entity's detail or lineage
+read. A single entity deleted between the search and the read answers **404**,
+and the connector indexes what it already has and carries on. A lineage request
+for an entity Atlas will not serve lineage for answers **400** — it serves only
+entities deriving from `DataSet` or `Process`, and a `hive_db` derives from
+neither — so that entry loses its lineage rather than the run losing the
+catalogue. The connector does not ask for a database's lineage in the first
+place; tolerating the 400 is the second line, for a customer type this code
+cannot know is not a `DataSet`. Every other status from Atlas stops the run, and
+on the search path a 400 stops it too, naming the likely cause: a type name in
+`Settings:AtlasTypes` that this cluster's Atlas does not define.
 
 ### 6.5 The ACL staleness bound (`Settings:FullRecrawlEveryRuns`)
 
@@ -715,9 +723,15 @@ stale can this be" needs the distinction:
 
 - **`cdphdfsdocs`** — bounded by `Settings:FullRecrawlEveryRuns`, exactly as
   above.
-- **`cdpatlascatalog`** — the catalogue is enumerated in full every run and every
-  entry's grants are re-derived from Ranger on each of them, so its bound is the
-  **schedule**: one run.
+- **`cdpatlascatalog`** — bounded by `Settings:FullRecrawlEveryRuns` too, and
+  the shape of the connector invites the opposite conclusion, so it is worth
+  being exact. The catalogue *is* enumerated in full every run: Atlas 2.1.0
+  cannot filter a basic search by modification time, so there is no incremental
+  read to ask for. But reading every entity is not re-deciding every entity. The
+  watermark filter runs *before* the routing check, and a Ranger policy edit
+  does not change an Atlas entity's modification time — so an entry whose grant
+  changed while its entity did not is dropped before any ACL is derived, and
+  keeps the ACL it last had until the next full recrawl.
 - **`cdphivecontracts`** — a crawl watermarked on `Settings:HiveWatermarkColumn`
   reads only new rows, so rows already indexed keep the ACL they were written
   with. Clearing that setting reads the table whole every run, which is the

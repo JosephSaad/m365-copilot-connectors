@@ -201,6 +201,47 @@ namespace SqlTicketsConnector.Tests
             Assert.Equal(2, summary.Total);
         }
 
+        [Fact]
+        public async Task A_multi_value_property_reaches_graph_as_an_annotated_collection()
+        {
+            // Graph rejects a collection sent without its
+            // "name@odata.type": "Collection(String)" sibling as a type mismatch
+            // against the registered StringCollection property, and the message
+            // names the item rather than the annotation. The engine adds it, so
+            // a connector adds a list and is finished - there is no second thing
+            // to remember, and no way to remember it in one connector and forget
+            // it in the next.
+            var item = new PushItem { Id = "collection1", ItemType = "file" };
+            item.AddIfPresent("title", "Tagged");
+            item.AddIfPresent("tags", new[] { "PII", "GDPR" });
+
+            // An empty or all-blank collection is not written at all, the way an
+            // empty string is not.
+            item.AddIfPresent("empty", Array.Empty<string>());
+            item.AddIfPresent("blank", new[] { " ", string.Empty });
+
+            Assert.False(item.Properties.ContainsKey("empty"));
+            Assert.False(item.Properties.ContainsKey("blank"));
+
+            (PushEngine engine, StubGraphAdapter adapter) = Engine();
+
+            await engine.PushItemsAsync(new FakePushSource(new[] { item }));
+
+            using var document = System.Text.Json.JsonDocument.Parse(adapter.WrittenBodies[^1]);
+
+            System.Text.Json.JsonElement properties = document.RootElement.GetProperty("properties");
+
+            Assert.Equal(
+                new[] { "PII", "GDPR" },
+                properties.GetProperty("tags").EnumerateArray().Select(v => v.GetString()).ToArray());
+
+            Assert.Equal("Collection(String)", properties.GetProperty("tags@odata.type").GetString());
+
+            // A single-value property is untouched by the annotation pass.
+            Assert.Equal("Tagged", properties.GetProperty("title").GetString());
+            Assert.False(properties.TryGetProperty("title@odata.type", out _));
+        }
+
         private static IReadOnlyList<PushItem> Items(params string[] ids)
         {
             return ids.Select(id =>

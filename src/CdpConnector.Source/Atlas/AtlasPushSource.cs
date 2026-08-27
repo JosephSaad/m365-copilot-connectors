@@ -159,11 +159,31 @@ public sealed class AtlasPushSource : IPushSource
             await this.atlas.EnrichAsync(entity, cancellationToken);
         }
 
+        // The slack is the same one the HDFS source applies, and it is needed
+        // here for a reason particular to this source. Each entity's timestamp
+        // is read by its own detail call, so the timestamps in one run are
+        // snapshots taken minutes apart across the enrich loop rather than at
+        // one instant. An entity altered after its own snapshot but before a
+        // later entity pushed the marker past it would be filtered out on every
+        // later incremental run, and would sit stale - content AND ACL - until
+        // the next full recrawl. Re-reading a few entities is upsert-cheap; not
+        // reading a changed one for a week is not.
         List<AtlasEntity> ordered = candidates
             .OrderBy(entity => entity.UpdatedUtc)
             .ThenBy(entity => entity.Guid, StringComparer.Ordinal)
-            .Where(entity => this.fullRecrawl || this.checkpoint.IsAfter(entity.UpdatedUtc, entity.Guid))
+            .Where(entity => this.fullRecrawl ||
+                             this.checkpoint.IsAfter(
+                                 entity.UpdatedUtc, entity.Guid, this.settings.ScanSlackSeconds))
             .ToList();
+
+        if (this.settings.ItemBudget > 0 && ordered.Count > this.settings.ItemBudget)
+        {
+            throw new InvalidOperationException(
+                $"{ordered.Count} catalogue entr(y/ies) are in scope, above the configured " +
+                $"Settings:ItemBudget of {this.settings.ItemBudget}. Nothing has been written. Raise the " +
+                "budget deliberately, or narrow Settings:AtlasTypes - a budget exists so a catalogue that " +
+                "grew by an order of magnitude overnight stops rather than spends the tenant's item quota.");
+        }
 
         this.log.Information(
             "{Total} catalogue entit(y/ies) found, {Selected} to write this run{Mode}.",
@@ -183,9 +203,15 @@ public sealed class AtlasPushSource : IPushSource
 
                 this.log.Warning(
                     "Stopping at Settings:MaxItemsPerRun ({Cap}). {Remaining} catalogue entr(y/ies) were not " +
-                    "written this run; the next run continues from the marker this one reached.",
+                    "written this run; {Next}",
                     this.settings.MaxItemsPerRun,
-                    ordered.Count - yielded);
+                    ordered.Count - yielded,
+                    this.fullRecrawl
+                        ? "this run is a full recrawl, which starts from the beginning every time, so it " +
+                          "cannot complete while the cap is below the size of the catalogue. Raise " +
+                          "Settings:MaxItemsPerRun above it or the recrawl will keep re-writing the same " +
+                          "oldest entries."
+                        : "the next run continues from the marker this one reached.");
                 break;
             }
 
@@ -277,13 +303,30 @@ public sealed class AtlasPushSource : IPushSource
         (string database, string table, string cluster) =
             AtlasEntity.SplitQualifiedName(entity.QualifiedName);
 
+        // A table whose qualified name did not parse into a database and a table
+        // cannot be asked about. An empty table name matches a policy written
+        // over "*" and nothing else, so the entry would be granted by the
+        // database-wide policy while a deny naming the real table could never
+        // match it. Refusing is the only answer that is not a guess.
+        if (entity.Kind == AtlasEntityKind.Table && (database.Length == 0 || table.Length == 0))
+        {
+            this.skipped++;
+
+            this.log.Warning(
+                "The catalogue entry for {QualifiedName} has no database.table form, so Ranger cannot be " +
+                "asked who may see it, and it is not indexed.",
+                entity.QualifiedName);
+
+            return null;
+        }
+
         // A database entry is described to whoever may read anything in it; a
         // table entry to whoever may read that table. A path entry follows the
         // filesystem rules the HDFS source already applies.
         RoutingDecision decision = entity.Kind switch
         {
             AtlasEntityKind.Table => this.routing!.EvaluateCatalogueEntry(database, table),
-            AtlasEntityKind.Database => this.routing!.EvaluateCatalogueEntry(database, "*"),
+            AtlasEntityKind.Database => this.routing!.EvaluateDatabaseEntry(database),
             _ => this.routing!.EvaluatePath(entity.QualifiedName),
         };
 
@@ -308,16 +351,23 @@ public sealed class AtlasPushSource : IPushSource
         // Enriched already, in the gather phase, because the marker needed the
         // timestamp it carries. Lineage is the expensive optional half and is
         // fetched only for entries that survived the routing check.
-        if (this.settings.AtlasIncludeLineage)
+        //
+        // Not for a database. Atlas serves lineage for entities deriving from
+        // DataSet or Process, and a hive_db derives from neither, so asking is a
+        // 400 from a completely healthy cluster - and one request per database
+        // that can only fail is a request not worth making.
+        if (this.settings.AtlasIncludeLineage && entity.Kind != AtlasEntityKind.Database)
         {
-            await this.atlas.AddLineageAsync(entity, cancellationToken);
+            await this.AddVisibleLineageAsync(entity, decision.Groups, cancellationToken);
         }
 
-        IReadOnlyList<string> describable = entity.Kind == AtlasEntityKind.Table
+        IReadOnlyList<string>? describable = entity.Kind == AtlasEntityKind.Table
             ? this.routing!.CatalogueColumns(database, table)
-            : Array.Empty<string>();
+            : null;
 
-        List<string> columns = describable.Count == 0
+        // Null is "nothing narrows this"; an empty list is "the granting
+        // policies agree on no column", and those are opposite answers.
+        List<string> columns = describable is null
             ? entity.Columns.ToList()
             : entity.Columns
                 .Where(column => describable.Contains(column, StringComparer.OrdinalIgnoreCase))
@@ -347,16 +397,108 @@ public sealed class AtlasPushSource : IPushSource
         item.AddIfPresent("ownerName", entity.Owner);
         item.AddIfPresent("description", entity.Description);
         item.AddIfPresent("columnNames", string.Join(", ", columns));
-        item.AddIfPresent("classifications", string.Join(", ", entity.Classifications));
-        item.AddIfPresent("glossaryTerms", string.Join(", ", entity.Terms));
+
+        // Collections, not joined strings, because both are refiners. A refiner
+        // buckets on the whole stored value, so "PII, GDPR" would be a bucket of
+        // its own and filtering on PII would miss the table carrying both tags -
+        // which is the one query these two fields exist to answer.
+        item.AddIfPresent("classifications", entity.Classifications.ToList());
+        item.AddIfPresent("glossaryTerms", entity.Terms.ToList());
+
         item.AddIfPresent("upstream", string.Join(", ", entity.Upstream));
         item.AddIfPresent("downstream", string.Join(", ", entity.Downstream));
         item.AddIfPresent("columnCount", (long)columns.Count);
-        item.AddIfPresent("modifiedUtc", entity.UpdatedUtc.UtcDateTime.ToString("o"));
+
+        // An entity whose detail call 404'd carries no timestamp at all, and
+        // writing the default would put 0001-01-01 in the field Copilot shows as
+        // the last modified date. No date is better than a wrong one.
+        if (entity.UpdatedUtc != default)
+        {
+            item.AddIfPresent("modifiedUtc", entity.UpdatedUtc.UtcDateTime.ToString("o"));
+        }
 
         this.markers[item.Id] = (entity.UpdatedUtc.UtcDateTime.ToString("o"), entity.Guid);
 
         return item;
+    }
+
+    /// <summary>
+    /// Fills in the lineage a reader of this entry is allowed to be told about.
+    ///
+    /// A neighbour's NAME is a disclosure. "Produced from hr.salaries_raw" tells
+    /// everyone granted the downstream table that a table of salaries exists,
+    /// what it is called and which database holds it - and that entry's ACL is
+    /// the downstream table's, which has nothing to do with who may read the
+    /// upstream one. Atlas will not stop this: on a stock cluster its own policy
+    /// shows every authenticated user every entity, which is exactly why this
+    /// connector does its own check.
+    ///
+    /// The test is that every group on THIS entry is also granted the
+    /// neighbour. Not "somebody is granted it" - the item carries one ACL and
+    /// every group on it sees every word - and not "the sets overlap", which
+    /// would disclose to the groups in the difference. A neighbour that is not a
+    /// Hive table, or whose qualified name will not parse, is dropped rather
+    /// than guessed at.
+    /// </summary>
+    /// <param name="entity">The entity being described.</param>
+    /// <param name="granted">The groups this entry will be granted to.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>A task for the operation.</returns>
+    private async Task AddVisibleLineageAsync(
+        AtlasEntity entity, IReadOnlyList<string> granted, CancellationToken cancellationToken)
+    {
+        (IReadOnlyList<AtlasNeighbour> upstream, IReadOnlyList<AtlasNeighbour> downstream) =
+            await this.atlas.LineageAsync(entity.Guid, cancellationToken);
+
+        int hidden = 0;
+
+        foreach ((IReadOnlyList<AtlasNeighbour> neighbours, IList<string> into) in
+                 new[] { (upstream, entity.Upstream), (downstream, entity.Downstream) })
+        {
+            foreach (AtlasNeighbour neighbour in neighbours)
+            {
+                if (this.MayName(neighbour, granted))
+                {
+                    into.Add(neighbour.Name);
+                }
+                else
+                {
+                    hidden++;
+                }
+            }
+        }
+
+        if (hidden > 0)
+        {
+            this.log.Debug(
+                "{Hidden} lineage neighbour(s) of {QualifiedName} are not named in its catalogue entry, " +
+                "because not everybody granted the entry is granted them.",
+                hidden,
+                entity.QualifiedName);
+        }
+    }
+
+    /// <summary>Decides whether everybody granted this entry may also be told the neighbour exists.</summary>
+    /// <param name="neighbour">The dataset on the other end of the lineage hop.</param>
+    /// <param name="granted">The groups the entry will be granted to.</param>
+    /// <returns>True when every one of those groups is granted the neighbour too.</returns>
+    private bool MayName(AtlasNeighbour neighbour, IReadOnlyList<string> granted)
+    {
+        (string database, string table, _) = AtlasEntity.SplitQualifiedName(neighbour.QualifiedName);
+
+        if (database.Length == 0 || table.Length == 0)
+        {
+            return false;
+        }
+
+        RoutingDecision decision = this.routing!.EvaluateCatalogueEntry(database, table);
+
+        if (!decision.MayIndex)
+        {
+            return false;
+        }
+
+        return granted.All(group => decision.Groups.Contains(group, StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>

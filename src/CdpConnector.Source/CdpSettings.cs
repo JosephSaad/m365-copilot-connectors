@@ -118,6 +118,13 @@ public sealed class CdpSettings
     /// </summary>
     public string AtlasBaseUrl { get; private init; } = string.Empty;
 
+    /// <summary>
+    /// The Atlas types the catalogue connector has a shape for. Anything else is
+    /// refused at startup rather than enumerated and silently dropped.
+    /// </summary>
+    private static readonly IReadOnlyList<string> DescribableAtlasTypes =
+        new[] { "hive_db", "hive_table", "hive_view", "hdfs_path" };
+
     /// <summary>Gets the Atlas entity types to catalogue.</summary>
     public IReadOnlyList<string> AtlasTypes { get; private init; } = Array.Empty<string>();
 
@@ -125,7 +132,7 @@ public sealed class CdpSettings
     public int AtlasPageSize { get; private init; }
 
     /// <summary>
-    /// Gets a value indicating whether to read one hop of lineage per entity.
+    /// Gets a value indicating whether to read one dataset hop of lineage per table.
     ///
     /// It is the most useful field in a catalogue and the most expensive: one
     /// extra request per entity. Worth it for a few thousand tables, and worth
@@ -425,6 +432,24 @@ public sealed class CdpSettings
                 "Settings:AtlasTypes",
                 "must list at least one Atlas entity type, separated by semicolons, for example " +
                 "hive_db;hive_table.");
+        }
+
+        // A type this connector has no shape for enumerates and details every
+        // one of its entities and then describes none of them, which costs a
+        // full crawl and reports a clean run with nothing written. Naming the
+        // types it understands turns a silent afternoon into a startup message.
+        List<string> unknown = this.AtlasTypes
+            .Where(type => !DescribableAtlasTypes.Contains(type))
+            .ToList();
+
+        if (unknown.Count > 0)
+        {
+            errors.Add(
+                "Settings:AtlasTypes",
+                $"names {string.Join(", ", unknown)}, which this connector cannot describe. It understands " +
+                $"{string.Join(", ", DescribableAtlasTypes)}. A type it does not understand is enumerated in " +
+                "full and then skipped entirely, so the run costs a whole crawl and writes nothing. Note that " +
+                "hive_column is deliberately absent: a column is described as part of its table.");
         }
     }
 

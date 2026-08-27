@@ -504,6 +504,41 @@ public sealed class PushEngine
             .ToList();
     }
 
+    /// <summary>
+    /// Adds the OData type annotation Graph requires beside every multi-value
+    /// property.
+    ///
+    /// A collection sent without its "name@odata.type": "Collection(String)"
+    /// sibling is rejected by Graph as a type mismatch against the registered
+    /// StringCollection property, and the message names the item rather than the
+    /// annotation. Doing it here means a connector adds a list and is finished;
+    /// there is no second thing to remember, and no way to remember it in one
+    /// connector and forget it in the next.
+    /// </summary>
+    /// <param name="properties">The connector's property values.</param>
+    /// <returns>Those values, with an annotation beside each collection.</returns>
+    private static Dictionary<string, object> AnnotateCollections(Dictionary<string, object> properties)
+    {
+        List<string> collections = properties
+            .Where(property => property.Value is IEnumerable<string>)
+            .Select(property => property.Key)
+            .ToList();
+
+        if (collections.Count == 0)
+        {
+            return properties;
+        }
+
+        var annotated = new Dictionary<string, object>(properties, StringComparer.Ordinal);
+
+        foreach (string name in collections)
+        {
+            annotated[name + "@odata.type"] = "Collection(String)";
+        }
+
+        return annotated;
+    }
+
     private ExternalItem BuildItem(PushItem mapped, List<Acl> acl, PushSummary summary)
     {
         ExternalSchemaRules.ValidateItemId(mapped.Id);
@@ -526,7 +561,7 @@ public sealed class PushEngine
         {
             Id = mapped.Id,
             Acl = acl,
-            Properties = new Properties { AdditionalData = mapped.Properties },
+            Properties = new Properties { AdditionalData = AnnotateCollections(mapped.Properties) },
             Content = new ExternalItemContent
             {
                 Type = ExternalItemContentType.Text,
