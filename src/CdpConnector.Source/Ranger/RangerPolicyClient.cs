@@ -140,6 +140,8 @@ public sealed class RangerPolicyClient : IDisposable
             }
         }
 
+        RefuseSecurityZones(serviceName, policies);
+
         this.log.Information(
             "Read {Count} Ranger polic(y/ies) from service {Service} over {Pages} page(s).",
             policies.Count,
@@ -147,6 +149,62 @@ public sealed class RangerPolicyClient : IDisposable
             pages);
 
         return policies;
+    }
+
+    /// <summary>
+    /// Stops the run when the service uses Ranger security zones.
+    ///
+    /// This connector evaluates every policy it read against every resource.
+    /// That is not how Ranger reads a zoned cluster: a resource that falls
+    /// inside a zone is evaluated against THAT ZONE's policies only, and a
+    /// resource outside every zone against unzoned policies only. Reading them
+    /// together applies a legacy unzoned grant to a table the zone protects, and
+    /// hands the indexed item to people the cluster refuses.
+    ///
+    /// Refusing is the answer rather than a warning, and rather than quietly
+    /// evaluating the unzoned policies alone. A warning would be read once and
+    /// then not again, and dropping the zoned policies would still be a guess
+    /// about a zone this code cannot see. The file header's rule already covers
+    /// the case: a Ranger this connector cannot read faithfully stops the run,
+    /// because "index it anyway" is the one answer that cannot be taken back.
+    ///
+    /// Honouring zones properly means fetching the zone definitions and
+    /// selecting a resource's zone before any policy is filtered. Until that
+    /// exists, this is the honest behaviour.
+    /// </summary>
+    /// <param name="serviceName">The Ranger service the policies came from.</param>
+    /// <param name="policies">Everything read for it.</param>
+    private static void RefuseSecurityZones(string serviceName, IReadOnlyList<RangerPolicy> policies)
+    {
+        List<RangerPolicy> zoned = policies.Where(policy => policy.ZoneName.Length > 0).ToList();
+
+        if (zoned.Count == 0)
+        {
+            return;
+        }
+
+        List<string> zones = zoned
+            .Select(policy => policy.ZoneName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        string named = string.Join(", ", zones.Take(5));
+
+        if (zones.Count > 5)
+        {
+            named += $" and {zones.Count - 5} more";
+        }
+
+        throw new InvalidOperationException(
+            $"Ranger service '{serviceName}' has {zoned.Count} polic(y/ies) in security zone(s) {named}, " +
+            "and this connector cannot evaluate zones. It applies every policy to every resource, whereas " +
+            "Ranger evaluates a resource inside a zone against that zone's policies only and a resource " +
+            "outside every zone against the unzoned ones only - so reading them together would grant an " +
+            "indexed item to people the cluster refuses. The run stops rather than deciding what may be " +
+            "indexed from a policy set it cannot read faithfully. Point Settings:RangerSqlService and " +
+            "Settings:RangerHdfsService at a service without zones, or wait for zone support; there is " +
+            "deliberately no setting that disables this check.");
     }
 
     /// <summary>Reads one page of the policy list.</summary>
@@ -234,6 +292,14 @@ public sealed class RangerPolicyClient : IDisposable
                 PolicyType = element.TryGetProperty("policyType", out JsonElement type)
                     ? (RangerPolicyType)type.GetInt32()
                     : RangerPolicyType.Access,
+
+                // Absent on an unzoned policy, and empty on one from some Ranger
+                // builds. Both mean the same thing and both must read as unzoned,
+                // or every cluster would trip the guard below.
+                ZoneName = element.TryGetProperty("zoneName", out JsonElement zone) &&
+                           zone.ValueKind == JsonValueKind.String
+                    ? zone.GetString()?.Trim() ?? string.Empty
+                    : string.Empty,
             };
 
             if (element.TryGetProperty("resources", out JsonElement resources) &&

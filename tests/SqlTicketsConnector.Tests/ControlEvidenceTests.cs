@@ -106,6 +106,12 @@ namespace SqlTicketsConnector.Tests
             new[] { "SqlTicketsConnector.Tests.CdpTraverseAndPagingTests", "A_null_gate_is_not_an_empty_one" },
             new[] { "SqlTicketsConnector.Tests.CdpTraverseAndPagingTests", "The_pager_steps_by_what_a_page_held_not_by_what_it_asked_for" },
             new[] { "SqlTicketsConnector.Tests.CdpTraverseAndPagingTests", "A_path_grant_does_not_reach_a_directory_differing_only_by_case" },
+
+            // The zone guard, and the test that stops it firing everywhere. A
+            // guard nobody can switch off is only safe while it cannot fire on
+            // an ordinary cluster, so both halves are evidence.
+            new[] { "SqlTicketsConnector.Tests.CdpTraverseAndPagingTests", "A_policy_in_a_security_zone_stops_the_run" },
+            new[] { "SqlTicketsConnector.Tests.CdpTraverseAndPagingTests", "An_unzoned_policy_set_is_read_normally" },
         };
 
         [Fact]
