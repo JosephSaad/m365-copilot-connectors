@@ -58,14 +58,18 @@ against.
 
 ## 1. What you are building
 
-Four projects in one Visual Studio solution:
+Nine projects in one Visual Studio solution, plus the test project:
 
 | Project | Model | Runs where |
 |---|---|---|
 | `SqlTicketsConnector` | gRPC server behind the Microsoft Graph connector agent | On-premises Windows Server |
-| `Connector.Security` | Shared secrets, certificates, credentials, SQL, redaction | Class library, referenced by the other three |
+| `Connector.Security` | Shared secrets, certificates, credentials, SQL, redaction | Class library, referenced by everything |
+| `PushCore` | The direct push engine. **Names no source technology** | Class library, referenced by every push tool |
+| `PushCore.Sql` | The SQL Server half of that engine: a query and a row mapping become a source | Class library, referenced only by the SQL push tools |
 | `SqlGraphPush` | Direct `PUT /external/connections/{id}/items/{itemId}` — one flat table | Operator workstation |
 | `SqlHierarchyPush` | The same, for a three level hierarchy | Operator workstation |
+| `CdpGraphPush` | The same, for Cloudera CDP 7.1.9: HDFS documents, Hive tables, and the Atlas catalogue | Windows host with Kerberos to the cluster |
+| `CdpConnector.Source` + `CdpConnector.Extraction` | HttpFS/WebHDFS, Hive over ODBC, Ranger, Atlas, ACLs, watermarks; and file bytes to text | Class libraries, referenced by `CdpGraphPush` |
 
 Two connector models are being demonstrated deliberately: the **SDK** model,
 where Microsoft's agent holds the tenant relationship and calls your gRPC
@@ -280,6 +284,60 @@ pushing into a Ready connection, fetch its registered schema and refuse if it
 carries any property this connector does not build. Append-only evolution stays
 legal (a missing expected property is a warning); a foreign property is fatal
 with the property named.
+
+## 8a. Deliverable D — a source that is not a database
+
+`CdpGraphPush`, against Cloudera CDP Private Cloud Base 7.1.9. Three connectors
+in one executable, each with its own connection and configuration file:
+`cdphdfsdocs` (documents in HDFS), `cdphivecontracts` (a Hive table), and
+`cdpatlascatalog` (the Apache Atlas catalogue).
+
+**This is the deliverable that proves the seam.** `IPushConnector` must name no
+source technology: a connector supplies a schema and an `IPushSource`, and a SQL
+connector gets `CreateSource` supplied for it by `ISqlPushConnector` out of the
+query and row mapping it already wrote. If adding this family required a change
+to `PushCore`, the seam is in the wrong place.
+
+**Hold no credential.** Hive and Impala authenticate through the Cloudera ODBC
+driver's SSPI plugin and HDFS, Ranger and Atlas through HTTP Negotiate — all
+from the logon session of the account the service runs as, which should be a
+gMSA whose password Active Directory owns and rotates. Compose the ODBC
+connection string from typed settings rather than accepting a pasted one, so
+there is no configuration key a password could live in, and inspect the free-text
+remainder for one anyway.
+
+**What it must refuse, and why.** Each of these is a case where one indexed copy
+cannot represent what the source would show two different people:
+
+- A table Ranger row-filters or column-masks is routed to a live query and never
+  read. Reading it would read the service account's view of it.
+- A deny is obeyed by refusing to index, never mirrored into a Graph deny ACE. A
+  mirrored deny that drifts fails open.
+- A cluster group that does not resolve to an Entra group is dropped, and an
+  item left with no grants is skipped **before its content is fetched**. There is
+  no fallback to the connection-wide ACL: a fallback would widen the audience of
+  exactly the item whose permissions could not be established.
+- An unreachable Ranger stops the run. It is what says whether indexing is
+  allowed at all, so it cannot default to yes.
+
+**The catalogue is the deliberate exception, in one direction only.** A
+row-filtered or masked table **is** catalogued even though its data is not: a
+filter governs rows and a mask governs values, and neither hides the table's
+existence, its columns or its owner from somebody granted `select`. The tables
+whose contents can never be indexed are frequently the ones most worth
+describing. A deny still refuses the entry, because describing a table discloses
+it, and a column-scoped grant narrows what is described rather than refusing it.
+
+Note also that the catalogue connector is deliberately **stricter than the
+cluster**: CDP ships Atlas with a Ranger policy granting every authenticated user
+read on every entity, and inheriting that would publish the shape of the lake to
+everyone in the tenant.
+
+**`Settings:FullRecrawlEveryRuns` is a security control, not a tuning knob.** A
+permission change at the source does not alter a file's modification time, so an
+incremental crawl never revisits a file whose grant was revoked. The periodic
+full recrawl is the only thing that re-derives item ACLs, which makes that number
+the documented upper bound on ACL staleness. Setting it to zero is refused.
 
 ## 9. The shared security engine
 
