@@ -60,6 +60,18 @@ public sealed class HdfsPushSource : IPushSource
     private readonly ILogger log;
     private readonly bool ownsHdfs;
 
+    /// <summary>
+    /// What each file in scope inherited from the directories above it: the
+    /// groups that can traverse all of them, or null when none restricted
+    /// anybody, and whether the whole chain is world-traversable.
+    ///
+    /// Recorded during the walk because that is the only place the chain is
+    /// known. A file missing from here has not been walked to, and is gated
+    /// closed rather than assumed reachable.
+    /// </summary>
+    private readonly Dictionary<string, (IReadOnlySet<string>? Gate, bool Everyone)> reachable =
+        new(StringComparer.Ordinal);
+
     private RoutingEvaluator? routing;
     private bool truncated;
     private int skipped;
@@ -271,7 +283,19 @@ public sealed class HdfsPushSource : IPushSource
                 continue;
             }
 
-            await this.WalkAsync(root, found, visited, cancellationToken);
+            // The root's own permissions gate everything under it, so it is
+            // narrowed like any other directory before the walk begins. A root
+            // whose status cannot be read leaves the gate unrestricted rather
+            // than empty, because an unreadable status is not evidence that
+            // nobody may traverse - and the files inside it are still gated by
+            // every directory below.
+            HdfsFileStatus? rootStatus = await this.hdfs.StatusAsync(root, cancellationToken);
+
+            (IReadOnlySet<string>? gate, bool everyone) = rootStatus is null
+                ? (null, true)
+                : await this.NarrowAsync(rootStatus, gate: null, everyone: true, cancellationToken);
+
+            await this.WalkAsync(root, found, visited, gate, everyone, cancellationToken);
         }
 
         int before = found.Count;
@@ -302,10 +326,74 @@ public sealed class HdfsPushSource : IPushSource
         return ordered;
     }
 
+    /// <summary>
+    /// Narrows the traversal gate by one directory.
+    ///
+    /// A world-traversable directory restricts nobody, so it passes the
+    /// inherited gate through untouched. Any other directory intersects it with
+    /// the groups that may traverse THIS directory, and the result is what the
+    /// files below it inherit.
+    /// </summary>
+    /// <param name="directory">The directory being entered.</param>
+    /// <param name="gate">What was inherited from above, or null for unrestricted.</param>
+    /// <param name="everyone">True while every ancestor has been world-traversable.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The gate for what is inside, and whether it is still world-reachable.</returns>
+    private async Task<(IReadOnlySet<string>? Gate, bool Everyone)> NarrowAsync(
+        HdfsFileStatus directory,
+        IReadOnlySet<string>? gate,
+        bool everyone,
+        CancellationToken cancellationToken)
+    {
+        HdfsAclStatus? acl = await this.hdfs.AclAsync(directory.Path, cancellationToken);
+
+        (IReadOnlyList<string> traversers, bool worldTraversable) =
+            HdfsAclBuilder.TraverseGroups(directory, acl);
+
+        if (worldTraversable)
+        {
+            // Everybody can get through here, so this directory takes nobody
+            // out of the running.
+            return (gate, everyone);
+        }
+
+        var here = new HashSet<string>(traversers, StringComparer.OrdinalIgnoreCase);
+
+        if (gate is not null)
+        {
+            here.IntersectWith(gate);
+        }
+
+        return (here, false);
+    }
+
+    /// <summary>
+    /// Walks one directory, carrying down who can still reach what is inside it.
+    ///
+    /// Reading a file on HDFS needs read on the file and execute on every
+    /// directory above it, so the set of groups that can reach a file is the
+    /// INTERSECTION of the groups that can traverse each of its ancestors. That
+    /// set can only be built on the way down, which is why it is threaded
+    /// through the walk rather than recomputed per file: one GETACLSTATUS per
+    /// directory, not per file.
+    ///
+    /// A null gate means no ancestor has restricted anybody yet. It is not the
+    /// same as an empty one, and the two must never be conflated - empty means
+    /// nobody gets in.
+    /// </summary>
+    /// <param name="path">The directory to walk.</param>
+    /// <param name="found">Files in scope, appended to.</param>
+    /// <param name="visited">Directories already walked.</param>
+    /// <param name="gate">Groups that can traverse everything above here, or null for unrestricted.</param>
+    /// <param name="everyone">True while every ancestor has been world-traversable.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>A task for the operation.</returns>
     private async Task WalkAsync(
         string path,
         List<HdfsFileStatus> found,
         HashSet<string> visited,
+        IReadOnlySet<string>? gate,
+        bool everyone,
         CancellationToken cancellationToken)
     {
         if (!visited.Add(path))
@@ -334,13 +422,17 @@ public sealed class HdfsPushSource : IPushSource
 
             if (entry.IsDirectory)
             {
-                await this.WalkAsync(entry.Path, found, visited, cancellationToken);
+                (IReadOnlySet<string>? narrowed, bool stillEveryone) =
+                    await this.NarrowAsync(entry, gate, everyone, cancellationToken);
+
+                await this.WalkAsync(entry.Path, found, visited, narrowed, stillEveryone, cancellationToken);
                 continue;
             }
 
             if (this.IsIndexable(entry))
             {
                 found.Add(entry);
+                this.reachable[entry.Path] = (gate, everyone);
             }
         }
     }
@@ -387,8 +479,17 @@ public sealed class HdfsPushSource : IPushSource
             return null;
         }
 
+        // What the directories above this file let through. A file the walk did
+        // not record is gated shut rather than let through on the assumption it
+        // was reachable: an empty gate costs an item, a missing check costs a
+        // leak.
+        (IReadOnlySet<string>? gate, bool everyone) =
+            this.reachable.TryGetValue(file.Path, out (IReadOnlySet<string>? Gate, bool Everyone) found)
+                ? found
+                : (new HashSet<string>(StringComparer.OrdinalIgnoreCase), false);
+
         IReadOnlyList<PushAclEntry> grants =
-            await this.acls.BuildAsync(file, acl, decision.Groups, cancellationToken);
+            await this.acls.BuildAsync(file, acl, decision.Groups, cancellationToken, gate, everyone);
 
         if (grants.Count == 0)
         {

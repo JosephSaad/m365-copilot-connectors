@@ -208,7 +208,11 @@ public sealed class RangerPolicy
     /// <summary>
     /// Gets a value indicating whether a resource value matches, as Ranger's own
     /// wildcard matcher would match it: a glob honouring '*' and '?' anywhere in
-    /// the value, case-insensitively, and honouring isExcludes.
+    /// the value, and honouring isExcludes.
+    ///
+    /// Case-insensitively, which is right for the resources this method is
+    /// asked about - database, table and column are Hive identifiers. A PATH is
+    /// not, and CoversPath matches one case-sensitively.
     /// </summary>
     /// <param name="resourceName">The resource to test, for example "table".</param>
     /// <param name="candidate">The value to test against it.</param>
@@ -314,7 +318,11 @@ public sealed class RangerPolicy
             return string.Equals(value, candidate, StringComparison.OrdinalIgnoreCase);
         }
 
-        return Pattern("v:" + value, value, star: ".*", question: ".", suffix: string.Empty).IsMatch(candidate);
+        // Case-insensitive, because a Hive identifier is: CUSTOMER and
+        // customer are one table, and Ranger matches them as one.
+        return Pattern(
+            "v:" + value, value, star: ".*", question: ".", suffix: string.Empty, ignoreCase: true)
+            .IsMatch(candidate);
     }
 
     /// <summary>Matches one path value against a candidate path.</summary>
@@ -330,12 +338,20 @@ public sealed class RangerPolicy
         // A path wildcard is a segment wildcard. "/data/*" names the entries of
         // /data and not the tree under them; what reaches under them is the
         // recursive flag, and only the recursive flag.
+        // Case-SENSITIVE, unlike a Hive name. HDFS is a case-sensitive
+        // filesystem: /data/Finance and /data/finance are two directories that
+        // can hold different files with different permissions. Folding them
+        // together would apply a grant written for one to the other, which is
+        // an over-grant - and this repository already says so where it
+        // normalises Settings:HdfsRoots and deliberately leaves their case
+        // alone.
         return Pattern(
             (recursive ? "r:" : "n:") + trimmed,
             trimmed,
             star: "[^/]*",
             question: "[^/]",
-            suffix: recursive ? "(/.*)?" : string.Empty)
+            suffix: recursive ? "(/.*)?" : string.Empty,
+            ignoreCase: false)
             .IsMatch(candidate);
     }
 
@@ -347,14 +363,16 @@ public sealed class RangerPolicy
         return path.Length > 1 && path.EndsWith('/') ? path.TrimEnd('/') : path;
     }
 
-    /// <summary>Translates a value into an anchored, case-insensitive glob.</summary>
+    /// <summary>Translates a value into an anchored glob.</summary>
     /// <param name="key">The cache key, distinguishing the matching mode.</param>
     /// <param name="value">The value to translate.</param>
     /// <param name="star">What '*' becomes.</param>
     /// <param name="question">What '?' becomes.</param>
     /// <param name="suffix">Appended before the anchor, to reach under a recursive path.</param>
+    /// <param name="ignoreCase">True for a Hive identifier, false for an HDFS path.</param>
     /// <returns>The compiled expression.</returns>
-    private static Regex Pattern(string key, string value, string star, string question, string suffix)
+    private static Regex Pattern(
+        string key, string value, string star, string question, string suffix, bool ignoreCase)
     {
         return Patterns.GetOrAdd(key, _ =>
         {
@@ -375,11 +393,16 @@ public sealed class RangerPolicy
 
             builder.Append(suffix).Append(@"\z");
 
-            // CultureInvariant with IgnoreCase: without it the current culture
-            // decides what upper case means, and under a Turkish culture 'I'
-            // and 'i' stop being the same letter, so a policy would match a
-            // different set of tables on a differently configured host.
-            return new Regex(builder.ToString(), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            // CultureInvariant wherever case is folded at all: without it the
+            // current culture decides what upper case means, and under a
+            // Turkish culture 'I' and 'i' stop being the same letter, so a
+            // policy would match a different set of tables on a differently
+            // configured host.
+            RegexOptions options = ignoreCase
+                ? RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+                : RegexOptions.CultureInvariant;
+
+            return new Regex(builder.ToString(), options);
         });
     }
 }

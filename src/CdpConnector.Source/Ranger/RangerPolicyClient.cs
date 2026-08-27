@@ -60,6 +60,26 @@ public sealed class RangerPolicyClient : IDisposable
         this.ownsClient = ownsClient;
     }
 
+    /// <summary>
+    /// How many policies to ask Ranger for at a time.
+    ///
+    /// Ranger clamps this to its own ranger.db.maxrows.default, 200 out of the
+    /// box, so asking for more is a request rather than an expectation - which
+    /// is exactly why the loop advances by what a page held rather than by what
+    /// it asked for.
+    /// </summary>
+    private const int PolicyPageSize = 1000;
+
+    /// <summary>
+    /// A ceiling on the whole policy set, past which the run stops.
+    ///
+    /// Not a real policy count - it is a backstop against a pager that will not
+    /// terminate. A policy set this connector cannot finish reading is an
+    /// unreadable Ranger, and the rule for that is already written at the top of
+    /// this file: stop, rather than decide what may be indexed from half of it.
+    /// </summary>
+    private const int MaxPolicies = 100_000;
+
     /// <summary>Reads every policy defined on one service.</summary>
     /// <param name="serviceName">The Ranger service, for example cm_hdfs or cm_hive.</param>
     /// <param name="cancellationToken">Cancellation.</param>
@@ -69,7 +89,77 @@ public sealed class RangerPolicyClient : IDisposable
     public async Task<IReadOnlyList<RangerPolicy>> PoliciesAsync(
         string serviceName, CancellationToken cancellationToken)
     {
-        string url = $"{this.baseUrl}/service/public/v2/api/service/{Uri.EscapeDataString(serviceName)}/policy";
+        var policies = new List<RangerPolicy>();
+        var seen = new HashSet<long>();
+        int startIndex = 0;
+        int pages = 0;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            List<RangerPolicy> page = await this.PageAsync(serviceName, startIndex, cancellationToken);
+            pages++;
+
+            if (page.Count == 0)
+            {
+                break;
+            }
+
+            int added = 0;
+
+            foreach (RangerPolicy policy in page)
+            {
+                if (seen.Add(policy.Id))
+                {
+                    policies.Add(policy);
+                    added++;
+                }
+            }
+
+            // Advance by what the page ACTUALLY held, never by what was asked
+            // for. Ranger clamps pageSize to its own ranger.db.maxrows.default,
+            // so a request for a thousand can come back with two hundred - and
+            // stepping the index by a thousand would then skip the eight
+            // hundred in between and never know it.
+            startIndex += page.Count;
+
+            // A full page that contributed nothing new is a server ignoring
+            // startIndex, which would otherwise spin on page one for ever.
+            if (added == 0)
+            {
+                break;
+            }
+
+            if (policies.Count >= MaxPolicies)
+            {
+                throw new InvalidOperationException(
+                    $"Ranger Admin returned more than {MaxPolicies} policies for service '{serviceName}', " +
+                    "which is past anything this connector should be asked to reason about. The run stops " +
+                    "rather than deciding what may be indexed from a policy set it has not finished reading.");
+            }
+        }
+
+        this.log.Information(
+            "Read {Count} Ranger polic(y/ies) from service {Service} over {Pages} page(s).",
+            policies.Count,
+            serviceName,
+            pages);
+
+        return policies;
+    }
+
+    /// <summary>Reads one page of the policy list.</summary>
+    /// <param name="serviceName">The Ranger service.</param>
+    /// <param name="startIndex">Where the page starts.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The policies on that page, in the order Ranger returned them.</returns>
+    private async Task<List<RangerPolicy>> PageAsync(
+        string serviceName, int startIndex, CancellationToken cancellationToken)
+    {
+        string url =
+            $"{this.baseUrl}/service/public/v2/api/service/{Uri.EscapeDataString(serviceName)}/policy" +
+            $"?pageSize={PolicyPageSize}&startIndex={startIndex}";
 
         HttpResponseMessage response;
 
@@ -109,12 +199,7 @@ public sealed class RangerPolicyClient : IDisposable
             await using Stream body = await response.Content.ReadAsStreamAsync(cancellationToken);
             using JsonDocument document = await JsonDocument.ParseAsync(body, cancellationToken: cancellationToken);
 
-            List<RangerPolicy> policies = Parse(document.RootElement);
-
-            this.log.Information(
-                "Read {Count} Ranger polic(y/ies) from service {Service}.", policies.Count, serviceName);
-
-            return policies;
+            return Parse(document.RootElement);
         }
     }
 
