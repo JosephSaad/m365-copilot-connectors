@@ -459,7 +459,7 @@
     background: var(--surface);
     border: 1px solid var(--rule);
     border-radius: 3px;
-    padding: 1.1rem 1.15rem 1.15rem;
+    padding: 1.7rem 1.15rem 1.3rem;
     margin: 0;
     display: flex;
     flex-direction: column;
@@ -467,13 +467,12 @@
     box-shadow: var(--shadow);
   }
 
-  .q legend {
-    /* A fieldset's padding-top does not apply above its legend - the legend is
-       laid out at the border box's top edge - so the title sat flush against
-       the card while everything below it had the full padding, which reads as
-       the whole panel sitting low. The legend carries its own top padding
-       instead, matching the card's. */
-    padding: 1.65rem 0 0.15rem;
+  .q .qhead {
+    /* Deliberately NOT a <legend>. A legend is laid out on the fieldset's
+       border box: it ignores padding-top, and on a title that wraps to two
+       lines the border is drawn straight through the first line. The group is
+       named with aria-labelledby instead, so this is an ordinary box that sits
+       inside the card's padding like everything else in it. */
     display: flex;
     align-items: baseline;
     gap: 0.6rem;
@@ -481,7 +480,7 @@
     font-size: 0.95rem;
     line-height: 1.35;
   }
-  .q legend .qn {
+  .q .qhead .qn {
     font-family: "IBM Plex Mono", ui-monospace, monospace;
     font-size: 0.68rem;
     font-weight: 500;
@@ -802,8 +801,8 @@
 
     <form class="quiz" id="quiz">
 
-      <fieldset class="q">
-        <legend><span class="qn">Q1</span> Where do the people asking sit?</legend>
+      <fieldset class="q" aria-labelledby="qh1">
+        <div class="qhead" id="qh1"><span class="qn">Q1</span> Where do the people asking sit?</div>
         <div class="opts">
           <label><input type="radio" name="reach" value="licensed"><span>Inside the tenant, all M365 Copilot licensed</span></label>
           <label><input type="radio" name="reach" value="mixed"><span>Inside the tenant, but not everyone is Copilot licensed</span></label>
@@ -811,8 +810,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q2</span> Who owns the data?</legend>
+      <fieldset class="q" aria-labelledby="qh2">
+        <div class="qhead" id="qh2"><span class="qn">Q2</span> Who owns the data?</div>
         <div class="opts">
           <label><input type="radio" name="own" value="ours"><span>We own it outright</span></label>
           <label><input type="radio" name="own" value="vendor"><span>Licensed from a vendor, no AI or redistribution rider</span></label>
@@ -821,8 +820,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q3</span> How is access controlled today?</legend>
+      <fieldset class="q" aria-labelledby="qh3">
+        <div class="qhead" id="qh3"><span class="qn">Q3</span> How is access controlled today?</div>
         <div class="opts">
           <label><input type="radio" name="access" value="groups"><span>Static Entra groups &mdash; everyone in the group sees everything</span></label>
           <label><input type="radio" name="access" value="rls"><span>Row-level or per-user entitlement inside the source</span></label>
@@ -830,8 +829,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q4</span> What is the answer, actually?</legend>
+      <fieldset class="q" aria-labelledby="qh4">
+        <div class="qhead" id="qh4"><span class="qn">Q4</span> What is the answer, actually?</div>
         <div class="opts">
           <label><input type="radio" name="kind" value="content"><span>Content &mdash; documents, case notes, records with text</span></label>
           <label><input type="radio" name="kind" value="computed"><span>A computed value &mdash; a measure, an aggregate, a price</span></label>
@@ -839,8 +838,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q5</span> Is the data modelled for analytics?</legend>
+      <fieldset class="q" aria-labelledby="qh5">
+        <div class="qhead" id="qh5"><span class="qn">Q5</span> Is the data modelled for analytics?</div>
         <div class="opts">
           <label><input type="radio" name="model" value="have"><span>It is already in a Power BI semantic model</span></label>
           <label><input type="radio" name="model" value="fits"><span>Not yet, but it is dimensional &mdash; facts, dimensions, measures</span></label>
@@ -849,8 +848,8 @@
         <p class="qnote">This only changes the answer where the reason for calling live was a computed value or row-level security. A semantic model is built for both; it is not a document surface, so a catalogue of descriptive metadata still belongs in the index.</p>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q6</span> How stale may an answer be?</legend>
+      <fieldset class="q" aria-labelledby="qh6">
+        <div class="qhead" id="qh6"><span class="qn">Q6</span> How stale may an answer be?</div>
         <p class="hint">Freshness is bounded by crawl interval on any index path. Nothing makes an index live.</p>
         <div class="opts">
           <label><input type="radio" name="fresh" value="live"><span>Current to the second or minute</span></label>
@@ -860,8 +859,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q7</span> Deletion SLA &mdash; how fast must a removed record stop appearing?</legend>
+      <fieldset class="q" aria-labelledby="qh7">
+        <div class="qhead" id="qh7"><span class="qn">Q7</span> Deletion SLA &mdash; how fast must a removed record stop appearing?</div>
         <p class="hint">The question people forget. A direct push <em>never</em> deletes; an agent-hosted crawl deletes on its next incremental pass.</p>
         <div class="opts">
           <label><input type="radio" name="del" value="immediate"><span>Immediately &mdash; right to erasure, or a compliance takedown</span></label>
@@ -871,8 +870,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q8</span> What infrastructure do you actually have?</legend>
+      <fieldset class="q" aria-labelledby="qh8">
+        <div class="qhead" id="qh8"><span class="qn">Q8</span> What infrastructure do you actually have?</div>
         <div class="opts">
           <label><input type="radio" name="infra" value="onprem"><span>An on-prem Windows host that can run the Graph connector agent</span></label>
           <label><input type="radio" name="infra" value="cloudjob"><span>No on-prem host &mdash; a VM or scheduled job with outbound HTTPS</span></label>
@@ -881,8 +880,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q9</span> What can the source be read through?</legend>
+      <fieldset class="q" aria-labelledby="qh9">
+        <div class="qhead" id="qh9"><span class="qn">Q9</span> What can the source be read through?</div>
         <div class="opts">
           <label><input type="radio" name="src" value="gallery"><span>It's on Microsoft's connector gallery list</span></label>
           <label><input type="radio" name="src" value="sql"><span>A SQL or otherwise queryable database</span></label>
@@ -892,8 +891,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q10</span> Roughly how many items?</legend>
+      <fieldset class="q" aria-labelledby="qh10">
+        <div class="qhead" id="qh10"><span class="qn">Q10</span> Roughly how many items?</div>
         <div class="opts">
           <label><input type="radio" name="vol" value="small"><span>Under ~50,000</span></label>
           <label><input type="radio" name="vol" value="mid"><span>50,000 to 500,000</span></label>
@@ -901,8 +900,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q11</span> How many more sources like this are coming?</legend>
+      <fieldset class="q" aria-labelledby="qh11">
+        <div class="qhead" id="qh11"><span class="qn">Q11</span> How many more sources like this are coming?</div>
         <div class="opts">
           <label><input type="radio" name="reuse" value="one"><span>This is the only one</span></label>
           <label><input type="radio" name="reuse" value="few"><span>Two or three more, probably</span></label>
@@ -910,8 +909,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q12</span> What does compliance require of the data boundary?</legend>
+      <fieldset class="q" aria-labelledby="qh12">
+        <div class="qhead" id="qh12"><span class="qn">Q12</span> What does compliance require of the data boundary?</div>
         <div class="opts">
           <label><input type="radio" name="iso" value="tenant"><span>The M365 tenant boundary is acceptable</span></label>
           <label><input type="radio" name="iso" value="nocopy"><span>No second copy &mdash; it must not be indexed anywhere</span></label>
@@ -919,8 +918,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q13</span> Does the model itself have to be governed?</legend>
+      <fieldset class="q" aria-labelledby="qh13">
+        <div class="qhead" id="qh13"><span class="qn">Q13</span> Does the model itself have to be governed?</div>
         <div class="opts">
           <label><input type="radio" name="gov" value="pinned"><span>Yes &mdash; the model and its version must be fixed, evaluated and attested before use</span></label>
           <label><input type="radio" name="gov" value="evidence"><span>We need evidence of behaviour &mdash; prompt and response logs, an evaluation set, a documented change process</span></label>
@@ -929,8 +928,8 @@
         <p class="qnote">This is model-risk governance, not data governance, and it is the reason a bank ends up hosting its own application when every data answer pointed at M365. No M365 surface lets you pin a model version or hold it still while you evaluate it.</p>
       </fieldset>
 
-      <fieldset class="q">
-        <legend><span class="qn">Q14</span> Whose retrieval has to be good enough?</legend>
+      <fieldset class="q" aria-labelledby="qh14">
+        <div class="qhead" id="qh14"><span class="qn">Q14</span> Whose retrieval has to be good enough?</div>
         <div class="opts">
           <label><input type="radio" name="ret" value="own"><span>Ours &mdash; chunking, embeddings, hybrid search and reranking are things we must tune</span></label>
           <label><input type="radio" name="ret" value="tune"><span>We need to influence relevance, but not own the pipeline</span></label>
@@ -1583,7 +1582,7 @@
   <footer>
     <p>Reconstructed from a photographed capability matrix and extended with the grounding, cost and data-provenance analysis from the surrounding architecture review.</p>
     <p>Microsoft's Copilot surface naming and capability boundaries move faster than anything else in this stack &mdash; particularly MCP support inside M365 and the line between declarative agents and Copilot Studio. Treat the tables as the shape of the decision, and confirm current boundaries before committing.</p>
-    <p class="stamp">Revision <strong>2026-08-27 &middot; r5</strong> &mdash; 14 questions, 10 routes. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
+    <p class="stamp">Revision <strong>2026-08-27 &middot; r6</strong> &mdash; 14 questions, 10 routes. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
   </footer>
 
 </div>
