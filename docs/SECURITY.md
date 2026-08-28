@@ -209,8 +209,8 @@ therefore treat the release asset, not only the source tree, as the unit under
 review.
 
 A build machine with no route to `api.nuget.org` is served by
-`build/Get-OfflinePackages.ps1`, which stages the 89 packages a restore needs
-(80 for a plain build, 4 runtime packs for the self-contained publish, 5 for the
+`build/Get-OfflinePackages.ps1`, which stages the 77 packages a restore needs
+(68 for a plain build, 4 runtime packs for the self-contained publish, 5 for the
 optional OTLP configuration). Those packages come from the same flat container
 endpoint a NuGet client would use, so provenance is unchanged; what the folder
 removes is the network hop, not a control. The list is data that can rot, so
