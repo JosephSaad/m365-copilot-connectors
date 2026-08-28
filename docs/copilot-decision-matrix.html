@@ -862,7 +862,7 @@
     <div class="section-head">
       <p class="eyebrow">Walk the tree</p>
       <h2>Eighteen questions that pick your route</h2>
-      <p class="lede">The gates in Figure 1, plus the ones that decide it in practice more often than ownership does: which surface the answer has to appear in, whether the data may be resident in OneLake, <strong>whether the answer needs data joined across sources</strong>, how many people will ask and what that costs, how fast a deleted record has to disappear, and what infrastructure you actually have. Answer what you know &mdash; the first hard gate to fire wins, and the rest becomes watch-outs.</p>
+      <p class="lede">The gates in Figure 1, plus the ones that decide it in practice more often than ownership does: which surface the answer has to appear in, whether the data may be resident in OneLake, <strong>whether the answer needs data merged across sources</strong>, how many people will ask and what that costs, how fast a deleted record has to disappear, and what infrastructure you actually have. Answer what you know &mdash; the first hard gate to fire wins, and the rest becomes watch-outs.</p>
     </div>
 
     <form class="quiz" id="quiz">
@@ -942,14 +942,14 @@
       </fieldset>
 
       <fieldset class="q" aria-labelledby="qh8">
-        <div class="qhead" id="qh8"><span class="qn">Q8</span> Does the answer need this data joined to other data?</div>
+        <div class="qhead" id="qh8"><span class="qn">Q8</span> Does the answer need this data merged or joined with other data?</div>
         <p class="hint">The question that most often decides Fabric versus everything else, and the one least often asked.</p>
         <div class="opts">
           <label><input type="radio" name="join" value="single"><span>No &mdash; this one source answers the question</span></label>
-          <label><input type="radio" name="join" value="few"><span>It has to be combined with two or three others</span></label>
+          <label><input type="radio" name="join" value="few"><span>It has to be merged with two or three others</span></label>
           <label><input type="radio" name="join" value="many"><span>It is one source among many in an integrated estate</span></label>
         </div>
-        <p class="qnote">A Graph index does not join. External items are flat and independent, so Copilot can rank across two connectors but cannot relate a row in one to a row in the other &mdash; and a tool call returns one source's answer, leaving the model to stitch, which it does plausibly rather than correctly. Joining is what a semantic model and OneLake are <em>for</em>: shortcuts register other sources in place, and one model can span a lakehouse and a warehouse through cross-database query.</p>
+        <p class="qnote">A Graph index does not join. External items are flat and independent, so Copilot can rank across two connectors but cannot relate a row in one to a row in the other &mdash; and a tool call returns one source's answer, leaving the model to stitch, which it does plausibly rather than correctly. Merging is what a semantic model and OneLake are <em>for</em>: shortcuts register other sources in place, and one model can span a lakehouse and a warehouse through cross-database query.</p>
       </fieldset>
 
       <fieldset class="q" aria-labelledby="qh9">
@@ -2008,7 +2008,7 @@
 
   <footer>
     <p>Microsoft's Copilot surface naming and capability boundaries move faster than anything else in this stack &mdash; particularly MCP support inside M365 and the line between declarative agents and Copilot Studio. Treat the tables as the shape of the decision, and confirm current boundaries before committing.</p>
-    <p class="stamp">Revision <strong>2026-08-28 &middot; r15</strong> &mdash; 18 questions, 12 routes, adversarially reviewed; Table 3 compares the three live-call packagings. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
+    <p class="stamp">Revision <strong>2026-08-28 &middot; r16</strong> &mdash; 18 questions, 12 routes, adversarially reviewed; Table 3 compares the three live-call packagings. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
   </footer>
 
 </div>

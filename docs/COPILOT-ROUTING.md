@@ -392,9 +392,10 @@ deletion latency, security boundary and data fit:
 
 ---
 
-## Joining, which is the question nobody asks until late
+## Merging, the question nobody asks until late
 
-An index **ranks**; it does not **relate**. External items are flat and
+Call it merging, integration, or joining — the requirement is the same, and
+an index **ranks**; it does not **relate**. External items are flat and
 independent, so Copilot can return results from two connectors side by side but
 cannot join a row in one to a row in the other. A tool call returns one source's
 answer and leaves the model to stitch — which for two or three facts is fine, and
