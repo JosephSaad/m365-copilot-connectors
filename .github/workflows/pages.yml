@@ -1,0 +1,40 @@
+# The public Pages site serves exactly one document: the Copilot decision
+# matrix. Everything else in docs/ is repository documentation, readable as
+# source on GitHub but deliberately not published as a website.
+name: pages
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/copilot-decision-matrix.html
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage the one published document
+        run: |
+          mkdir _site
+          cp docs/copilot-decision-matrix.html _site/copilot-decision-matrix.html
+          # The site root is the same document, so the bare URL works too.
+          cp docs/copilot-decision-matrix.html _site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
