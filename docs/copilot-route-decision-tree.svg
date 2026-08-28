@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1554 1000" width="1554" height="1000" role="img" aria-label="Decision tree for routing a Copilot question. Gate one: do the askers hold M365 licences — if not, Azure AI Foundry. Gate two: who owns the data. Owned data passes a content-and-group-access gate and then a freshness-and-deletion-SLA gate before being indexed by a synced Copilot connector. Data that is row-level secured or computed, and that models cleanly, goes to a Power BI semantic model, whose storage mode — Direct Lake, Import or DirectQuery — is picked by OneLake residency and by whether a second copy is permitted. Vendor-licensed data goes to a live tool call unless a signed AI rider permits indexing. The live-call branch offers four leaves: a federated Copilot connector, which is an MCP server Microsoft fronts and the only no-copy path that reaches Microsoft 365 Copilot chat; an API action; an MCP server you build; and a ready-made MCP server somebody else publishes. Azure AI Foundry is the escape hatch, forced by askers outside the tenant, network isolation, a model that must be pinned and validated, or retrieval you control.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1554 1030" width="1554" height="1030" role="img" aria-label="Decision tree for routing a Copilot question. Gate one: do the askers hold M365 licences — if not, Azure AI Foundry. Gate two: who owns the data. Owned data passes a content-and-group-access gate and then a freshness-and-deletion-SLA gate before being indexed by a synced Copilot connector. Data that is row-level secured or computed, and that models cleanly, goes to a Power BI semantic model, whose storage mode — Direct Lake, Import or DirectQuery — is picked by OneLake residency and by whether a second copy is permitted. Vendor-licensed data goes to a live tool call unless a signed AI rider permits indexing. The live-call branch offers four leaves: a federated Copilot connector, which is an MCP server Microsoft fronts and the only no-copy path that reaches Microsoft 365 Copilot chat; an API action; an MCP server you build; and a ready-made MCP server somebody else publishes. Azure AI Foundry is the escape hatch, forced by askers outside the tenant, network isolation, a model that must be pinned and validated, or retrieval you control.">
   <title>Routing a Copilot question by ownership, then by residency, then by cost</title>
   <desc>Four gates decide between indexing content in a synced Copilot connector, modelling it in Power BI, and fetching it live with a tool call. Ownership routes first; freshness and deletion SLA decide the owned branch; OneLake residency picks the semantic model's storage mode; licensed vendor data goes live by default, and a federated Copilot connector is the live path that still reaches Microsoft 365 Copilot chat.</desc>
 
@@ -62,7 +62,7 @@
     </marker>
   </defs>
 
-  <rect class="bg" x="0" y="0" width="1554" height="1000"/>
+  <rect class="bg" x="0" y="0" width="1554" height="1030"/>
 
   <!-- START -->
   <rect class="n-start" x="560" y="18" width="200" height="44" rx="3"/>
@@ -115,7 +115,7 @@
   <rect class="n-gate" x="60" y="400" width="280" height="76" rx="3"/>
   <text class="t-body" x="200" y="427" text-anchor="middle">Can you live with crawl-interval</text>
   <text class="t-body" x="200" y="446" text-anchor="middle">freshness and crawl-bound deletion?</text>
-  <text class="t-cost" x="200" y="464" text-anchor="middle">a direct push never deletes at all</text>
+  <text class="t-cost" x="200" y="464" text-anchor="middle">a direct push deletes only when you call it</text>
 
   <path class="edge" d="M140,476 L140,598" marker-end="url(#ar)"/>
   <text class="t-edge" x="150" y="530">yes</text>
@@ -137,11 +137,11 @@
   <!-- OUTCOME BANDS -->
   <rect class="n-index" x="60" y="600" width="388" height="52" rx="3"/>
   <text class="t-accent" x="254" y="624" text-anchor="middle">INDEX IT</text>
-  <text class="t-cost" x="254" y="641" text-anchor="middle">synced connector &#183; a copy in the Graph index, M365-wide</text>
+  <text class="t-cost" x="254" y="641" text-anchor="middle">synced Copilot connector &#183; a copy in the M365 index</text>
 
   <rect class="n-model" x="478" y="600" width="436" height="52" rx="3"/>
   <text class="t-title" x="696" y="624" text-anchor="middle">MODEL IT</text>
-  <text class="t-cost" x="696" y="641" text-anchor="middle">Fabric plane &#183; computed per user &#183; RLS at query time</text>
+  <text class="t-cost" x="696" y="641" text-anchor="middle">Fabric plane &#183; computed per user &#183; residency picks the mode</text>
 
   <rect class="n-call" x="944" y="600" width="550" height="52" rx="3"/>
   <text class="t-title" x="1219" y="624" text-anchor="middle">CALL IT</text>
@@ -178,16 +178,16 @@
   <text class="t-title" x="386" y="700" text-anchor="middle">Custom: push</text>
   <text class="t-leaf" x="386" y="719" text-anchor="middle">build: weeks</text>
   <text class="t-leaf" x="386" y="734" text-anchor="middle">runs anywhere</text>
-  <text class="t-leafr" x="386" y="749" text-anchor="middle">never deletes</text>
+  <text class="t-leafr" x="386" y="749" text-anchor="middle">you must delete</text>
   <text class="t-leaf" x="386" y="764" text-anchor="middle">org-level ACLs</text>
 
   <!-- MODEL leaves -->
   <rect class="n-box" x="478" y="678" width="140" height="104" rx="3"/>
   <text class="t-title" x="548" y="700" text-anchor="middle">Direct Lake</text>
   <text class="t-leaf" x="548" y="719" text-anchor="middle">needs it in OneLake</text>
-  <text class="t-leaf" x="548" y="734" text-anchor="middle">no copy, no refresh</text>
-  <text class="t-leaf" x="548" y="749" text-anchor="middle">needs F2+ capacity</text>
-  <text class="t-leaf" x="548" y="764" text-anchor="middle">import-class speed</text>
+  <text class="t-leaf" x="548" y="734" text-anchor="middle">no copy; framing only</text>
+  <text class="t-leaf" x="548" y="749" text-anchor="middle">F2+ or P1+, guardrails</text>
+  <text class="t-leafr" x="548" y="764" text-anchor="middle">SQL-endpoint RLS off</text>
 
   <rect class="n-box" x="626" y="678" width="140" height="104" rx="3"/>
   <text class="t-title" x="696" y="700" text-anchor="middle">Import</text>
@@ -234,14 +234,16 @@
 
   <!-- how the model gets asked -->
   <path class="tick" d="M696,782 L696,806"/>
-  <rect class="n-gate" x="478" y="808" width="436" height="76" rx="3"/>
+  <rect class="n-gate" x="478" y="808" width="436" height="92" rx="3"/>
   <text class="t-title" x="696" y="830" text-anchor="middle">Asked in words by</text>
-  <text class="t-cost" x="696" y="849" text-anchor="middle">Power BI Copilot &amp; Q&amp;A &#183; Fabric data agent &#183; both need F2+</text>
+  <text class="t-cost" x="696" y="849" text-anchor="middle">Power BI Copilot &#183; Fabric data agent &#183; both need F2+ or P1+</text>
   <text class="t-cost" x="696" y="863" text-anchor="middle">F64 is the separate threshold that drops viewer Pro licences</text>
-  <text class="t-risk" x="696" y="877" text-anchor="middle">neither reaches M365 chat alone &#8212; Copilot Studio is the hop</text>
+  <text class="t-risk" x="696" y="877" text-anchor="middle">Q&amp;A retires December 2026 &#8212; Copilot is the replacement</text>
+  <text class="t-risk" x="696" y="891" text-anchor="middle">M365 chat: the Agent Store (preview), or via Copilot Studio</text>
 
-  <text class="t-cost" x="777" y="916" text-anchor="middle">Build effort assumes the source system and its API already exist. If they do not, that is the real project.</text>
-  <text class="t-cost" x="777" y="934" text-anchor="middle">Only the agent-hosted connector deletes. Only DirectQuery and the CALL leaves store nothing. Only the federated connector does both &#8212; no copy, and M365 chat reach.</text>
-  <text class="t-cost" x="777" y="952" text-anchor="middle">Storage mode is not a preference: OneLake residency and your no-copy rule pick it, and a shortcut registers data in OneLake without moving it.</text>
-  <text class="t-risk" x="777" y="970" text-anchor="middle">A federated connector is read-only and reaches Copilot Chat, Excel, Researcher and Cowork &#8212; not every surface, and never a write. Each user authenticates as themselves.</text>
+  <text class="t-cost" x="777" y="928" text-anchor="middle">Build effort assumes the source system and its API already exist. If they do not, that is the real project.</text>
+  <text class="t-cost" x="777" y="946" text-anchor="middle">Only a crawl detects deletions on its own; a direct push removes an item only when your code calls the API. Only DirectQuery and the CALL leaves store nothing at all.</text>
+  <text class="t-cost" x="777" y="964" text-anchor="middle">Storage mode is not a preference: OneLake residency and your no-copy rule pick it. A shortcut registers data in OneLake without moving it &#8212; but Direct Lake cannot use any gateway, so nothing behind one qualifies.</text>
+  <text class="t-risk" x="777" y="982" text-anchor="middle">Direct Lake on OneLake does not apply SQL-endpoint row-level or column security, and its own RLS is recommended with a fixed identity. Where the row rule lives at the source, prove it survives.</text>
+  <text class="t-risk" x="777" y="1000" text-anchor="middle">A federated connector is read-only and reaches Copilot Chat, Excel, Researcher and Cowork &#8212; not every surface, and never a write. Each user authenticates as themselves.</text>
 </svg>

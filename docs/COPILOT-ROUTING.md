@@ -14,7 +14,8 @@ one. This document is the check that it should be.
 >
 > *And since federated connectors shipped, calling it no longer costs you M365 reach.*
 
-A Graph connector makes a persistent copy in a Microsoft-hosted index and grants
+A synced Copilot connector — what used to be called a Graph connector — makes a
+persistent copy in a Microsoft-hosted index and grants
 it to Entra groups. Against content you own, that is cheap, broad and correct —
 one build, and it appears in Copilot chat, Word, Outlook, Teams and Search
 without a retrieval story per surface.
@@ -66,7 +67,7 @@ Each outcome then has exactly one decision it does not get to make on preference
 
 | Outcome | The decision it cannot make on preference | What decides it instead |
 |---|---|---|
-| `INDEX IT` | agent-hosted or direct push | the deletion SLA, then the hosting. Only the agent deletes |
+| `INDEX IT` | agent-hosted or direct push | the deletion SLA, then the hosting. Only a crawl detects deletions for you |
 | `MODEL IT` | Import, DirectQuery or Direct Lake | OneLake residency, and whether a second copy is permitted |
 | `CALL IT` | federated, action, MCP or ready-made MCP | where the answer must appear, and whether you are writing |
 
@@ -90,14 +91,61 @@ routing document rather than in a modelling guide.
 |---|---|---|---|---|
 | **Import** | VertiPaq columnar store, persisted in Power BI managed storage in the capacity region | loaded into capacity node memory | no — unless OneLake integration is on, which writes a further read-only Delta copy | you have created a governed copy that must be classified, labelled and audited independently |
 | **DirectQuery** | nothing stored. The model holds metadata, relationships and DAX only | translated to native queries run against the source at report runtime | no. Nothing lands anywhere | zero copy, but latency and source load scale with user concurrency |
-| **Direct Lake** | in OneLake as Delta Parquet, and nowhere else. No second copy, no refresh cycle | column segments transcoded into capacity memory on demand, evicted under pressure | yes, by definition — OneLake *is* the storage | import-class performance without creating a new copy to govern |
+| **Direct Lake** | in OneLake as Delta Parquet, and nowhere else. No second copy, and no *data* refresh | column segments transcoded into capacity memory on demand, evicted under pressure | yes, by definition — OneLake *is* the storage | import-class performance without creating a new copy to govern — at a security cost set out below |
 
-Two things this table does not say, and both catch people out. **Metadata is
-always persisted**: the model definition, DAX measures, relationships, row-level
-security roles and lineage live in the Power BI metadata store whatever mode you
-pick — so "DirectQuery stores nothing" is a claim about your rows, not about your
-model. And **composite models mix modes per table**, so one table forcing a mode
-does not force the whole model.
+### The security column, which is the one that should decide it
+
+The mode does not only move the rows. It decides which access rules survive, and
+they are not equivalent:
+
+| | Semantic-model RLS | The source's own (SQL endpoint) RLS | Object / column security |
+|---|---|---|---|
+| **Import** | yes | yes, **but you must duplicate it** in the model | duplicate it in model OLS |
+| **DirectQuery** | yes | **yes** — it passes through | yes |
+| **Direct Lake on OneLake** | yes, but Microsoft **recommends a fixed identity** connection | **no — not applied at all** | **no** |
+| **Direct Lake on SQL** | yes | yes — **by falling back to DirectQuery** | yes, though a denied permission may error |
+
+> **Direct Lake on OneLake reads the files, and file access in OneLake does not
+> observe SQL-based row-level security.** A query the warehouse would have
+> filtered simply succeeds in full.
+
+That is the same failure this document refuses everywhere else — an index that
+cannot reproduce the source's enforcement — arriving through a mode chosen for
+its residency properties. If the row rule lives at the source rather than in the
+semantic model, Direct Lake on OneLake drops it silently. And the recommended
+workaround, a **fixed identity** connection, is the same flattening pattern this
+document warns about for a ready-made MCP server and for a Ranger service-account
+proxy: every caller becomes one account, and only the model is trimming anything.
+
+**"Direct Lake" is therefore two modes, not one.** *On OneLake* reads Fabric
+sources directly and never falls back. *On SQL* goes through the SQL analytics
+endpoint, honours its security, and **falls back to DirectQuery** on SQL views,
+on RLS, and when guardrails are exceeded — so its performance profile is not the
+one you chose it for. Decide which you are building.
+
+### Three constraints that disqualify Direct Lake outright
+
+- **No gateway, of any kind.** Direct Lake supports cloud connections only and
+  cannot operate through the on-premises data gateway *or* a VNet gateway. Every
+  on-premises source — a Kerberised CDP cluster included — is therefore out,
+  however it is shortcut.
+- **Same region.** The semantic model's workspace must sit in the same region as
+  the data source's workspace. The workaround is a lakehouse in the other region
+  with shortcuts to the tables.
+- **Guardrails, and a refresh that can fail.** A Direct Lake refresh is *framing*
+  — metadata only, seconds rather than hours — but exceed the capacity guardrails
+  and on Direct Lake on OneLake the refresh fails and **the model cannot be
+  queried at all** until the Delta tables are optimised. Delta table maintenance
+  is an operational commitment here, not an optimisation.
+
+Two more things these tables do not say, and both catch people out. **Metadata
+is always persisted**: the model definition, DAX measures, relationships,
+row-level security roles and lineage live in the Power BI metadata store whatever
+mode you pick — so "DirectQuery stores nothing" is a claim about your rows, not
+about your model. And **composite models mix modes per table**, so one table
+forcing a mode does not force the whole model — which is often the right answer
+when one table's security requirement would otherwise disqualify Direct Lake for
+everything.
 
 The rule that falls out of it:
 
@@ -125,7 +173,9 @@ needs it twice over:
 - **F2 or higher** (or Premium P1+) is where Copilot and Fabric data agents
   become available at all. Pro or PPU alone is not a Copilot capacity, and
   **trial SKUs are not supported** — which is the usual reason a proof of
-  concept works and the pilot does not.
+  concept works and the pilot does not. Note that F2 is a floor, not a target:
+  F2 through F8 cap a Direct Lake model at 10 GB on disk, 3 GB in memory and
+  300 million rows per table. Size against the guardrail table.
 - **F64 or higher** is where report consumers stop needing an individual Power
   BI Pro licence. Below it, every viewer needs Pro on top of the capacity. That
   line usually decides the SKU rather than the compute does.
@@ -140,14 +190,37 @@ askers and they reach different places:
 
 | | What it grounds on | Where the answer appears |
 |---|---|---|
-| **Power BI Q&A** | one semantic model | inside a report or the service |
+| **Copilot for Power BI** | a report, or a semantic model | inside a report, the service, or Desktop |
 | **Copilot in Fabric** | the workload you are authoring in | inside Fabric, as authoring assistance |
-| **Fabric data agent** | selected lakehouses, warehouses, KQL databases and semantic models | inside Fabric — or, published to **Copilot Studio**, in Teams or as a declarative agent in M365 Copilot |
+| **Fabric data agent** | selected lakehouses, warehouses, KQL databases, mirrored databases and semantic models | inside Fabric; published to the **M365 Agent Store** (preview), in Copilot chat and Teams; or published to **Copilot Studio** and surfaced from there |
 
-All of them need F2+ and tenant-level enablement. **None of them makes anything
-retrievable in Microsoft 365 Copilot chat on its own.** Reaching that window from
-the Fabric side means publishing the data agent as a tool to a Copilot Studio
-agent — a second build, a second approval, and a second thing to operate.
+> **Power BI Q&A is deprecated — Microsoft retires the Q&A experiences in
+> December 2026** and directs you to Copilot for Power BI instead. If a design
+> names Q&A as its natural-language surface, it is naming something with a
+> published end date inside most pilot horizons. Note the cost consequence too:
+> Q&A was free to every user on any licence, and Copilot needs F2+ or P1+.
+
+All the surviving options need F2+ or P1+ and tenant-level enablement. **None of
+them grounds Microsoft 365 Copilot chat the way indexed connector content does**
+— a published data agent is an agent a person invokes by name, not grounding that
+turns up on its own. There are now two ways to publish it outward, and they are
+alternatives rather than a sequence:
+
+- **To the Agent Store in Microsoft 365 Copilot** (preview). Users chat with it
+  directly or `@`-mention it from the main chat, and can share it into a Teams
+  chat or channel. Needs a Microsoft 365 Copilot licence per user, on the same
+  tenant and the same account. Row-level and column-level security on the
+  underlying sources are respected.
+- **To Copilot Studio**, as a tool inside an agent you build — which can then be
+  surfaced in Teams or as a declarative agent.
+
+> **The Agent Store route leaves Fabric's compliance boundary, and Microsoft
+> says so explicitly.** Responses returned by a Fabric data agent consumed in
+> Microsoft 365 may be sent outside Fabric's compliance boundary or geographic
+> region, and are processed and stored thereafter under Microsoft 365's terms
+> rather than Fabric's. It also requires *cross-geo processing and cross-geo
+> storing for AI* to be enabled in tenant settings. For a regulated customer
+> that is a control decision with a paper trail, not a publish button.
 
 ### Power BI against Cloudera, specifically
 
@@ -176,6 +249,13 @@ identity and row-level enforcement is gone.
 > not after.** They are two enforcement engines over the same rows. Deciding late
 > means either duplicating the policy in DAX or discovering that the gateway
 > flattened every user into a proxy account.
+
+And one blunt rule that removes a whole column from the table above: **Direct
+Lake cannot use a gateway.** It supports cloud connections only — not the
+on-premises data gateway, not a VNet gateway. Every on-premises CDP source is
+therefore Import or DirectQuery, whatever else is true of it. The Iceberg row's
+Direct Lake option survives only where the storage is cloud object storage
+reachable without a gateway, not local HDFS.
 
 The interactive version of this page — seventeen questions that route one source
 to one delivery path, with the cost and the warnings attached — ships beside it
@@ -352,11 +432,20 @@ question, not a configuration detail.
 ## Three factors people leave until too late
 
 **Deletion SLA.** The question that most often invalidates a design after it is
-built. A **direct push never deletes** — a row excluded from the query leaves its
-item in the index indefinitely. The **agent-hosted** connector deletes, but only
-on its next incremental crawl, so the best SLA it can offer is the crawl
-interval. If a removed record has to stop appearing immediately, no index path
-qualifies. `deploy/Compare-SourceToIndex.ps1` finds the orphans a push leaves
+built. Say it precisely, because the loose version is wrong in both directions:
+**nothing detects deletions for you on a direct push.** Microsoft has no
+visibility into what disappeared from your source — its first sight of any change
+is the moment your code calls the Graph API. The API *does* delete an external
+item by its id, so removal is a thing you must build and run, not a thing you
+cannot do. The **agent-hosted** connector has deletion detected for it on the
+next crawl, so the best SLA it can offer is the crawl interval; Microsoft
+recommends crawling at least every 14 days simply to keep detection reliable. If
+a removed record has to stop appearing immediately, no index path qualifies.
+
+There is also a platform backstop worth knowing and not designing against: where
+connection failures stop delete detection working reliably, items not
+rediscovered by a crawl for **28 days** are removed from the index automatically,
+to maintain compliance. `deploy/Compare-SourceToIndex.ps1` finds the orphans a push leaves
 behind and prints the `DELETE` commands without running them.
 
 **Freshness.** Bounded by crawl interval on every index path. Nothing makes an
@@ -408,6 +497,15 @@ Three cells are reproduced as photographed but look wrong, and are flagged in
 the page itself rather than silently corrected — chiefly a row showing M365
 Copilot Chat as unable to use Graph connector content, which contradicts how
 connector grounding works.
+
+**Claims in this document were re-verified against Microsoft documentation on
+28 August 2026.** The corrections that pass found: the Fabric data agent now
+publishes directly to the Microsoft 365 Agent Store rather than only through
+Copilot Studio; Power BI Q&A carries a December 2026 retirement; Direct Lake has
+a refresh (framing) and does not apply SQL-endpoint row or column security;
+Direct Lake works on P SKUs as well as F, cannot use any gateway, and requires
+same-region workspaces; and a direct push has no deletion *detection* rather than
+no deletion at all.
 
 **The Fabric and federated-connector material is younger than the rest of this
 document**, and it is the part most likely to have moved. Which experiences
