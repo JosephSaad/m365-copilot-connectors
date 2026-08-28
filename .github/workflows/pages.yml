@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
     paths:
-      - docs/copilot-decision-matrix.html
+      - docs/copilot-router.html
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -30,9 +30,9 @@ jobs:
       - name: Stage the one published document
         run: |
           mkdir _site
-          cp docs/copilot-decision-matrix.html _site/copilot-decision-matrix.html
+          cp docs/copilot-router.html _site/copilot-router.html
           # The site root is the same document, so the bare URL works too.
-          cp docs/copilot-decision-matrix.html _site/index.html
+          cp docs/copilot-router.html _site/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

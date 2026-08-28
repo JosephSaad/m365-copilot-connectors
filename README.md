@@ -136,7 +136,7 @@ docs/
   ASSUMPTIONS.md                       Decisions, deviations, open questions
   ADDING-A-PUSH-CONNECTOR.md           One class and one config file: the recipe and the reasoning
   COPILOT-ROUTING.md                   Connector, action, MCP or Foundry - the decision upstream of this repository
-  copilot-decision-matrix.html         Self-contained tool: the matrices, the tree, and an 11 question router
+  copilot-router.html                 The Copilot Router: an 18 question router, the tree, and the matrices
   copilot-route-decision-tree.png / .svg / -dark.png  The routing drawing embedded by COPILOT-ROUTING.md
   copilot-surface-matrix.png           The capability-by-surface matrix as a standalone image
   copilot-delivery-paths.png           The delivery-path matrix as a standalone image

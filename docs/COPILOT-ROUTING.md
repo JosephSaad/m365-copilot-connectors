@@ -263,9 +263,9 @@ therefore Import or DirectQuery, whatever else is true of it. The Iceberg row's
 Direct Lake option survives only where the storage is cloud object storage
 reachable without a gateway, not local HDFS.
 
-The interactive version of this page — eighteen questions that route one source
+The interactive version of this page — the **Copilot Router**, eighteen questions that route one source
 to one delivery path, with the cost and the warnings attached — ships beside it
-as [`copilot-decision-matrix.html`](copilot-decision-matrix.html). Open it in a
+as [`copilot-router.html`](copilot-router.html). Open it in a
 browser; it is a single self-contained file with no build step and no network
 calls.
 
@@ -357,7 +357,7 @@ M365 audit trail gives you what Microsoft chooses to give you.
 
 ## The interactive version
 
-[`copilot-decision-matrix.html`](copilot-decision-matrix.html) is a
+[`copilot-router.html`](copilot-router.html) is a
 self-contained page — no build step, no dependencies, no network calls. It holds:
 
 - your surface capability matrix, extended with the rows that decide whether a
