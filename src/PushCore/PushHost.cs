@@ -257,6 +257,11 @@ public static class PushHost
                 summary.Duplicates,
                 summary.ThrottleWaits);
 
+            // Separate statement, and deliberately not interpolated into the line
+            // above: this is a block a person reads, and folding a table into a
+            // structured log message makes it unreadable in both places.
+            Log.Information("Where the time went:{NewLine}{Attribution}", Environment.NewLine, summary.Timing.Report());
+
             return 0;
         }
         catch (AuthenticationFailedException ex)
