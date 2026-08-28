@@ -257,7 +257,7 @@ therefore Import or DirectQuery, whatever else is true of it. The Iceberg row's
 Direct Lake option survives only where the storage is cloud object storage
 reachable without a gateway, not local HDFS.
 
-The interactive version of this page — seventeen questions that route one source
+The interactive version of this page — eighteen questions that route one source
 to one delivery path, with the cost and the warnings attached — ships beside it
 as [`copilot-decision-matrix.html`](copilot-decision-matrix.html). Open it in a
 browser; it is a single self-contained file with no build step and no network
@@ -346,7 +346,7 @@ self-contained page — no build step, no dependencies, no network calls. It hol
 - the tree above;
 - a section on **the two planes** — what belongs to Microsoft 365 and Graph, what
   belongs to Fabric, and why retrieval and delegation are not substitutable;
-- **a seventeen-question router.** Answer what you know; the first hard gate to
+- **an eighteen-question router.** Answer what you know; the first hard gate to
   fire picks the route and the rest becomes watch-outs.
 
 **GitHub shows this file as source, not as a page.** Download it and open it in
@@ -364,6 +364,67 @@ for regulated data, licensing and cost:
 deletion latency, security boundary and data fit:
 
 ![Delivery-path matrix: gallery connector, custom connector, API action, MCP server and Foundry application compared on layer, standalone-ness, wiring per surface, freshness, deletion latency, infrastructure, build and recurrent cost, access enforcement, persistent copies, audit trail, and fit for first-party, RLS-guarded and licensed third-party data.](copilot-delivery-paths.png)
+
+---
+
+## Joining, which is the question nobody asks until late
+
+An index **ranks**; it does not **relate**. External items are flat and
+independent, so Copilot can return results from two connectors side by side but
+cannot join a row in one to a row in the other. A tool call returns one source's
+answer and leaves the model to stitch — which for two or three facts is fine, and
+beyond that produces a plausible answer rather than a correct one, because the
+model has no key, no cardinality and no way to know it dropped a record.
+
+Joining is what a semantic model and OneLake are *for*: a shortcut registers
+another source in place without copying it, and one model can span a lakehouse
+and a warehouse through cross-database query. So:
+
+> **If the questions people will actually ask span more than one source, that
+> fact outranks most of what follows.** It is the argument for Fabric that
+> survives when the residency and licensing arguments do not.
+
+Ask it early, because it is cheap to answer and expensive to discover: a
+per-source connector estate can grow for a year while the answers stay wrong.
+
+---
+
+## Security is not only row-level
+
+The tool asks how access is controlled and offers four answers, not three,
+because they fail differently:
+
+| | What it means | Why an index cannot carry it |
+|---|---|---|
+| **Entra groups** | everyone in the group sees everything | nothing to lose — this is what a Graph ACL expresses |
+| **Row-level** | some rows, per user | flattening rows into items discards it silently |
+| **Column- or object-level** | whole *fields* restricted, not whole rows | an external item is one flat document with every property on it; there is no per-field trimming to fall back on |
+| **Dynamic barriers** | MNPI, restricted lists, deal teams that change | an ACL is written at push time; a wall-crossing next Tuesday is not in it |
+
+Column- and object-level security matters twice over here, because it is also
+the thing **Direct Lake on OneLake does not apply** — see the storage-mode
+security table above. A design that moves object-level security from a warehouse
+into a Direct Lake model has to rebuild it as model OLS, or lose it.
+
+---
+
+## Audience size decides cost, not just load
+
+Ten users and fifty thousand users take opposite routes for the same data, and
+the reason is arithmetic rather than architecture:
+
+- **Small populations** are punished by standing capacity. A paid Fabric
+  capacity costs the same whether ten people use it or none, and F64 — the point
+  at which viewers stop needing Pro — is absurd for a team. Below roughly fifty
+  users the arithmetic usually favours calling the source per question.
+- **Large populations** are punished by per-seat and per-call costs. A federated
+  connector needs a Copilot add-on licence *and* an individual consent for every
+  user. Per-message and per-call meters scale linearly with headcount, and the
+  model decides how many calls to make.
+- **The index is the path whose cost stops growing.** A crawl costs the same
+  whether ten people search or ten thousand. That is the strongest economic
+  argument for indexing and it is worth making explicitly, because it is the one
+  thing on this page that gets cheaper per head as the audience grows.
 
 ---
 
