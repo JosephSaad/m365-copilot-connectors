@@ -1811,6 +1811,91 @@
     </div>
   </section>
 
+  <!-- ============ THE THREE CALL PACKAGINGS ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Table 3 &middot; the CALL IT leaves, side by side</p>
+      <h2>Action, MCP server, federated &mdash; one decision, three packagings</h2>
+      <p class="lede">All three are the same decision: call the source live, store nothing, and let it enforce entitlement per user. They differ only in how the call is packaged &mdash; and the packaging decides who can reach it. The one-line version: an API action is a tool <em>an agent</em> holds; an MCP server is a tool <em>many clients</em> can hold; a federated connector is an MCP server <em>Microsoft holds for you</em>, which is what puts it in Copilot chat with nothing built around it.</p>
+    </div>
+
+    <div class="scroller">
+      <table>
+        <caption>The three ways to expose a live call &middot; same entitlement story, different reach per unit of build</caption>
+        <thead>
+          <tr>
+            <th class="rowhead" scope="col">&nbsp;</th>
+            <th scope="col">API action / plugin</th>
+            <th scope="col">MCP server</th>
+            <th scope="col">Federated connector</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th class="rowhead" scope="row">What it physically is</th>
+            <td class="val">an OpenAPI spec + manifest &mdash; not a deployable on its own</td>
+            <td class="val">a process you host, speaking Model Context Protocol</td>
+            <td class="val">also an MCP server &mdash; registered with M365: from the gallery, or your own via the admin center</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Who calls it</th>
+            <td class="val">the one agent that hosts it &mdash; declarative or Copilot Studio &mdash; wired by hand</td>
+            <td class="val">any MCP-capable client &mdash; Copilot Studio, an IDE, Foundry &mdash; wired per client</td>
+            <td class="val pos">M365 Copilot itself &mdash; Copilot Chat, Excel, Researcher, Cowork &mdash; with nothing wired</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">How a person reaches it</th>
+            <td class="val">they must find and invoke the host agent</td>
+            <td class="val">through whatever client you connected it to</td>
+            <td class="val pos">it is simply there in Copilot chat, once the user connects the source</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Read or write</th>
+            <td class="val pos">can write</td>
+            <td class="val pos">can write</td>
+            <td class="val neg">read-only, by design</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Whose identity it carries</th>
+            <td class="val">the host agent&rsquo;s auth configuration</td>
+            <td class="val neg">yours to build &mdash; whose identity it acts as is your design problem</td>
+            <td class="val pos">per-user Entra SSO or OAuth, mandated by the registration; each user consents individually</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Audit trail</th>
+            <td class="val">the host agent&rsquo;s, plus source logs</td>
+            <td class="val">your logs &mdash; you build them</td>
+            <td class="val pos">Microsoft Purview</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Licence to run it</th>
+            <td class="val">rides the host agent&rsquo;s own meter</td>
+            <td class="val">rides each client&rsquo;s own meter</td>
+            <td class="val neg">M365 Copilot add-on per querying user &mdash; not Copilot Studio licences, not pay-as-you-go</td>
+          </tr>
+          <tr>
+            <th class="rowhead" scope="row">Build</th>
+            <td class="val">days&ndash;2 weeks, plus the agent that hosts it</td>
+            <td class="val">days&ndash;2 weeks, plus auth and audit</td>
+            <td class="val">gallery: configuration. Your own: the MCP server, then a registration</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <ol class="steps">
+      <li><p><span class="q">Does it have to write?</span> Then federated is out &mdash; it is read-only by design. Choose between an action and an MCP server.</p></li>
+      <li><p><span class="q">Where must the answer appear?</span> M365 Copilot chat without building an agent &rarr; federated. Inside one specific agent you are building anyway &rarr; action. Many different clients &rarr; MCP server.</p></li>
+      <li><p><span class="q">Are you willing to build?</span> A gallery federated connector is configuration. Your own federated connector is an MCP server plus a registration. An action is a build plus an agent to host it.</p></li>
+    </ol>
+
+    <div class="rule-card">
+      <p class="eyebrow">The subtlety worth remembering</p>
+      <p class="big">Federated and MCP are not rivals &mdash; <em>federated is what your MCP server becomes when you register it.</em></p>
+      <p class="note">Build an MCP server for analysts&rsquo; tooling, and when the same source is later needed in Copilot chat you rebuild nothing: register the server as a custom federated connector, with Entra SSO or OAuth so the caller&rsquo;s identity carries through, and expose its read tools there. The trade you make at that moment is the federated column above &mdash; read-only, four experiences, and a Copilot add-on licence for every user who queries it. A <strong>ready-made</strong> MCP server is just the middle column with somebody else&rsquo;s name on it: same packaging, but their tool surface, their identity handling and their release cadence.</p>
+    </div>
+  </section>
+
   <!-- ============ TWO PLANES ============ -->
   <section>
     <div class="section-head">
@@ -1923,7 +2008,7 @@
 
   <footer>
     <p>Microsoft's Copilot surface naming and capability boundaries move faster than anything else in this stack &mdash; particularly MCP support inside M365 and the line between declarative agents and Copilot Studio. Treat the tables as the shape of the decision, and confirm current boundaries before committing.</p>
-    <p class="stamp">Revision <strong>2026-08-28 &middot; r14</strong> &mdash; 18 questions, 12 routes, adversarially reviewed: 20 agents, 11 confirmed defects fixed. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
+    <p class="stamp">Revision <strong>2026-08-28 &middot; r15</strong> &mdash; 18 questions, 12 routes, adversarially reviewed; Table 3 compares the three live-call packagings. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
   </footer>
 
 </div>
