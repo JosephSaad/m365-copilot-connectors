@@ -55,10 +55,10 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up .NET 9
+      - name: Set up .NET 10
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: "9.0.x"
+          dotnet-version: "10.0.x"
 
       - name: Restore
         run: dotnet restore SqlTicketsConnector.sln
@@ -212,10 +212,10 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up .NET 9
+      - name: Set up .NET 10
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: "9.0.x"
+          dotnet-version: "10.0.x"
 
       # Self-contained: the .NET runtime is bundled, so the target server needs
       # nothing but Windows. Whoever downloads this zip should never have to go
@@ -314,7 +314,7 @@ jobs:
               'docs/CDP-DEPLOYMENT.md',
               'docs/TROUBLESHOOTING-CDP.md',
               'docs/COPILOT-ROUTING.md',
-              'docs/copilot-decision-matrix.html',        # linked by COPILOT-ROUTING.md
+              'docs/copilot-router.html',                 # linked by COPILOT-ROUTING.md
               'docs/copilot-route-decision-tree.svg',     # embedded by it
               'docs/copilot-route-decision-tree.png',
               'docs/copilot-route-decision-tree-dark.png',
