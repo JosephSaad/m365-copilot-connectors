@@ -24,14 +24,30 @@ namespace SqlTicketsConnector.Tests.TestSupport
         private readonly IReadOnlyList<PushItem> items;
         private readonly Func<PushItem, Exception> throwOn;
 
-        public FakePushSource(IReadOnlyList<PushItem> items, Func<PushItem, Exception> throwOn = null, int skipped = 0)
+        public FakePushSource(
+            IReadOnlyList<PushItem> items,
+            Func<PushItem, Exception> throwOn = null,
+            int skipped = 0,
+            bool requiresOrderedCommit = true)
         {
             this.items = items;
             this.throwOn = throwOn;
             this.Skipped = skipped;
+            this.RequiresOrderedCommit = requiresOrderedCommit;
         }
 
-        /// <summary>Gets the items the engine reported as written, in order.</summary>
+        /// <summary>
+        /// Gets whether the engine must write this source's items one at a time.
+        /// Defaults to true, like the interface, so every existing test keeps
+        /// exercising the serial path it was written for.
+        /// </summary>
+        public bool RequiresOrderedCommit { get; }
+
+        /// <summary>
+        /// Gets the items the engine reported as written. In order when the source
+        /// required ordering; in completion order otherwise, which is the point of
+        /// recording it at all.
+        /// </summary>
         public List<string> Committed { get; } = new List<string>();
 
         /// <summary>Gets a value indicating whether the engine declared the crawl clean.</summary>
@@ -62,7 +78,14 @@ namespace SqlTicketsConnector.Tests.TestSupport
 
         public ValueTask OnItemCommittedAsync(PushItem item, CancellationToken cancellationToken)
         {
-            this.Committed.Add(item.Id);
+            // Locked because an unordered source is committed from several writer
+            // threads at once, and a torn List<T> would fail a concurrency test
+            // for a reason that has nothing to do with the engine.
+            lock (this.Committed)
+            {
+                this.Committed.Add(item.Id);
+            }
+
             return ValueTask.CompletedTask;
         }
 
