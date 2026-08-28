@@ -36,6 +36,9 @@ namespace SqlTicketsConnector.Tests.TestSupport
         public List<RequestInformation> Writes { get; } = new List<RequestInformation>();
 
         /// <summary>Gets the item IDs PUT through this adapter, in order.</summary>
+        private int writesInFlight;
+        private int maxConcurrentWrites;
+
         public List<string> WrittenItemIds { get; } = new List<string>();
 
         /// <summary>
@@ -54,6 +57,21 @@ namespace SqlTicketsConnector.Tests.TestSupport
         /// </summary>
         public Func<string, Exception> FailItem { get; set; }
 
+        /// <summary>
+        /// Gets or sets how long a write pretends to take. Zero by default. A test
+        /// that wants to observe overlap needs the writes to overlap, and a stub
+        /// that returns instantly can be driven by eight writers and still never
+        /// have two in flight at once.
+        /// </summary>
+        public TimeSpan WriteDelay { get; set; } = TimeSpan.Zero;
+
+        /// <summary>
+        /// Gets the greatest number of writes that were in flight simultaneously.
+        /// This is how the ordering guarantee is tested as a fact rather than
+        /// inferred from the order things happened to land in.
+        /// </summary>
+        public int MaxConcurrentWrites => Volatile.Read(ref this.maxConcurrentWrites);
+
         public ISerializationWriterFactory SerializationWriterFactory =>
             new global::Microsoft.Kiota.Serialization.Json.JsonSerializationWriterFactory();
 
@@ -63,7 +81,7 @@ namespace SqlTicketsConnector.Tests.TestSupport
         {
         }
 
-        public Task<ModelType> SendAsync<ModelType>(
+        public async Task<ModelType> SendAsync<ModelType>(
             RequestInformation requestInfo,
             ParsableFactory<ModelType> factory,
             Dictionary<string, ParsableFactory<IParsable>> errorMapping = null,
@@ -78,6 +96,20 @@ namespace SqlTicketsConnector.Tests.TestSupport
             {
                 if (itemId is not null)
                 {
+                    this.EnterWrite();
+
+                    try
+                    {
+                        if (this.WriteDelay > TimeSpan.Zero)
+                        {
+                            await Task.Delay(this.WriteDelay, cancellationToken);
+                        }
+                    }
+                    finally
+                    {
+                        this.LeaveWrite();
+                    }
+
                     Exception failure = this.FailItem?.Invoke(itemId);
 
                     if (failure is not null)
@@ -87,11 +119,20 @@ namespace SqlTicketsConnector.Tests.TestSupport
                         throw failure;
                     }
 
-                    this.WrittenItemIds.Add(itemId);
-                    this.WrittenBodies.Add(ReadBody(requestInfo));
+                    // Locked: an unordered source is written by several writer
+                    // threads at once, and a torn list here would fail a test for
+                    // a reason that has nothing to do with the code under test.
+                    lock (this.WrittenItemIds)
+                    {
+                        this.WrittenItemIds.Add(itemId);
+                        this.WrittenBodies.Add(ReadBody(requestInfo));
+                    }
                 }
 
-                this.Writes.Add(requestInfo);
+                lock (this.WrittenItemIds)
+                {
+                    this.Writes.Add(requestInfo);
+                }
             }
 
             object result = url.EndsWith("/schema", StringComparison.OrdinalIgnoreCase)
@@ -100,7 +141,32 @@ namespace SqlTicketsConnector.Tests.TestSupport
                     ? new ExternalItem { Id = itemId }
                     : this.connection;
 
-            return Task.FromResult((ModelType)result);
+            return (ModelType)result;
+        }
+
+        /// <summary>Records that a write started, and the new high-water concurrency.</summary>
+        private void EnterWrite()
+        {
+            int now = Interlocked.Increment(ref this.writesInFlight);
+            int seen = Volatile.Read(ref this.maxConcurrentWrites);
+
+            while (now > seen)
+            {
+                int was = Interlocked.CompareExchange(ref this.maxConcurrentWrites, now, seen);
+
+                if (was == seen)
+                {
+                    break;
+                }
+
+                seen = was;
+            }
+        }
+
+        /// <summary>Records that a write finished.</summary>
+        private void LeaveWrite()
+        {
+            Interlocked.Decrement(ref this.writesInFlight);
         }
 
         public Task<IEnumerable<ModelType>> SendCollectionAsync<ModelType>(

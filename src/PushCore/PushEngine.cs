@@ -31,12 +31,26 @@ using Connector.Security.Schema;
 using Microsoft.Graph;
 using Microsoft.Graph.Models.ExternalConnectors;
 using Microsoft.Graph.Models.ODataErrors;
+using System.Runtime.ExceptionServices;
+using System.Threading.Channels;
 using Serilog;
 
 /// <summary>Runs one connector against one connection.</summary>
 public sealed class PushEngine
 {
     private const int MaxWriteAttempts = 5;
+
+    // Four is Microsoft's own default in its published connector template, and
+    // the number it recommends starting from. Sixteen is the ceiling because the
+    // connectors API limits an application to 25 concurrent operations on a
+    // connection and this run makes others of its own.
+    private const int DefaultWriters = 4;
+    private const int MaxWriters = 16;
+
+    // How often a run says it is still moving, in items. Frequent enough that a
+    // stalled run is obvious, rare enough that the line is not on the per-row
+    // critical path.
+    private const int ProgressEvery = 250;
 
     private readonly IPushConnector connector;
     private readonly PushOptions options;
@@ -265,16 +279,92 @@ public sealed class PushEngine
     public async Task<PushSummary> PushItemsAsync(IPushSource source, CancellationToken cancellationToken = default)
     {
         var summary = new PushSummary();
+        int writers = this.ResolveWriterCount(source);
+
+        if (writers > 1)
+        {
+            await this.WriteConcurrentlyAsync(source, summary, writers, cancellationToken);
+        }
+        else
+        {
+            await this.WriteInOrderAsync(source, summary, cancellationToken);
+        }
+
+        // Candidates the source itself declined, so the summary reconciles
+        // against the source rather than only against what was written.
+        summary.CountSkipped(source.Skipped);
+
+        if (!this.dryRun)
+        {
+            // Reached only by falling out of the loop, which means the
+            // enumeration ended without throwing and every write returned.
+            await source.OnCrawlCompletedAsync(cancellationToken);
+        }
+
+        return summary;
+    }
+
+    /// <summary>Decides how many writers this run may use.</summary>
+    /// <param name="source">The opened source.</param>
+    /// <returns>One, unless the source has no position to protect and more are configured.</returns>
+    /// <remarks>
+    /// Three things force one writer, and each on its own is sufficient. A source
+    /// that keeps a position (RequiresOrderedCommit) needs serial writes, because
+    /// out-of-order completion is precisely what would let its checkpoint pass an
+    /// item that never landed. A dry run writes nothing, so concurrency would buy
+    /// nothing and only make the log arrive scrambled. And the configured count
+    /// is the operator's own ceiling.
+    ///
+    /// The upper clamp is not arbitrary: the connectors API states that "an
+    /// application is limited to 25 concurrent operations on a connection", so 16
+    /// leaves room for the schema polls and ownership checks that share it.
+    /// </remarks>
+    private int ResolveWriterCount(IPushSource source)
+    {
+        if (this.dryRun || source.RequiresOrderedCommit)
+        {
+            return 1;
+        }
+
+        int configured = this.options.Setting("Writers", DefaultWriters);
+        int writers = Math.Clamp(configured, 1, MaxWriters);
+
+        if (writers != configured)
+        {
+            this.log.Warning(
+                "Settings:Writers was {Configured}; using {Writers}. Graph allows an application 25 " +
+                "concurrent operations on a connection, and this run needs headroom for its own polls.",
+                configured,
+                writers);
+        }
+
+        return writers;
+    }
+
+    /// <summary>Reads the source and writes one item at a time, in order.</summary>
+    /// <param name="source">The opened source.</param>
+    /// <param name="summary">The run's counters.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>A task for the operation.</returns>
+    /// <remarks>
+    /// The original path, and the only one a source with a watermark ever takes.
+    /// The commit follows the write on the same thread, so the marker cannot pass
+    /// an item the index does not have - the guarantee is structural here rather
+    /// than argued.
+    /// </remarks>
+    private async Task WriteInOrderAsync(
+        IPushSource source, PushSummary summary, CancellationToken cancellationToken)
+    {
         var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string lastItemId = "(none)";
         int rowOrdinal = 0;
 
         // Driven by hand rather than with await foreach for one reason: the time
         // spent inside MoveNextAsync is the time the SOURCE took to produce the
-        // row, and await foreach leaves nowhere to stand to measure it. The body
-        // below is the loop body it has always been, and the using block is
-        // scoped to the loop so the enumerator is still disposed on the way out
-        // of it - before OnCrawlCompletedAsync, exactly as await foreach did.
+        // row, and await foreach leaves nowhere to stand to measure it. The using
+        // block is scoped to the loop so the enumerator is still disposed on the
+        // way out of it - before OnCrawlCompletedAsync, exactly as await foreach
+        // did.
         await using (IAsyncEnumerator<PushItem> rows =
             source.ReadAsync(cancellationToken).GetAsyncEnumerator(cancellationToken))
         {
@@ -294,52 +384,11 @@ public sealed class PushEngine
                 long rowStarted = PushTiming.Now();
                 rowOrdinal++;
 
-                ExternalItem item;
+                ExternalItem? item = this.Prepare(mapped, rowOrdinal, lastItemId, written, summary);
 
-                try
+                if (item is null)
                 {
-                    long prepareStarted = PushTiming.Now();
-
-                    List<Acl>? acl = this.ResolveAcl(mapped);
-
-                    if (acl is null)
-                    {
-                        // The source derived no grant for this item. Writing it would
-                        // put a row in the index that Graph returns to nobody, which
-                        // reads as success and is not; skipping it narrows the index
-                        // rather than the audience of something already in it.
-                        summary.Skipped++;
-                        this.log.Warning(
-                            "Item {ItemId} has no grants and was not written. " +
-                            "The source could resolve no group for it.",
-                            mapped.Id);
-                        continue;
-                    }
-
-                    item = this.BuildItem(mapped, acl, summary);
-                    summary.Timing.Prepare.Add(PushTiming.MicrosecondsSince(prepareStarted));
-                }
-                catch (Exception ex)
-                {
-                    // Locate the failure without logging row content: ordinal and the
-                    // neighbouring item ID are policy-safe and turn "which row killed
-                    // the run" from bisection into a lookup.
-                    throw new InvalidOperationException(
-                        $"Row {rowOrdinal} could not be prepared (the item before it was {lastItemId}). " +
-                        "The row's content is deliberately not logged; find it in the source by ordinal.",
-                        ex);
-                }
-
-                if (!written.Add(mapped.Id))
-                {
-                    // The PUT is an upsert, so a duplicate ID silently overwrites the
-                    // earlier item while the count claims both. The source is expected
-                    // to return one row per item; say so out loud and count it.
-                    summary.Duplicates++;
-                    this.log.Warning(
-                        "Item {ItemId} appeared more than once (row {RowOrdinal}); the later row overwrote the earlier item.",
-                        mapped.Id,
-                        rowOrdinal);
+                    continue;
                 }
 
                 if (this.dryRun)
@@ -358,10 +407,10 @@ public sealed class PushEngine
                     lastItemId = mapped.Id;
                     summary.Count(mapped.ItemType);
 
-                    // Measured like any other row. A dry run writes nothing, so what it
-                    // reports IS the whole non-Graph cost of the pipeline - the cheapest
-                    // way to find out how much of a slow run is not Graph's fault, and
-                    // it needs no tenant at all.
+                    // Measured like any other row. A dry run writes nothing, so what
+                    // it reports IS the whole non-Graph cost of the pipeline - the
+                    // cheapest way to find out how much of a slow run is not Graph's
+                    // fault, and it needs no tenant at all.
                     summary.Timing.RowTotal.Add(PushTiming.MicrosecondsSince(rowStarted));
 
                     // No commit callback: a dry run writes nothing, so it must leave
@@ -371,34 +420,275 @@ public sealed class PushEngine
 
                 await this.WriteWithRetryAsync(mapped.Id, item, summary, cancellationToken);
 
-                long commitStarted = PushTiming.Now();
-
                 lastItemId = mapped.Id;
-                summary.Count(mapped.ItemType);
-                this.log.Information("Indexed {ItemId} ({ItemType}).", mapped.Id, mapped.ItemType);
-
-                // Only now. Everything above can throw, and every one of those paths
-                // leaves the source's marker on the last item that really landed.
-                await source.OnItemCommittedAsync(mapped, cancellationToken);
-
-                summary.Timing.Commit.Add(PushTiming.MicrosecondsSince(commitStarted));
-                summary.Timing.RowTotal.Add(PushTiming.MicrosecondsSince(rowStarted));
+                await this.CommitAsync(source, mapped, summary, rowStarted, cancellationToken);
             }
         }
+    }
 
-        // Candidates the source itself declined, so the summary reconciles
-        // against the source rather than only against what was written.
-        summary.Skipped += source.Skipped;
-
-        if (!this.dryRun)
+    /// <summary>Reads the source on one thread and writes on several.</summary>
+    /// <param name="source">The opened source. Must not require ordered commits.</param>
+    /// <param name="summary">The run's counters.</param>
+    /// <param name="writers">How many writers to run.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>A task for the operation.</returns>
+    /// <remarks>
+    /// Reading, ACL resolution, item building and duplicate detection all stay on
+    /// the single reading thread. Only the write and its commit run in parallel.
+    /// That is deliberate: the duplicate set and the row ordinals never become
+    /// shared state, so the only concurrency to reason about is N outstanding
+    /// PUTs - and this path is reachable only from a source that keeps no
+    /// position, so there is no checkpoint for their out-of-order completion to
+    /// corrupt.
+    ///
+    /// The channel is bounded and the reader waits on it. A source that outruns
+    /// Graph is therefore throttled by the queue rather than buffering a corpus
+    /// into memory, and the SQL reader closes as soon as the last row is handed
+    /// over rather than being paced by the writes.
+    /// </remarks>
+    private async Task WriteConcurrentlyAsync(
+        IPushSource source, PushSummary summary, int writers, CancellationToken cancellationToken)
+    {
+        var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var queue = Channel.CreateBounded<Pending>(new BoundedChannelOptions(writers * 2)
         {
-            // Reached only by falling out of the loop, which means the
-            // enumeration ended without throwing and every write returned.
-            await source.OnCrawlCompletedAsync(cancellationToken);
+            SingleReader = false,
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.Wait,
+        });
+
+        // A failure in any writer has to stop the reader, and a failure in the
+        // reader has to stop the writers; neither can be left running against a
+        // run that is already over.
+        using var failed = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        Task reader = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    string lastItemId = "(none)";
+                    int rowOrdinal = 0;
+
+                    await using IAsyncEnumerator<PushItem> rows =
+                        source.ReadAsync(failed.Token).GetAsyncEnumerator(failed.Token);
+
+                    while (true)
+                    {
+                        long readStarted = PushTiming.Now();
+                        bool hasRow = await rows.MoveNextAsync();
+                        summary.Timing.SourceRead.Add(PushTiming.MicrosecondsSince(readStarted));
+
+                        if (!hasRow)
+                        {
+                            break;
+                        }
+
+                        PushItem mapped = rows.Current;
+
+                        long rowStarted = PushTiming.Now();
+                        rowOrdinal++;
+
+                        ExternalItem? item = this.Prepare(mapped, rowOrdinal, lastItemId, written, summary);
+
+                        if (item is null)
+                        {
+                            continue;
+                        }
+
+                        lastItemId = mapped.Id;
+                        await queue.Writer.WriteAsync(new Pending(mapped, item, rowStarted), failed.Token);
+                    }
+
+                    queue.Writer.Complete();
+                }
+                catch (Exception ex)
+                {
+                    // Complete WITH the fault, so every writer's ReadAllAsync ends
+                    // rather than waiting forever on a channel nobody will fill.
+                    queue.Writer.TryComplete(ex);
+                    failed.Cancel();
+                    throw;
+                }
+            },
+            CancellationToken.None);
+
+        Task[] consumers = Enumerable.Range(0, writers).Select(_ => Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await foreach (Pending pending in queue.Reader.ReadAllAsync(failed.Token))
+                    {
+                        await this.WriteWithRetryAsync(
+                            pending.Mapped.Id, pending.Item, summary, failed.Token);
+
+                        await this.CommitAsync(
+                            source, pending.Mapped, summary, pending.StartedAt, failed.Token);
+                    }
+                }
+                catch (Exception)
+                {
+                    failed.Cancel();
+                    throw;
+                }
+            },
+            CancellationToken.None)).ToArray();
+
+        // WhenAll so every task is awaited - an unobserved writer fault would
+        // otherwise surface later, attached to nothing. The reader is awaited
+        // first because its exception is the one that explains the run.
+        var all = new List<Task>(consumers.Length + 1) { reader };
+        all.AddRange(consumers);
+
+        try
+        {
+            await Task.WhenAll(all);
+        }
+        catch (Exception)
+        {
+            // Which exception surfaces decides whether the operator gets an
+            // explanation or a symptom. The first failure cancels every other
+            // task, so by the time WhenAll throws, most of what it holds is
+            // OperationCanceledException caused BY the real fault - and WhenAll
+            // rethrows only the first, which may well be one of those.
+            //
+            // Prefer the reader: a row that could not be prepared names its
+            // ordinal, and that locates the problem in the source.
+            if (reader.IsFaulted)
+            {
+                reader.GetAwaiter().GetResult();
+            }
+
+            // Otherwise prefer any genuine failure over the cancellations it
+            // caused. "Graph refused item a20 with 400" is the run's cause of
+            // death; "a write was cancelled" is a consequence of it.
+            Exception? cause = all
+                .Where(task => task.IsFaulted)
+                .SelectMany(task => task.Exception?.Flatten().InnerExceptions
+                    ?? (IEnumerable<Exception>)Array.Empty<Exception>())
+                .FirstOrDefault(ex => ex is not OperationCanceledException);
+
+            if (cause is not null)
+            {
+                ExceptionDispatchInfo.Capture(cause).Throw();
+            }
+
+            throw;
+        }
+    }
+
+    /// <summary>Resolves the ACL and builds the item, or reports why it will not be written.</summary>
+    /// <param name="mapped">The row as the source yielded it.</param>
+    /// <param name="rowOrdinal">Which row this is, for locating a failure.</param>
+    /// <param name="lastItemId">The previous item's ID, for the same reason.</param>
+    /// <param name="written">IDs already seen this run. Touched only by the reading thread.</param>
+    /// <param name="summary">The run's counters.</param>
+    /// <returns>The item to write, or null when the source could grant it to nobody.</returns>
+    private ExternalItem? Prepare(
+        PushItem mapped, int rowOrdinal, string lastItemId, HashSet<string> written, PushSummary summary)
+    {
+        ExternalItem item;
+
+        try
+        {
+            long prepareStarted = PushTiming.Now();
+
+            List<Acl>? acl = this.ResolveAcl(mapped);
+
+            if (acl is null)
+            {
+                // The source derived no grant for this item. Writing it would
+                // put a row in the index that Graph returns to nobody, which
+                // reads as success and is not; skipping it narrows the index
+                // rather than the audience of something already in it.
+                summary.CountSkipped();
+                this.log.Warning(
+                    "Item {ItemId} has no grants and was not written. " +
+                    "The source could resolve no group for it.",
+                    mapped.Id);
+                return null;
+            }
+
+            item = this.BuildItem(mapped, acl, summary);
+            summary.Timing.Prepare.Add(PushTiming.MicrosecondsSince(prepareStarted));
+        }
+        catch (Exception ex)
+        {
+            // Locate the failure without logging row content: ordinal and the
+            // neighbouring item ID are policy-safe and turn "which row killed
+            // the run" from bisection into a lookup.
+            throw new InvalidOperationException(
+                $"Row {rowOrdinal} could not be prepared (the item before it was {lastItemId}). " +
+                "The row's content is deliberately not logged; find it in the source by ordinal.",
+                ex);
         }
 
-        return summary;
+        if (!written.Add(mapped.Id))
+        {
+            // The PUT is an upsert, so a duplicate ID silently overwrites the
+            // earlier item while the count claims both. The source is expected
+            // to return one row per item; say so out loud and count it.
+            summary.CountDuplicate();
+            this.log.Warning(
+                "Item {ItemId} appeared more than once (row {RowOrdinal}); the later row overwrote the earlier item.",
+                mapped.Id,
+                rowOrdinal);
+        }
+
+        return item;
     }
+
+    /// <summary>Counts a written item and tells the source it landed.</summary>
+    /// <param name="source">The opened source.</param>
+    /// <param name="mapped">The item that was written.</param>
+    /// <param name="summary">The run's counters.</param>
+    /// <param name="rowStarted">When this row began, for the timing table.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>A task for the operation.</returns>
+    /// <remarks>
+    /// Reached only after WriteWithRetryAsync returned. Everything that can throw
+    /// happens before this, and every one of those paths leaves the source's
+    /// marker on the last item that really landed.
+    /// </remarks>
+    private async Task CommitAsync(
+        IPushSource source,
+        PushItem mapped,
+        PushSummary summary,
+        long rowStarted,
+        CancellationToken cancellationToken)
+    {
+        long commitStarted = PushTiming.Now();
+
+        int total = summary.Count(mapped.ItemType);
+
+        // Debug, not Information, for two reasons that point the same way. The
+        // runbook already documents the per-item line as what raising the level
+        // to Debug BUYS you - this engine was the one component contradicting
+        // that. And at Information it is a synchronous console write plus a file
+        // write per row, on the critical path of every row, for a line nobody
+        // reads on a healthy run. The evidence is not lost; it is where the
+        // documentation always said it was.
+        this.log.Debug("Indexed {ItemId} ({ItemType}).", mapped.Id, mapped.ItemType);
+
+        if (total % ProgressEvery == 0)
+        {
+            // What replaces it at Information: enough to see a long run moving,
+            // amortised over ProgressEvery rows instead of paid on every one.
+            this.log.Information("Indexed {Count} items so far.", total);
+        }
+
+        await source.OnItemCommittedAsync(mapped, cancellationToken);
+
+        summary.Timing.Commit.Add(PushTiming.MicrosecondsSince(commitStarted));
+        summary.Timing.RowTotal.Add(PushTiming.MicrosecondsSince(rowStarted));
+    }
+
+    /// <summary>One prepared item, waiting for a writer.</summary>
+    /// <param name="Mapped">The row as the source yielded it.</param>
+    /// <param name="Item">The item to write.</param>
+    /// <param name="StartedAt">When this row began, for the timing table.</param>
+    private readonly record struct Pending(PushItem Mapped, ExternalItem Item, long StartedAt);
 
     /// <summary>
     /// Decides which grants an item carries: its own when the source supplied
@@ -589,7 +879,7 @@ public sealed class PushEngine
 
         if (content.Truncated)
         {
-            summary.Truncated++;
+            summary.CountTruncated();
 
             this.log.Warning(
                 "Item {ItemId} content truncated from {OriginalBytes} to {FinalBytes} bytes.",
@@ -649,7 +939,7 @@ public sealed class PushEngine
 
                     if (ex.ResponseStatusCode == 429)
                     {
-                        summary.ThrottleWaits++;
+                        summary.CountThrottleWait();
                     }
 
                     this.log.Warning(

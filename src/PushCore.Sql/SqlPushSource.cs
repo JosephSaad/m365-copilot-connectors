@@ -42,6 +42,20 @@ public sealed class SqlPushSource : IPushSource
     public int Skipped => this.skipped;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// False, and it is the file header above that earns it: a SQL push re-reads
+    /// its whole query every run, so OnItemCommittedAsync below has nothing to
+    /// record and does nothing. There is no marker here, so there is no marker
+    /// for out-of-order completion to move past, and the engine may write these
+    /// items several at a time.
+    ///
+    /// If a future SQL connector implements incremental reads, it implements
+    /// them here - and it must delete this override in the same change, or the
+    /// checkpoint it introduces can outrun the writes it is meant to describe.
+    /// </remarks>
+    public bool RequiresOrderedCommit => false;
+
+    /// <inheritdoc/>
     public async IAsyncEnumerable<PushItem> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {

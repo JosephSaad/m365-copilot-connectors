@@ -20,6 +20,12 @@
 // Ordering is the source's contract, not the engine's: resumption compares the
 // stored marker against the next item, so a source that yields out of order
 // loses rows on the run after an interruption rather than the run itself.
+//
+// RequiresOrderedCommit is the one place a source can trade that away. It
+// defaults to true, so a source written before this existed - or written
+// without thinking about it - keeps the serial behaviour and the guarantee that
+// comes with it. Only a source that keeps NO position may return false, because
+// only then is there no marker for out-of-order completion to corrupt.
 // ---------------------------------------------------------------------------
 
 namespace PushCore;
@@ -37,6 +43,24 @@ public interface IPushSource : IAsyncDisposable
     /// source that yields everything it finds.
     /// </summary>
     int Skipped => 0;
+
+    /// <summary>
+    /// Gets a value indicating whether the engine must write this source's items
+    /// one at a time, in the order they were yielded.
+    ///
+    /// True - the default, and what every source got before this existed - means
+    /// serial writes. It is what makes the watermark rule free: the engine
+    /// commits after each confirmed write, so a run that dies cannot leave the
+    /// marker past an item the index does not have.
+    ///
+    /// Return false ONLY if the source keeps no position at all, which in
+    /// practice means OnItemCommittedAsync does nothing. Such a source has no
+    /// marker to corrupt, so there is nothing for ordering to protect, and the
+    /// engine is free to write several items at once. A source that returns
+    /// false while still recording a position is asking for a checkpoint that
+    /// can outrun its own writes - do not.
+    /// </summary>
+    bool RequiresOrderedCommit => true;
 
     /// <summary>
     /// The items to consider, in ascending checkpoint order.

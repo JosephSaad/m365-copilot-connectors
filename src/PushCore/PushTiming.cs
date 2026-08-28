@@ -58,6 +58,11 @@ public sealed class TimingSeries
 
     private readonly long[] buckets = new long[BucketCount];
 
+    private long count;
+    private long sum;
+    private long max;
+    private long nonZero;
+
     /// <summary>Initializes a new instance of the <see cref="TimingSeries"/> class.</summary>
     /// <param name="name">The label this series reports under.</param>
     public TimingSeries(string name)
@@ -69,19 +74,24 @@ public sealed class TimingSeries
     public string Name { get; }
 
     /// <summary>Gets the number of samples recorded.</summary>
-    public long Count { get; private set; }
+    public long Count => Volatile.Read(ref this.count);
 
     /// <summary>Gets the sum of every sample, in the series' own unit.</summary>
-    public long Sum { get; private set; }
+    public long Sum => Volatile.Read(ref this.sum);
 
     /// <summary>Gets the largest sample, or zero when nothing was recorded.</summary>
-    public long Max { get; private set; }
+    public long Max => Volatile.Read(ref this.max);
 
     /// <summary>Gets the number of samples that were greater than zero.</summary>
-    public long NonZero { get; private set; }
+    public long NonZero => Volatile.Read(ref this.nonZero);
 
     /// <summary>Records one sample.</summary>
     /// <param name="value">The sample, in the series' own unit. Negatives are clamped to zero.</param>
+    /// <remarks>
+    /// Lock-free, because several writers call it at once whenever the source
+    /// permits concurrent writes. A lost increment here would understate a
+    /// segment and could turn a throttle-bound reading into a latency-bound one.
+    /// </remarks>
     public void Add(long value)
     {
         if (value < 0)
@@ -89,20 +99,31 @@ public sealed class TimingSeries
             value = 0;
         }
 
-        this.Count++;
-        this.Sum += value;
-
-        if (value > this.Max)
-        {
-            this.Max = value;
-        }
+        Interlocked.Increment(ref this.count);
+        Interlocked.Add(ref this.sum, value);
 
         if (value > 0)
         {
-            this.NonZero++;
+            Interlocked.Increment(ref this.nonZero);
         }
 
-        this.buckets[Math.Min(BucketFor(value), BucketCount - 1)]++;
+        // Compare-and-swap rather than a read-then-write: two writers finishing
+        // slow rows together must not lose the larger of the two.
+        long seen = Volatile.Read(ref this.max);
+
+        while (value > seen)
+        {
+            long was = Interlocked.CompareExchange(ref this.max, value, seen);
+
+            if (was == seen)
+            {
+                break;
+            }
+
+            seen = was;
+        }
+
+        Interlocked.Increment(ref this.buckets[Math.Min(BucketFor(value), BucketCount - 1)]);
     }
 
     /// <summary>Maps a sample onto its quarter-octave bucket.</summary>
@@ -153,7 +174,8 @@ public sealed class TimingSeries
             return 0;
         }
 
-        long target = (long)Math.Ceiling(fraction * this.Count);
+        long snapshot = this.Count;
+        long target = (long)Math.Ceiling(fraction * snapshot);
 
         if (target < 1)
         {
