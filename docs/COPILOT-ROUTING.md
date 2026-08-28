@@ -263,7 +263,7 @@ therefore Import or DirectQuery, whatever else is true of it. The Iceberg row's
 Direct Lake option survives only where the storage is cloud object storage
 reachable without a gateway, not local HDFS.
 
-The interactive version of this page — the **Copilot Router**, eighteen questions that route one source
+The interactive version of this page — the **Copilot Router**, nineteen questions that route one source
 to one delivery path, with the cost and the warnings attached — ships beside it
 as [`copilot-router.html`](copilot-router.html). Open it in a
 browser; it is a single self-contained file with no build step and no network
@@ -318,6 +318,25 @@ agent you are building anyway → action; many clients → MCP), and **are you
 willing to build**. And the subtlety worth remembering: federated and MCP are
 not rivals — *federated is what your MCP server becomes when you register it*.
 
+### The gateway question
+
+Before pricing any MCP-flavoured route, ask whether an **approved gateway
+pattern for MCP exists in the estate**. In a regulated environment, enterprise
+standards will want a server you host fronted by a governed gateway — and where
+the approved standards stop at SOAP and REST, standing that pattern up (new
+patterns, enterprise architecture approval, roadmap mapping, capacity
+allocation) is the critical path, dwarfing the build itself. The capability is
+not the gap: Azure API Management supports a remote MCP server mode — exposing
+a managed REST API as an MCP server, or governing an existing one — with MCP
+content-safety policies, client-visible telemetry and side-by-side versioning.
+The decision is which gateway becomes the standard and who funds it. And the
+pattern must serve **every origin**, because MCP clients are not confined to a
+cloud plane: federated connectors consume it in M365, Foundry agents in Azure,
+and most agent frameworks run on premises, egressing before they touch either.
+A gallery federated connector needs none of this — Microsoft fronts the
+server — which is one more reason it is the near-term answer while the
+gateway pattern is written.
+
 **The two `INDEX IT` custom leaves are one decision you do not get to make on
 preference.** Agent-hosted needs a Windows host and crawls incrementally, which
 is what lets it delete; direct push runs anywhere with outbound HTTPS and never
@@ -371,7 +390,7 @@ self-contained page — no build step, no dependencies, no network calls. It hol
 - the tree above;
 - a section on **the two planes** — what belongs to Microsoft 365 and Graph, what
   belongs to Fabric, and why retrieval and delegation are not substitutable;
-- **an eighteen-question router.** Answer what you know; the first hard gate to
+- **a nineteen-question router.** Answer what you know; the first hard gate to
   fire picks the route and the rest becomes watch-outs.
 
 **GitHub shows this file as source, not as a page.** Download it and open it in

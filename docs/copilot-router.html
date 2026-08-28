@@ -629,7 +629,7 @@
   <header>
     <p class="eyebrow">One source in, one route out</p>
     <h1>Copilot Router</h1>
-    <p class="lede">Eighteen questions route one data source to one delivery path &mdash; index it, model it, or call it &mdash; with what each path costs to build and to run, and why data you own and data you licence take different routes. The reference tables underneath are the evidence.</p>
+    <p class="lede">Nineteen questions route one data source to one delivery path &mdash; index it, model it, or call it &mdash; with what each path costs to build and to run, and why data you own and data you licence take different routes. The reference tables underneath are the evidence.</p>
     <div class="meta">
       <span>Rows 1&ndash;12 reconstructed from source</span>
       <span>Fabric &amp; connector claims re-verified 2026-08-28</span>
@@ -861,7 +861,7 @@
   <section id="questionnaire">
     <div class="section-head">
       <p class="eyebrow">Walk the tree</p>
-      <h2>Eighteen questions that pick your route</h2>
+      <h2>Nineteen questions that pick your route</h2>
       <p class="lede">The gates in Figure 1, plus the ones that decide it in practice more often than ownership does: which surface the answer has to appear in, whether the data may be resident in OneLake, <strong>whether the answer needs data merged across sources</strong>, how many people will ask and what that costs, how fast a deleted record has to disappear, and what infrastructure you actually have. Answer what you know &mdash; the first hard gate to fire wins, and the rest becomes watch-outs.</p>
     </div>
 
@@ -996,7 +996,18 @@
       </fieldset>
 
       <fieldset class="q" aria-labelledby="qh13">
-        <div class="qhead" id="qh13"><span class="qn">Q13</span> What can the source be read through?</div>
+        <div class="qhead" id="qh13"><span class="qn">Q13</span> Is there an approved gateway pattern for MCP in your estate?</div>
+        <p class="hint">The question a working group discovers late: MCP-flavoured routes ride on an egress pattern enterprise standards may not cover yet.</p>
+        <div class="opts">
+          <label><input type="radio" name="gw" value="approved"><span>Yes &mdash; a governed gateway carries MCP traffic today</span></label>
+          <label><input type="radio" name="gw" value="standing"><span>It is being stood up &mdash; the pattern and approvals are in flight</span></label>
+          <label><input type="radio" name="gw" value="none"><span>No &mdash; no operational gateway, and the approved standards stop at SOAP and REST</span></label>
+        </div>
+        <p class="qnote">This never changes the route &mdash; it changes the timeline. A gallery federated connector needs none of it (Microsoft fronts the server), and synced connectors and actions ride ordinary HTTPS. But an MCP server you host &mdash; including one you register as a custom federated connector &mdash; is exactly what enterprise standards will want behind a governed gateway, and where no pattern exists, pattern approval is the critical path rather than the build. Note that the capability itself is not the gap: Azure API Management supports a remote MCP server mode, with content-safety policies, client-visible telemetry and side-by-side versioning. And MCP is not one platform&rsquo;s concern &mdash; federated connectors use it in the M365 plane, Foundry agents consume it in Azure, and most agent frameworks that will call your server run on premises, so one pattern has to serve every origin.</p>
+      </fieldset>
+
+      <fieldset class="q" aria-labelledby="qh14">
+        <div class="qhead" id="qh14"><span class="qn">Q14</span> What can the source be read through?</div>
         <div class="opts">
           <label><input type="radio" name="src" value="gallery"><span>It's on Microsoft's <em>synced</em> connector gallery list</span></label>
           <label><input type="radio" name="src" value="fedready"><span>A <em>federated</em> Copilot connector reaches it &mdash; one published in the gallery, or one we register ourselves over a read-only MCP server</span></label>
@@ -1009,8 +1020,8 @@
         <p class="qnote">The gallery now holds two kinds of connector and they behave oppositely. A <strong>synced</strong> connector crawls and indexes at org level under admin credentials. A <strong>federated</strong> connector indexes nothing: it fetches over MCP at question time, each user authenticating as themselves, and it is read-only. Note what a synced connector does <em>not</em> do for a partner-built or custom source: Microsoft has no visibility into deletions there, and its first sight of any change is your own call to the Graph API. Several market-data vendors publish federated connectors, which is the first configuration answer this page has ever been able to offer for licensed content. And you are not limited to the gallery: an organisation can register its <strong>own</strong> custom federated connector over an MCP server it hosts, which is how an internal source reaches M365 Copilot chat without being copied into the index.</p>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh14">
-        <div class="qhead" id="qh14"><span class="qn">Q14</span> Roughly how many items?</div>
+      <fieldset class="q" aria-labelledby="qh15">
+        <div class="qhead" id="qh15"><span class="qn">Q15</span> Roughly how many items?</div>
         <div class="opts">
           <label><input type="radio" name="vol" value="small"><span>Under ~50,000</span></label>
           <label><input type="radio" name="vol" value="mid"><span>50,000 to 500,000</span></label>
@@ -1018,8 +1029,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh15">
-        <div class="qhead" id="qh15"><span class="qn">Q15</span> How many more sources like this are coming?</div>
+      <fieldset class="q" aria-labelledby="qh16">
+        <div class="qhead" id="qh16"><span class="qn">Q16</span> How many more sources like this are coming?</div>
         <div class="opts">
           <label><input type="radio" name="reuse" value="one"><span>This is the only one</span></label>
           <label><input type="radio" name="reuse" value="few"><span>Two or three more, probably</span></label>
@@ -1027,8 +1038,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh16">
-        <div class="qhead" id="qh16"><span class="qn">Q16</span> What does compliance require of the data boundary?</div>
+      <fieldset class="q" aria-labelledby="qh17">
+        <div class="qhead" id="qh17"><span class="qn">Q17</span> What does compliance require of the data boundary?</div>
         <div class="opts">
           <label><input type="radio" name="iso" value="tenant"><span>The M365 tenant boundary is acceptable</span></label>
           <label><input type="radio" name="iso" value="nocopy"><span>No second copy &mdash; it must not be indexed or imported anywhere</span></label>
@@ -1036,8 +1047,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh17">
-        <div class="qhead" id="qh17"><span class="qn">Q17</span> Does the model itself have to be governed?</div>
+      <fieldset class="q" aria-labelledby="qh18">
+        <div class="qhead" id="qh18"><span class="qn">Q18</span> Does the model itself have to be governed?</div>
         <div class="opts">
           <label><input type="radio" name="gov" value="pinned"><span>Yes &mdash; the model and its version must be fixed, evaluated and attested before use</span></label>
           <label><input type="radio" name="gov" value="evidence"><span>We need evidence of behaviour &mdash; prompt and response logs, an evaluation set, a documented change process</span></label>
@@ -1046,8 +1057,8 @@
         <p class="qnote">This is model-risk governance, not data governance, and it is the reason a bank ends up hosting its own application when every data answer pointed at M365. No M365 surface lets you pin a model version or hold it still while you evaluate it.</p>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh18">
-        <div class="qhead" id="qh18"><span class="qn">Q18</span> Whose retrieval has to be good enough?</div>
+      <fieldset class="q" aria-labelledby="qh19">
+        <div class="qhead" id="qh19"><span class="qn">Q19</span> Whose retrieval has to be good enough?</div>
         <div class="opts">
           <label><input type="radio" name="ret" value="own"><span>Ours &mdash; chunking, embeddings, hybrid search and reranking are things we must tune</span></label>
           <label><input type="radio" name="ret" value="tune"><span>We need to influence relevance, but not own the pipeline</span></label>
@@ -1061,7 +1072,7 @@
     <div class="quiz-bar">
       <button type="button" id="run">Show my route</button>
       <button type="button" class="ghost" id="clear">Clear</button>
-      <span class="progress" id="progress">0 of 18 answered</span>
+      <span class="progress" id="progress">0 of 19 answered</span>
     </div>
 
     <div class="result" id="result" hidden>
@@ -1840,7 +1851,7 @@
           <tr>
             <th class="rowhead" scope="row">Who calls it</th>
             <td class="val">the one agent that hosts it &mdash; declarative or Copilot Studio &mdash; wired by hand</td>
-            <td class="val">any MCP-capable client &mdash; Copilot Studio, an IDE, Foundry &mdash; wired per client</td>
+            <td class="val">any MCP-capable client &mdash; Copilot Studio, an IDE, Foundry, an on-premises agent framework &mdash; wired per client</td>
             <td class="val pos">M365 Copilot itself &mdash; Copilot Chat, Excel, Researcher, Cowork &mdash; with nothing wired</td>
           </tr>
           <tr>
@@ -1933,7 +1944,7 @@
     <div class="rule-card">
       <p class="eyebrow">The distinction worth memorising</p>
       <p class="big">Retrieval versus <em>delegation</em>.</p>
-      <p class="note">A connector pushes content into the index so Copilot retrieves it. Fabric MCP and a data agent expose a query capability an agent calls at runtime. <strong>The two are not substitutable</strong>, and the failure mode is always the same direction: a team picks Fabric to avoid a connector approval, ships it, and discovers the M365 Copilot grounding requirement was never met. Neither Copilot in Fabric nor a data agent makes anything <em>retrievable</em> in M365 Copilot chat the way indexed content is; a published data agent is something a person invokes by name, not grounding that arrives on its own. A federated connector is the one mechanism that sits in both frames at once &mdash; delegation by wire, retrieval by placement &mdash; which is exactly why it is the interesting new answer for content that may not be copied. Note where that lands the MCP server you were going to build anyway: registered as a custom federated connector, it stops being a thing wired per client and becomes a thing M365 Copilot chat reaches on its own.</p>
+      <p class="note">A connector pushes content into the index so Copilot retrieves it. Fabric MCP and a data agent expose a query capability an agent calls at runtime. <strong>The two are not substitutable</strong>, and the failure mode is always the same direction: a team picks Fabric to avoid a connector approval, ships it, and discovers the M365 Copilot grounding requirement was never met. Neither Copilot in Fabric nor a data agent makes anything <em>retrievable</em> in M365 Copilot chat the way indexed content is; a published data agent is something a person invokes by name, not grounding that arrives on its own. A federated connector is the one mechanism that sits in both frames at once &mdash; delegation by wire, retrieval by placement &mdash; which is exactly why it is the interesting new answer for content that may not be copied. And the MCP <em>clients</em> need not live in either plane: most agent frameworks run on premises today, egressing before they touch any cloud &mdash; which is why the gateway pattern, not the platform, is where a single enterprise standard has to live. Note where that lands the MCP server you were going to build anyway: registered as a custom federated connector, it stops being a thing wired per client and becomes a thing M365 Copilot chat reaches on its own.</p>
     </div>
   </section>
 
@@ -2008,7 +2019,7 @@
 
   <footer>
     <p>Microsoft's Copilot surface naming and capability boundaries move faster than anything else in this stack &mdash; particularly MCP support inside M365 and the line between declarative agents and Copilot Studio. Treat the tables as the shape of the decision, and confirm current boundaries before committing.</p>
-    <p class="stamp">Revision <strong>2026-08-28 &middot; r18</strong> &mdash; the Copilot Router; 18 questions, 12 routes, adversarially reviewed. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
+    <p class="stamp">Revision <strong>2026-08-28 &middot; r19</strong> &mdash; the Copilot Router; 19 questions, 12 routes; the gateway-readiness question added from the enablement working group. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
   </footer>
 
 </div>
@@ -2018,7 +2029,7 @@
   "use strict";
 
   var FIELDS = ["reach","surface","own","access","kind","model","onelake","join","conc",
-                "fresh","del","infra","src","vol","reuse","iso","gov","ret"];
+                "fresh","del","infra","gw","src","vol","reuse","iso","gov","ret"];
 
   var ROUTES = {
     gallery: {
@@ -2430,6 +2441,14 @@
     }
     if (a.surface === "app" && route !== "foundry") {
       w.push("The answer has to appear in your own application, and this route does not put it there by itself. Either embed a Copilot Studio agent in the app, or call the same source directly from the app — and if the app is the real deliverable, price that against Foundry before committing.");
+    }
+    var gwGap = (a.gw === "none" || a.gw === "standing");
+    if ((route === "mcp" || route === "mcpready") && gwGap) {
+      w.push("<strong>In your estate the gateway, not the build, is the critical path for this route.</strong> Enterprise standards will want this server fronted by a governed gateway, and you have said " + (a.gw === "none" ? "none is operational and the approved standards stop at SOAP and REST" : "the pattern is still being stood up") + ". Standing one up means new patterns, enterprise architecture approval, roadmap mapping and capacity allocation \u2014 a longer tail than the days-to-weeks build this route prices. Deliver the near-term answer on a route that does not need the gateway, and build this one behind the architecture work rather than ahead of it.");
+      w.push("The gateway is a deployment decision, not a capability search: Azure API Management already supports a remote MCP server mode \u2014 exposing a managed REST API as an MCP server, or governing an existing one \u2014 with MCP content-safety policies, client-visible telemetry and side-by-side versioning. The work is agreeing the tier, the networking model and who funds the instance, then writing the pattern once for every origin: Foundry agents, federated connectors, and the agent frameworks that run on premises.");
+    }
+    if (route === "federated" && gwGap) {
+      w.push("A <em>gallery</em> federated connector is unaffected by your gateway gap \u2014 Microsoft fronts the server. But registering <strong>your own</strong> MCP server as a custom federated connector puts a server you host on the path, and the same gateway and standards questions land on it before an admin approves the registration.");
     }
     if (route === "mcpready") {
       w.push("<strong>You are adopting somebody else’s tool surface, not just their transport.</strong> Read the tool list before you connect it: an MCP server that exposes a write or a delete alongside the read you wanted has handed Copilot that capability too, and the model decides when to use it.");
