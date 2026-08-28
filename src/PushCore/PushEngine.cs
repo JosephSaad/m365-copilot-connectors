@@ -269,85 +269,121 @@ public sealed class PushEngine
         string lastItemId = "(none)";
         int rowOrdinal = 0;
 
-        await foreach (PushItem mapped in source.ReadAsync(cancellationToken).WithCancellation(cancellationToken))
+        // Driven by hand rather than with await foreach for one reason: the time
+        // spent inside MoveNextAsync is the time the SOURCE took to produce the
+        // row, and await foreach leaves nowhere to stand to measure it. The body
+        // below is the loop body it has always been, and the using block is
+        // scoped to the loop so the enumerator is still disposed on the way out
+        // of it - before OnCrawlCompletedAsync, exactly as await foreach did.
+        await using (IAsyncEnumerator<PushItem> rows =
+            source.ReadAsync(cancellationToken).GetAsyncEnumerator(cancellationToken))
         {
-            rowOrdinal++;
-
-            ExternalItem item;
-
-            try
+            while (true)
             {
-                List<Acl>? acl = this.ResolveAcl(mapped);
+                long readStarted = PushTiming.Now();
+                bool hasRow = await rows.MoveNextAsync();
+                summary.Timing.SourceRead.Add(PushTiming.MicrosecondsSince(readStarted));
 
-                if (acl is null)
+                if (!hasRow)
                 {
-                    // The source derived no grant for this item. Writing it would
-                    // put a row in the index that Graph returns to nobody, which
-                    // reads as success and is not; skipping it narrows the index
-                    // rather than the audience of something already in it.
-                    summary.Skipped++;
+                    break;
+                }
+
+                PushItem mapped = rows.Current;
+
+                long rowStarted = PushTiming.Now();
+                rowOrdinal++;
+
+                ExternalItem item;
+
+                try
+                {
+                    long prepareStarted = PushTiming.Now();
+
+                    List<Acl>? acl = this.ResolveAcl(mapped);
+
+                    if (acl is null)
+                    {
+                        // The source derived no grant for this item. Writing it would
+                        // put a row in the index that Graph returns to nobody, which
+                        // reads as success and is not; skipping it narrows the index
+                        // rather than the audience of something already in it.
+                        summary.Skipped++;
+                        this.log.Warning(
+                            "Item {ItemId} has no grants and was not written. " +
+                            "The source could resolve no group for it.",
+                            mapped.Id);
+                        continue;
+                    }
+
+                    item = this.BuildItem(mapped, acl, summary);
+                    summary.Timing.Prepare.Add(PushTiming.MicrosecondsSince(prepareStarted));
+                }
+                catch (Exception ex)
+                {
+                    // Locate the failure without logging row content: ordinal and the
+                    // neighbouring item ID are policy-safe and turn "which row killed
+                    // the run" from bisection into a lookup.
+                    throw new InvalidOperationException(
+                        $"Row {rowOrdinal} could not be prepared (the item before it was {lastItemId}). " +
+                        "The row's content is deliberately not logged; find it in the source by ordinal.",
+                        ex);
+                }
+
+                if (!written.Add(mapped.Id))
+                {
+                    // The PUT is an upsert, so a duplicate ID silently overwrites the
+                    // earlier item while the count claims both. The source is expected
+                    // to return one row per item; say so out loud and count it.
+                    summary.Duplicates++;
                     this.log.Warning(
-                        "Item {ItemId} has no grants and was not written. " +
-                        "The source could resolve no group for it.",
-                        mapped.Id);
+                        "Item {ItemId} appeared more than once (row {RowOrdinal}); the later row overwrote the earlier item.",
+                        mapped.Id,
+                        rowOrdinal);
+                }
+
+                if (this.dryRun)
+                {
+                    // Item ID, type and sizes only. The content is customer data and
+                    // does not go to the console any more than it goes to the log.
+                    this.log.Information(
+                        "Would write {ItemId} ({ItemType}): {PropertyCount} properties, {ContentBytes} content bytes, " +
+                        "{AclCount} ACL entr(y/ies).",
+                        mapped.Id,
+                        mapped.ItemType,
+                        mapped.Properties.Count,
+                        item.Content?.Value?.Length ?? 0,
+                        item.Acl?.Count ?? 0);
+
+                    lastItemId = mapped.Id;
+                    summary.Count(mapped.ItemType);
+
+                    // Measured like any other row. A dry run writes nothing, so what it
+                    // reports IS the whole non-Graph cost of the pipeline - the cheapest
+                    // way to find out how much of a slow run is not Graph's fault, and
+                    // it needs no tenant at all.
+                    summary.Timing.RowTotal.Add(PushTiming.MicrosecondsSince(rowStarted));
+
+                    // No commit callback: a dry run writes nothing, so it must leave
+                    // the watermark exactly where it found it.
                     continue;
                 }
 
-                item = this.BuildItem(mapped, acl, summary);
-            }
-            catch (Exception ex)
-            {
-                // Locate the failure without logging row content: ordinal and the
-                // neighbouring item ID are policy-safe and turn "which row killed
-                // the run" from bisection into a lookup.
-                throw new InvalidOperationException(
-                    $"Row {rowOrdinal} could not be prepared (the item before it was {lastItemId}). " +
-                    "The row's content is deliberately not logged; find it in the source by ordinal.",
-                    ex);
-            }
+                await this.WriteWithRetryAsync(mapped.Id, item, summary, cancellationToken);
 
-            if (!written.Add(mapped.Id))
-            {
-                // The PUT is an upsert, so a duplicate ID silently overwrites the
-                // earlier item while the count claims both. The source is expected
-                // to return one row per item; say so out loud and count it.
-                summary.Duplicates++;
-                this.log.Warning(
-                    "Item {ItemId} appeared more than once (row {RowOrdinal}); the later row overwrote the earlier item.",
-                    mapped.Id,
-                    rowOrdinal);
-            }
-
-            if (this.dryRun)
-            {
-                // Item ID, type and sizes only. The content is customer data and
-                // does not go to the console any more than it goes to the log.
-                this.log.Information(
-                    "Would write {ItemId} ({ItemType}): {PropertyCount} properties, {ContentBytes} content bytes, " +
-                    "{AclCount} ACL entr(y/ies).",
-                    mapped.Id,
-                    mapped.ItemType,
-                    mapped.Properties.Count,
-                    item.Content?.Value?.Length ?? 0,
-                    item.Acl?.Count ?? 0);
+                long commitStarted = PushTiming.Now();
 
                 lastItemId = mapped.Id;
                 summary.Count(mapped.ItemType);
+                this.log.Information("Indexed {ItemId} ({ItemType}).", mapped.Id, mapped.ItemType);
 
-                // No commit callback: a dry run writes nothing, so it must leave
-                // the watermark exactly where it found it.
-                continue;
+                // Only now. Everything above can throw, and every one of those paths
+                // leaves the source's marker on the last item that really landed.
+                await source.OnItemCommittedAsync(mapped, cancellationToken);
+
+                summary.Timing.Commit.Add(PushTiming.MicrosecondsSince(commitStarted));
+                summary.Timing.RowTotal.Add(PushTiming.MicrosecondsSince(rowStarted));
             }
-
-            await this.WriteWithRetryAsync(mapped.Id, item, summary, cancellationToken);
-
-            lastItemId = mapped.Id;
-            summary.Count(mapped.ItemType);
-            this.log.Information("Indexed {ItemId} ({ItemType}).", mapped.Id, mapped.ItemType);
-
-            // Only now. Everything above can throw, and every one of those paths
-            // leaves the source's marker on the last item that really landed.
-            await source.OnItemCommittedAsync(mapped, cancellationToken);
         }
 
         // Candidates the source itself declined, so the summary reconciles
@@ -546,6 +582,11 @@ public sealed class PushEngine
         TruncationResult content = ContentTruncator.Truncate(
             mapped.Content ?? string.Empty, this.options.DataSource.MaxContentBytes);
 
+        // Taken here because this is the only place the real byte count exists -
+        // Value.Length would be characters, and the gap matters when the question
+        // is whether twenty of these fit in one 30 MB Graph $batch.
+        summary.Timing.ContentBytes.Add(content.FinalBytes);
+
         if (content.Truncated)
         {
             summary.Truncated++;
@@ -573,62 +614,94 @@ public sealed class PushEngine
     private async Task WriteWithRetryAsync(
         string itemId, ExternalItem item, PushSummary summary, CancellationToken cancellationToken)
     {
-        for (int attempt = 1; ; attempt++)
+        // Accumulated across every attempt for this row and recorded once, in the
+        // finally, so a row that gave up still reports what it spent. The two are
+        // kept apart on purpose: time in flight and time asleep after a 429 call
+        // for opposite remedies, and a single "the write took 3.5s" number cannot
+        // tell you which of them you are looking at.
+        long inFlight = 0;
+        long asleep = 0;
+
+        try
         {
-            try
+            for (int attempt = 1; ; attempt++)
             {
-                await this.graph.External.Connections[this.options.Graph.ConnectionId]
-                    .Items[itemId].PutAsync(item, cancellationToken: cancellationToken);
-                return;
-            }
-            catch (ODataError ex) when (
-                ex.ResponseStatusCode is 429 or 502 or 503 or 504 && attempt < MaxWriteAttempts)
-            {
-                // 429 honours Retry-After; a transient 5xx gets the same bounded
-                // backoff rather than aborting a thousand-item run for one blip.
-                TimeSpan wait = GraphThrottling.RetryAfter(ex) ?? GraphThrottling.Backoff(attempt);
+                long started = PushTiming.Now();
 
-                if (ex.ResponseStatusCode == 429)
+                try
                 {
-                    summary.ThrottleWaits++;
+                    await this.graph.External.Connections[this.options.Graph.ConnectionId]
+                        .Items[itemId].PutAsync(item, cancellationToken: cancellationToken);
+
+                    inFlight += PushTiming.MicrosecondsSince(started);
+                    return;
                 }
+                catch (ODataError ex) when (
+                    ex.ResponseStatusCode is 429 or 502 or 503 or 504 && attempt < MaxWriteAttempts)
+                {
+                    // The refusal itself was time in flight; only the sleep that
+                    // follows is backoff.
+                    inFlight += PushTiming.MicrosecondsSince(started);
 
-                this.log.Warning(
-                    "Write of {ItemId} returned {Status}. Waiting {Seconds}s before attempt {Next} of {Max}.",
-                    itemId,
-                    ex.ResponseStatusCode,
-                    (int)wait.TotalSeconds,
-                    attempt + 1,
-                    MaxWriteAttempts);
+                    // 429 honours Retry-After; a transient 5xx gets the same bounded
+                    // backoff rather than aborting a thousand-item run for one blip.
+                    TimeSpan wait = GraphThrottling.RetryAfter(ex) ?? GraphThrottling.Backoff(attempt);
 
-                await Task.Delay(wait, cancellationToken);
+                    if (ex.ResponseStatusCode == 429)
+                    {
+                        summary.ThrottleWaits++;
+                    }
+
+                    this.log.Warning(
+                        "Write of {ItemId} returned {Status}. Waiting {Seconds}s before attempt {Next} of {Max}.",
+                        itemId,
+                        ex.ResponseStatusCode,
+                        (int)wait.TotalSeconds,
+                        attempt + 1,
+                        MaxWriteAttempts);
+
+                    long sleeping = PushTiming.Now();
+                    await Task.Delay(wait, cancellationToken);
+                    asleep += PushTiming.MicrosecondsSince(sleeping);
+                }
+                catch (HttpRequestException ex) when (attempt < MaxWriteAttempts)
+                {
+                    inFlight += PushTiming.MicrosecondsSince(started);
+
+                    TimeSpan wait = GraphThrottling.Backoff(attempt);
+
+                    this.log.Warning(
+                        "Write of {ItemId} failed in transit ({Message}). Waiting {Seconds}s before attempt " +
+                        "{Next} of {Max}.",
+                        itemId,
+                        ex.Message,
+                        (int)wait.TotalSeconds,
+                        attempt + 1,
+                        MaxWriteAttempts);
+
+                    long sleeping = PushTiming.Now();
+                    await Task.Delay(wait, cancellationToken);
+                    asleep += PushTiming.MicrosecondsSince(sleeping);
+                }
+                catch (ODataError ex)
+                {
+                    inFlight += PushTiming.MicrosecondsSince(started);
+
+                    // Terminal: name the item and the status before the exception
+                    // climbs to the run-level handler, so "which row killed the run"
+                    // is one log line, not an inference. Item ID and status only.
+                    this.log.Error(
+                        "Write failed for {ItemId} with status {Status}. Giving up on this run.",
+                        itemId,
+                        ex.ResponseStatusCode);
+                    throw;
+                }
             }
-            catch (HttpRequestException ex) when (attempt < MaxWriteAttempts)
-            {
-                TimeSpan wait = GraphThrottling.Backoff(attempt);
-
-                this.log.Warning(
-                    "Write of {ItemId} failed in transit ({Message}). Waiting {Seconds}s before attempt " +
-                    "{Next} of {Max}.",
-                    itemId,
-                    ex.Message,
-                    (int)wait.TotalSeconds,
-                    attempt + 1,
-                    MaxWriteAttempts);
-
-                await Task.Delay(wait, cancellationToken);
-            }
-            catch (ODataError ex)
-            {
-                // Terminal: name the item and the status before the exception
-                // climbs to the run-level handler, so "which row killed the run"
-                // is one log line, not an inference. Item ID and status only.
-                this.log.Error(
-                    "Write failed for {ItemId} with status {Status}. Giving up on this run.",
-                    itemId,
-                    ex.ResponseStatusCode);
-                throw;
-            }
+        }
+        finally
+        {
+            summary.Timing.WriteInFlight.Add(inFlight);
+            summary.Timing.WriteBackoff.Add(asleep);
         }
     }
 }

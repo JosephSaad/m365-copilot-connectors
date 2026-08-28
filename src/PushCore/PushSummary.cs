@@ -31,6 +31,13 @@ public sealed class PushSummary
     /// <summary>Gets the total number of items written.</summary>
     public int Total { get; private set; }
 
+    /// <summary>
+    /// Gets where the wall clock went, attributed per segment. Rides on the
+    /// summary because the summary already reaches the host; measuring the run
+    /// should not require its own plumbing.
+    /// </summary>
+    public PushTiming Timing { get; } = new PushTiming();
+
     /// <summary>Gets the counts, keyed by item type.</summary>
     public IReadOnlyDictionary<string, int> ByType => this.byType;
 
