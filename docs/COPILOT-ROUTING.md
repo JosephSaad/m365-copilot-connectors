@@ -299,6 +299,25 @@ A synced connector is still the odd one out among the index paths, and that is
 still its main advantage: publish once, and every M365 surface picks it up with
 nothing told to it.
 
+Side by side, the three live-call packagings differ only in who can reach them:
+
+| | API action | MCP server | Federated connector |
+|---|---|---|---|
+| What it physically is | an OpenAPI spec + manifest — not a deployable on its own | a process you host, speaking MCP | also an MCP server — registered with M365, from the gallery or your own |
+| Who calls it | the one agent that hosts it, wired by hand | any MCP-capable client, wired per client | **M365 Copilot itself**, with nothing wired |
+| How a person reaches it | they must find and invoke the host agent | through whatever client you connected | it is simply there in Copilot chat, once connected |
+| Read or write | can write | can write | **read-only, by design** |
+| Whose identity | the host agent's auth config | yours to build | per-user Entra SSO or OAuth, mandated; each user consents |
+| Audit | the host agent's + source logs | your logs | Microsoft Purview |
+| Licence | rides the host agent's meter | rides each client's meter | **Copilot add-on per querying user** — not Studio licences, not pay-as-you-go |
+| Build | days–2 weeks, plus a host agent | days–2 weeks, plus auth and audit | gallery: configuration; your own: the server, then a registration |
+
+Three questions pick between them: **does it have to write** (federated is out),
+**where must the answer appear** (Copilot chat with no agent → federated; one
+agent you are building anyway → action; many clients → MCP), and **are you
+willing to build**. And the subtlety worth remembering: federated and MCP are
+not rivals — *federated is what your MCP server becomes when you register it*.
+
 **The two `INDEX IT` custom leaves are one decision you do not get to make on
 preference.** Agent-hosted needs a Windows host and crawls incrementally, which
 is what lets it delete; direct push runs anywhere with outbound HTTPS and never
