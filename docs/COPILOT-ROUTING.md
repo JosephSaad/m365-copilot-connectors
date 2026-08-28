@@ -58,10 +58,12 @@ but it is still counting.
 
 ![Decision tree: a question for Copilot routes first on whether the askers hold M365 licences, then on who owns the data. Owned content with group-shaped access must also clear a freshness and deletion-SLA gate before it is indexed by a synced Copilot connector, which splits into an agent-hosted connector and a direct push. Data that is row-level secured or computed, and that models cleanly, goes to a Power BI semantic model, whose storage mode — Direct Lake, Import or DirectQuery — is picked by OneLake residency and by whether a second copy is permitted. Everything else, including almost all vendor-licensed data, is fetched by a live tool call: a federated Copilot connector, an API action, an MCP server you build, or a ready-made one somebody publishes. Each leaf carries its build effort and running meter.](copilot-route-decision-tree.png)
 
-Four gates and three outcomes. The first gate is about reach, the second about
-ownership, and the last two are the ones that actually decide. The dashed path
-is the only route that puts licensed content into an index — it exists, but it
-needs a rider your market-data team has to negotiate.
+Five gates and three outcomes. Reach first, ownership second — and each branch
+then has its own decider: the shape of access and the deletion SLA on the owned
+side, the licence on the vendor side. The dashed path is the only route that
+puts licensed content into an index — it exists, but it needs a rider your
+market-data team has to negotiate, and the interactive router still applies the
+owned branch's access and SLA gates to it.
 
 Each outcome then has exactly one decision it does not get to make on preference:
 
@@ -152,7 +154,11 @@ The rule that falls out of it:
 > **If the source data cannot leave its current store, Import is disqualified
 > because it creates a copy, and Direct Lake is disqualified because the data
 > must be resident in OneLake. That leaves DirectQuery — or a shortcut, which
-> registers the data in OneLake without moving it.**
+> registers the data in OneLake without moving it. And where a removed record
+> must disappear immediately, DirectQuery is the only mode that can promise it:
+> Import answers from its last refresh, Direct Lake from the current OneLake
+> state, and only the mode that stores nothing makes removal at the source
+> removal everywhere.**
 
 That last clause is the one worth remembering, because it turns most
 "DirectQuery only" conclusions into Direct Lake ones. There are four ways data
