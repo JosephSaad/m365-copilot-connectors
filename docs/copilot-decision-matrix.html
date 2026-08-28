@@ -183,6 +183,8 @@
     font-size: 0.85rem;
   }
 
+  table.wide { min-width: 1500px; font-size: 0.8rem; }
+
   caption {
     caption-side: top;
     text-align: left;
@@ -360,6 +362,8 @@
   .t-edge  { fill: var(--ink-muted); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.03em; }
   .t-accent{ fill: var(--accent); font-family: var(--sans); font-size: 13.5px; font-weight: 600; letter-spacing: 0.04em; }
   .t-risk  { fill: var(--risk); font-family: var(--mono); font-size: 10.5px; }
+  .t-leaf  { fill: var(--ink-muted); font-family: var(--mono); font-size: 9.5px; }
+  .t-leafr { fill: var(--risk); font-family: var(--mono); font-size: 9.5px; }
 
   .edge      { stroke: var(--ink-muted); stroke-width: 1.4; fill: none; }
   .edge-risk { stroke: var(--risk); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
@@ -628,6 +632,7 @@
     <p class="lede">Your surface matrix, reconstructed and extended with the layer it doesn't cover: how data actually reaches those surfaces, what each path costs to build and to run, and why data you own and data you licence take different routes.</p>
     <div class="meta">
       <span>Rows 1&ndash;12 reconstructed from source</span>
+      <span>Fabric rows from the components briefing</span>
       <span>Extended rows &amp; tables marked</span>
       <span>Verify against current docs</span>
     </div>
@@ -652,8 +657,7 @@
 
     <figure>
       <div class="figbox">
-        <svg viewBox="0 0 1240 846" role="img" aria-label="Decision tree for routing a Copilot question. Gate one: do the askers hold M365 licences — if not, Azure AI Foundry. Gate two: who owns the data. Owned data passes a content-and-group-access gate and then a freshness-and-deletion-SLA gate before being indexed by a Graph connector. Vendor-licensed data goes to a live tool call unless a signed AI rider permits indexing. Azure AI Foundry is the escape hatch, forced by askers outside the tenant, network isolation, a model that must be pinned and validated, or retrieval you control. The live-call branch offers three leaves: an API action, an MCP server you build, and a ready-made MCP server somebody else publishes. Each leaf carries build effort and running meter.">
-
+        <svg viewBox="0 0 1554 1000" role="img" aria-label="Decision tree for routing a Copilot question. Gate one: do the askers hold M365 licences — if not, Azure AI Foundry. Gate two: who owns the data. Owned data passes a content-and-group-access gate and then a freshness-and-deletion-SLA gate before being indexed by a synced Copilot connector. Data that is row-level secured or computed, and that models cleanly, goes to a Power BI semantic model, whose storage mode — Direct Lake, Import or DirectQuery — is picked by OneLake residency and by whether a second copy is permitted. Vendor-licensed data goes to a live tool call unless a signed AI rider permits indexing. The live-call branch offers four leaves: a federated Copilot connector, which is an MCP server Microsoft fronts and the only no-copy path that reaches Microsoft 365 Copilot chat; an API action; an MCP server you build; and a ready-made MCP server somebody else publishes. Azure AI Foundry is the escape hatch, forced by askers outside the tenant, network isolation, a model that must be pinned and validated, or retrieval you control.">
           <defs>
             <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" class="head"/>
@@ -664,33 +668,33 @@
           </defs>
 
           <!-- START -->
-          <rect class="n-start" x="400" y="18" width="200" height="44" rx="3"/>
-          <text class="t-title" x="500" y="45" text-anchor="middle">A question for Copilot</text>
-          <path class="edge" d="M500,62 L500,94" marker-end="url(#ar)"/>
+          <rect class="n-start" x="560" y="18" width="200" height="44" rx="3"/>
+          <text class="t-title" x="660" y="45" text-anchor="middle">A question for Copilot</text>
+          <path class="edge" d="M660,62 L660,94" marker-end="url(#ar)"/>
 
           <!-- GATE 1 -->
-          <rect class="n-gate" x="368" y="96" width="264" height="48" rx="3"/>
-          <text class="t-body" x="500" y="125" text-anchor="middle">Do the askers hold M365 licences?</text>
+          <rect class="n-gate" x="528" y="96" width="264" height="48" rx="3"/>
+          <text class="t-body" x="660" y="125" text-anchor="middle">Do the askers hold M365 licences?</text>
 
-          <path class="edge" d="M632,120 L754,120" marker-end="url(#ar)"/>
-          <text class="t-edge" x="693" y="111" text-anchor="middle">no</text>
-          <rect class="n-esc" x="756" y="80" width="424" height="96" rx="3"/>
-          <text class="t-title" x="968" y="104" text-anchor="middle">Azure AI Foundry</text>
-          <text class="t-cost" x="968" y="122" text-anchor="middle">months to build &#183; tokens + hosting + headcount</text>
-          <text class="t-cost" x="968" y="145" text-anchor="middle">also forced by: network isolation &#183; a model you must pin</text>
-          <text class="t-cost" x="968" y="159" text-anchor="middle">and validate &#183; retrieval you control</text>
+          <path class="edge" d="M792,120 L934,120" marker-end="url(#ar)"/>
+          <text class="t-edge" x="863" y="111" text-anchor="middle">no</text>
+          <rect class="n-esc" x="936" y="80" width="558" height="96" rx="3"/>
+          <text class="t-title" x="1215" y="104" text-anchor="middle">Azure AI Foundry</text>
+          <text class="t-cost" x="1215" y="122" text-anchor="middle">months to build &#183; tokens + hosting + headcount</text>
+          <text class="t-cost" x="1215" y="145" text-anchor="middle">also forced by: network isolation &#183; a model you must pin and</text>
+          <text class="t-cost" x="1215" y="159" text-anchor="middle">validate &#183; retrieval you control</text>
 
-          <path class="edge" d="M500,144 L500,178" marker-end="url(#ar)"/>
-          <text class="t-edge" x="512" y="167">yes</text>
+          <path class="edge" d="M660,144 L660,178" marker-end="url(#ar)"/>
+          <text class="t-edge" x="672" y="167">yes</text>
 
           <!-- GATE 2 -->
-          <rect class="n-gate" x="368" y="180" width="264" height="48" rx="3"/>
-          <text class="t-body" x="500" y="209" text-anchor="middle">Who owns the data?</text>
+          <rect class="n-gate" x="528" y="180" width="264" height="48" rx="3"/>
+          <text class="t-body" x="660" y="209" text-anchor="middle">Who owns the data?</text>
 
-          <path class="edge" d="M500,228 L500,256 L265,256 L265,288" marker-end="url(#ar)"/>
-          <path class="edge" d="M500,256 L735,256 L735,288" marker-end="url(#ar)"/>
-          <text class="t-edge" x="352" y="248" text-anchor="middle">we own it</text>
-          <text class="t-edge" x="655" y="248" text-anchor="middle">licensed from a vendor</text>
+          <path class="edge" d="M660,228 L660,256 L265,256 L265,288" marker-end="url(#ar)"/>
+          <path class="edge" d="M660,256 L1215,256 L1215,288" marker-end="url(#ar)"/>
+          <text class="t-edge" x="452" y="248" text-anchor="middle">we own it</text>
+          <text class="t-edge" x="940" y="248" text-anchor="middle">licensed from a vendor</text>
 
           <!-- GATE 3 : owned -->
           <rect class="n-gate" x="110" y="290" width="310" height="74" rx="3"/>
@@ -699,16 +703,16 @@
           <text class="t-cost" x="265" y="353" text-anchor="middle">no RLS, no MNPI, no dynamic barriers</text>
 
           <!-- GATE 4 : licensed -->
-          <rect class="n-gate" x="580" y="290" width="310" height="74" rx="3"/>
-          <text class="t-body" x="735" y="317" text-anchor="middle">Does the licence permit indexing</text>
-          <text class="t-body" x="735" y="336" text-anchor="middle">and AI grounding?</text>
-          <text class="t-cost" x="735" y="353" text-anchor="middle">redistribution + derived data + AI rider</text>
+          <rect class="n-gate" x="1050" y="290" width="330" height="74" rx="3"/>
+          <text class="t-body" x="1215" y="317" text-anchor="middle">Does the licence permit indexing</text>
+          <text class="t-body" x="1215" y="336" text-anchor="middle">and AI grounding?</text>
+          <text class="t-cost" x="1215" y="353" text-anchor="middle">redistribution + derived data + AI rider</text>
 
           <!-- GATE 3 outputs -->
           <path class="edge" d="M180,364 L180,398" marker-end="url(#ar)"/>
           <text class="t-edge" x="190" y="386">both yes</text>
           <path class="edge" d="M390,364 L390,505"/>
-          <text class="t-edge" x="400" y="400">either one is no</text>
+          <text class="t-edge" x="400" y="392">either one is no</text>
 
           <!-- GATE 3b : the SLA gate -->
           <rect class="n-gate" x="60" y="400" width="280" height="76" rx="3"/>
@@ -717,92 +721,135 @@
           <text class="t-cost" x="200" y="464" text-anchor="middle">a direct push never deletes at all</text>
 
           <path class="edge" d="M140,476 L140,598" marker-end="url(#ar)"/>
-          <text class="t-edge" x="150" y="520">yes</text>
+          <text class="t-edge" x="150" y="530">yes</text>
           <path class="edge" d="M300,476 L300,505"/>
           <text class="t-edge" x="310" y="496">no</text>
 
           <!-- shared trunk to CALL, with a branch into MODEL -->
-          <path class="edge" d="M300,505 L845,505 L845,598" marker-end="url(#ar)"/>
-          <path class="edge" d="M390,505 L390,532 L600,532 L600,598" marker-end="url(#ar)"/>
-          <text class="t-edge" x="497" y="525" text-anchor="middle">row-level or computed, and it models cleanly</text>
+          <path class="edge" d="M300,505 L1080,505 L1080,598" marker-end="url(#ar)"/>
+          <path class="edge" d="M390,505 L390,532 L696,532 L696,598" marker-end="url(#ar)"/>
+          <text class="t-edge" x="543" y="525" text-anchor="middle">row-level or computed, and it models cleanly</text>
 
           <!-- GATE 4 outputs -->
-          <path class="edge" d="M820,364 L820,598" marker-end="url(#ar)"/>
-          <text class="t-edge" x="830" y="430">no &#8212; the usual answer</text>
+          <path class="edge" d="M1330,364 L1330,598" marker-end="url(#ar)"/>
+          <text class="t-edge" x="1340" y="430">no &#8212; the usual answer</text>
 
-          <path class="edge-risk" d="M620,364 L620,565 L250,565 L250,598" marker-end="url(#ar-risk)"/>
-          <text class="t-risk" x="435" y="557" text-anchor="middle">yes, with a signed AI rider &#8212; rare, and audited</text>
+          <path class="edge-risk" d="M1100,364 L1100,578 L250,578 L250,598" marker-end="url(#ar-risk)"/>
+          <text class="t-risk" x="675" y="570" text-anchor="middle">yes, with a signed AI rider &#8212; rare, and audited</text>
 
           <!-- OUTCOME BANDS -->
-          <rect class="n-index" x="60" y="600" width="410" height="52" rx="3"/>
-          <text class="t-accent" x="265" y="624" text-anchor="middle">INDEX IT</text>
-          <text class="t-cost" x="265" y="641" text-anchor="middle">Graph connector &#183; one copy, security-trimmed, M365-wide</text>
+          <rect class="n-index" x="60" y="600" width="388" height="52" rx="3"/>
+          <text class="t-accent" x="254" y="624" text-anchor="middle">INDEX IT</text>
+          <text class="t-cost" x="254" y="641" text-anchor="middle">synced connector &#183; a copy in the Graph index, M365-wide</text>
 
-          <rect class="n-model" x="500" y="600" width="200" height="52" rx="3"/>
-          <text class="t-title" x="600" y="624" text-anchor="middle">MODEL IT</text>
-          <text class="t-cost" x="600" y="641" text-anchor="middle">computed live, per user</text>
+          <rect class="n-model" x="478" y="600" width="436" height="52" rx="3"/>
+          <text class="t-title" x="696" y="624" text-anchor="middle">MODEL IT</text>
+          <text class="t-cost" x="696" y="641" text-anchor="middle">Fabric plane &#183; computed per user &#183; RLS at query time</text>
 
-          <rect class="n-call" x="730" y="600" width="450" height="52" rx="3"/>
-          <text class="t-title" x="955" y="624" text-anchor="middle">CALL IT</text>
-          <text class="t-cost" x="955" y="641" text-anchor="middle">live tool call &#183; no copy, entitled at the source</text>
+          <rect class="n-call" x="944" y="600" width="550" height="52" rx="3"/>
+          <text class="t-title" x="1219" y="624" text-anchor="middle">CALL IT</text>
+          <text class="t-cost" x="1219" y="641" text-anchor="middle">live tool call &#183; nothing stored, entitled at the source per user</text>
 
-          <!-- leaves -->
-          <path class="tick" d="M125,652 L125,676"/>
-          <path class="tick" d="M265,652 L265,676"/>
-          <path class="tick" d="M405,652 L405,676"/>
-          <path class="tick" d="M600,652 L600,676"/>
-          <path class="tick" d="M800,652 L800,676"/>
-          <path class="tick" d="M955,652 L955,676"/>
-          <path class="tick" d="M1110,652 L1110,676"/>
+          <!-- ticks -->
+          <path class="tick" d="M122,652 L122,676"/>
+          <path class="tick" d="M254,652 L254,676"/>
+          <path class="tick" d="M386,652 L386,676"/>
+          <path class="tick" d="M548,652 L548,676"/>
+          <path class="tick" d="M696,652 L696,676"/>
+          <path class="tick" d="M844,652 L844,676"/>
+          <path class="tick" d="M1010,652 L1010,676"/>
+          <path class="tick" d="M1149,652 L1149,676"/>
+          <path class="tick" d="M1288,652 L1288,676"/>
+          <path class="tick" d="M1427,652 L1427,676"/>
 
-          <rect class="n-box" x="60" y="678" width="130" height="86" rx="3"/>
-          <text class="t-title" x="125" y="702" text-anchor="middle">Gallery</text>
-          <text class="t-cost" x="125" y="722" text-anchor="middle">build: hours&#8211;days</text>
-          <text class="t-cost" x="125" y="737" text-anchor="middle">run: item quota</text>
-          <text class="t-cost" x="125" y="754" text-anchor="middle">check the list</text>
+          <!-- INDEX leaves -->
+          <rect class="n-box" x="60" y="678" width="124" height="104" rx="3"/>
+          <text class="t-title" x="122" y="700" text-anchor="middle">Gallery: synced</text>
+          <text class="t-leaf" x="122" y="719" text-anchor="middle">build: hours&#8211;days</text>
+          <text class="t-leaf" x="122" y="734" text-anchor="middle">run: item quota</text>
+          <text class="t-leaf" x="122" y="749" text-anchor="middle">org-level auth</text>
+          <text class="t-leaf" x="122" y="764" text-anchor="middle">check the list</text>
 
-          <rect class="n-box" x="200" y="678" width="130" height="86" rx="3"/>
-          <text class="t-title" x="265" y="702" text-anchor="middle">Custom: agent</text>
-          <text class="t-cost" x="265" y="722" text-anchor="middle">build: weeks</text>
-          <text class="t-cost" x="265" y="737" text-anchor="middle">needs a host</text>
-          <text class="t-cost" x="265" y="754" text-anchor="middle">deletes on recrawl</text>
+          <rect class="n-box" x="192" y="678" width="124" height="104" rx="3"/>
+          <text class="t-title" x="254" y="700" text-anchor="middle">Custom: agent</text>
+          <text class="t-leaf" x="254" y="719" text-anchor="middle">build: weeks</text>
+          <text class="t-leaf" x="254" y="734" text-anchor="middle">needs a host</text>
+          <text class="t-leaf" x="254" y="749" text-anchor="middle">deletes on recrawl</text>
+          <text class="t-leaf" x="254" y="764" text-anchor="middle">org-level ACLs</text>
 
-          <rect class="n-box" x="340" y="678" width="130" height="86" rx="3"/>
-          <text class="t-title" x="405" y="702" text-anchor="middle">Custom: push</text>
-          <text class="t-cost" x="405" y="722" text-anchor="middle">build: weeks</text>
-          <text class="t-cost" x="405" y="737" text-anchor="middle">runs anywhere</text>
-          <text class="t-risk" x="405" y="754" text-anchor="middle">never deletes</text>
+          <rect class="n-box" x="324" y="678" width="124" height="104" rx="3"/>
+          <text class="t-title" x="386" y="700" text-anchor="middle">Custom: push</text>
+          <text class="t-leaf" x="386" y="719" text-anchor="middle">build: weeks</text>
+          <text class="t-leaf" x="386" y="734" text-anchor="middle">runs anywhere</text>
+          <text class="t-leafr" x="386" y="749" text-anchor="middle">never deletes</text>
+          <text class="t-leaf" x="386" y="764" text-anchor="middle">org-level ACLs</text>
 
-          <rect class="n-box" x="500" y="678" width="200" height="86" rx="3"/>
-          <text class="t-title" x="600" y="702" text-anchor="middle">Power BI semantic model</text>
-          <text class="t-cost" x="600" y="722" text-anchor="middle">build: days&#8211;weeks</text>
-          <text class="t-cost" x="600" y="737" text-anchor="middle">run: capacity + refresh</text>
-          <text class="t-cost" x="600" y="754" text-anchor="middle">RLS enforced per user</text>
+          <!-- MODEL leaves -->
+          <rect class="n-box" x="478" y="678" width="140" height="104" rx="3"/>
+          <text class="t-title" x="548" y="700" text-anchor="middle">Direct Lake</text>
+          <text class="t-leaf" x="548" y="719" text-anchor="middle">needs it in OneLake</text>
+          <text class="t-leaf" x="548" y="734" text-anchor="middle">no copy, no refresh</text>
+          <text class="t-leaf" x="548" y="749" text-anchor="middle">needs F2+ capacity</text>
+          <text class="t-leaf" x="548" y="764" text-anchor="middle">import-class speed</text>
 
-          <rect class="n-box" x="730" y="678" width="140" height="86" rx="3"/>
-          <text class="t-title" x="800" y="702" text-anchor="middle">API action</text>
-          <text class="t-cost" x="800" y="722" text-anchor="middle">build: days&#8211;2wk</text>
-          <text class="t-cost" x="800" y="737" text-anchor="middle">run: per call</text>
-          <text class="t-cost" x="800" y="754" text-anchor="middle">watch fan-out</text>
+          <rect class="n-box" x="626" y="678" width="140" height="104" rx="3"/>
+          <text class="t-title" x="696" y="700" text-anchor="middle">Import</text>
+          <text class="t-leafr" x="696" y="719" text-anchor="middle">a governed copy</text>
+          <text class="t-leaf" x="696" y="734" text-anchor="middle">VertiPaq, in-region</text>
+          <text class="t-leaf" x="696" y="749" text-anchor="middle">refresh-bound</text>
+          <text class="t-leaf" x="696" y="764" text-anchor="middle">fastest queries</text>
 
-          <rect class="n-box" x="885" y="678" width="140" height="86" rx="3"/>
-          <text class="t-title" x="955" y="702" text-anchor="middle">MCP server</text>
-          <text class="t-cost" x="955" y="722" text-anchor="middle">build: days&#8211;2wk</text>
-          <text class="t-cost" x="955" y="737" text-anchor="middle">run: many clients</text>
-          <text class="t-cost" x="955" y="754" text-anchor="middle">you own auth</text>
+          <rect class="n-box" x="774" y="678" width="140" height="104" rx="3"/>
+          <text class="t-title" x="844" y="700" text-anchor="middle">DirectQuery</text>
+          <text class="t-leaf" x="844" y="719" text-anchor="middle">no rows stored</text>
+          <text class="t-leaf" x="844" y="734" text-anchor="middle">live at the source</text>
+          <text class="t-leafr" x="844" y="749" text-anchor="middle">load &#8733; concurrency</text>
+          <text class="t-leaf" x="844" y="764" text-anchor="middle">the no-copy answer</text>
 
-          <rect class="n-esc" x="1040" y="678" width="140" height="86" rx="3"/>
-          <text class="t-title" x="1110" y="702" text-anchor="middle">Ready-made MCP</text>
-          <text class="t-cost" x="1110" y="722" text-anchor="middle">build: hours&#8211;days</text>
-          <text class="t-cost" x="1110" y="737" text-anchor="middle">run: per call</text>
-          <text class="t-risk" x="1110" y="754" text-anchor="middle">their code, your data</text>
+          <!-- CALL leaves -->
+          <rect class="n-index" x="944" y="678" width="133" height="104" rx="3"/>
+          <text class="t-title" x="1010" y="700" text-anchor="middle">Federated</text>
+          <text class="t-leaf" x="1010" y="719" text-anchor="middle">build: config</text>
+          <text class="t-leaf" x="1010" y="734" text-anchor="middle">reaches M365 chat</text>
+          <text class="t-leaf" x="1010" y="749" text-anchor="middle">per-user OAuth</text>
+          <text class="t-leafr" x="1010" y="764" text-anchor="middle">read-only</text>
 
-          <text class="t-cost" x="620" y="790" text-anchor="middle">Build effort assumes the source system and its API already exist. If they do not, that is the real project.</text>
-          <text class="t-cost" x="620" y="808" text-anchor="middle">The three CALL leaves are ways of exposing a tool, not deployables. Agent vs push is decided by your hosting and your deletion SLA: only the agent deletes.</text>
-          <text class="t-risk" x="620" y="824" text-anchor="middle">A ready-made server is somebody else&#8217;s code between Copilot and your data: review its tool surface, whose identity it acts as, and its audit trail.</text>
+          <rect class="n-box" x="1083" y="678" width="133" height="104" rx="3"/>
+          <text class="t-title" x="1149" y="700" text-anchor="middle">API action</text>
+          <text class="t-leaf" x="1149" y="719" text-anchor="middle">build: days&#8211;2wk</text>
+          <text class="t-leaf" x="1149" y="734" text-anchor="middle">run: per call</text>
+          <text class="t-leaf" x="1149" y="749" text-anchor="middle">an agent hosts it</text>
+          <text class="t-leaf" x="1149" y="764" text-anchor="middle">watch fan-out</text>
+
+          <rect class="n-box" x="1222" y="678" width="133" height="104" rx="3"/>
+          <text class="t-title" x="1288" y="700" text-anchor="middle">MCP server</text>
+          <text class="t-leaf" x="1288" y="719" text-anchor="middle">build: days&#8211;2wk</text>
+          <text class="t-leaf" x="1288" y="734" text-anchor="middle">run: many clients</text>
+          <text class="t-leaf" x="1288" y="749" text-anchor="middle">you own auth</text>
+          <text class="t-leaf" x="1288" y="764" text-anchor="middle">wired per client</text>
+
+          <rect class="n-esc" x="1361" y="678" width="133" height="104" rx="3"/>
+          <text class="t-title" x="1427" y="700" text-anchor="middle">Ready-made MCP</text>
+          <text class="t-leaf" x="1427" y="719" text-anchor="middle">build: hours&#8211;days</text>
+          <text class="t-leaf" x="1427" y="734" text-anchor="middle">run: per call</text>
+          <text class="t-leafr" x="1427" y="749" text-anchor="middle">their code, your data</text>
+          <text class="t-leaf" x="1427" y="764" text-anchor="middle">check identity flow</text>
+
+          <!-- how the model gets asked -->
+          <path class="tick" d="M696,782 L696,806"/>
+          <rect class="n-gate" x="478" y="808" width="436" height="76" rx="3"/>
+          <text class="t-title" x="696" y="830" text-anchor="middle">Asked in words by</text>
+          <text class="t-cost" x="696" y="849" text-anchor="middle">Power BI Copilot &amp; Q&amp;A &#183; Fabric data agent &#183; both need F2+</text>
+          <text class="t-cost" x="696" y="863" text-anchor="middle">F64 is the separate threshold that drops viewer Pro licences</text>
+          <text class="t-risk" x="696" y="877" text-anchor="middle">neither reaches M365 chat alone &#8212; Copilot Studio is the hop</text>
+
+          <text class="t-cost" x="777" y="916" text-anchor="middle">Build effort assumes the source system and its API already exist. If they do not, that is the real project.</text>
+          <text class="t-cost" x="777" y="934" text-anchor="middle">Only the agent-hosted connector deletes. Only DirectQuery and the CALL leaves store nothing. Only the federated connector does both &#8212; no copy, and M365 chat reach.</text>
+          <text class="t-cost" x="777" y="952" text-anchor="middle">Storage mode is not a preference: OneLake residency and your no-copy rule pick it, and a shortcut registers data in OneLake without moving it.</text>
+          <text class="t-risk" x="777" y="970" text-anchor="middle">A federated connector is read-only and reaches Copilot Chat, Excel, Researcher and Cowork &#8212; not every surface, and never a write. Each user authenticates as themselves.</text>
         </svg>
       </div>
-      <figcaption><strong>Figure 1.</strong> Ownership routes the question before cost does, and the owned branch still has to clear an SLA gate: crawl-interval freshness and crawl-bound deletion are the two promises no index path can improve on. The dashed red path is the only route that puts licensed vendor content into an index &mdash; it exists, but it needs a rider your market-data team has to negotiate, and it re-imports every entitlement obligation into a system that counts seats by Entra group.</figcaption>
+      <figcaption><strong>Figure 1.</strong> Ownership routes the question before cost does, and each branch then has one decision it cannot make on preference. The index branch has the SLA gate &mdash; crawl-interval freshness and crawl-bound deletion are the two promises no index path improves on. The model branch has residency: OneLake residency and your no-copy rule pick the storage mode, not taste. The call branch has reach &mdash; only the federated leaf lands in M365 Copilot chat, and only in four of its surfaces. The dashed red path is the only route that puts licensed vendor content into an index; it exists, but it needs a rider your market-data team has to negotiate, and it re-imports every entitlement obligation into a system that counts seats by Entra group.</figcaption>
     </figure>
   </section>
 
@@ -810,8 +857,8 @@
   <section id="questionnaire">
     <div class="section-head">
       <p class="eyebrow">Walk the tree</p>
-      <h2>Fourteen questions that pick your route</h2>
-      <p class="lede">The gates in Figure 1, plus the three that decide it in practice more often than ownership does: how fast a deleted record has to disappear, how stale an answer may be, and what infrastructure you actually have. Answer what you know &mdash; the first hard gate to fire wins, and the rest becomes watch-outs.</p>
+      <h2>Seventeen questions that pick your route</h2>
+      <p class="lede">The gates in Figure 1, plus the ones that decide it in practice more often than ownership does: which surface the answer has to appear in, whether the data may be resident in OneLake, how many people will ask at once, how fast a deleted record has to disappear, and what infrastructure you actually have. Answer what you know &mdash; the first hard gate to fire wins, and the rest becomes watch-outs.</p>
     </div>
 
     <form class="quiz" id="quiz">
@@ -826,7 +873,18 @@
       </fieldset>
 
       <fieldset class="q" aria-labelledby="qh2">
-        <div class="qhead" id="qh2"><span class="qn">Q2</span> Who owns the data?</div>
+        <div class="qhead" id="qh2"><span class="qn">Q2</span> Where must the answer actually appear?</div>
+        <div class="opts">
+          <label><input type="radio" name="surface" value="m365"><span>In M365 Copilot chat, alongside every other connected source</span></label>
+          <label><input type="radio" name="surface" value="fabric"><span>A Fabric or Power BI surface is acceptable</span></label>
+          <label><input type="radio" name="surface" value="teams"><span>Teams, or a purpose-built agent, is acceptable</span></label>
+          <label><input type="radio" name="surface" value="app"><span>Our own application</span></label>
+        </div>
+        <p class="qnote">The question that separates a Copilot connector from a Fabric data agent, and the one most often skipped. Neither Power BI Copilot nor a Fabric data agent puts anything into M365 Copilot chat on its own &mdash; reaching it from the Fabric side means publishing the data agent as a tool to a Copilot Studio agent. Choosing Fabric to avoid a connector approval leaves the M365 grounding requirement unmet.</p>
+      </fieldset>
+
+      <fieldset class="q" aria-labelledby="qh3">
+        <div class="qhead" id="qh3"><span class="qn">Q3</span> Who owns the data?</div>
         <div class="opts">
           <label><input type="radio" name="own" value="ours"><span>We own it outright</span></label>
           <label><input type="radio" name="own" value="vendor"><span>Licensed from a vendor, no AI or redistribution rider</span></label>
@@ -835,8 +893,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh3">
-        <div class="qhead" id="qh3"><span class="qn">Q3</span> How is access controlled today?</div>
+      <fieldset class="q" aria-labelledby="qh4">
+        <div class="qhead" id="qh4"><span class="qn">Q4</span> How is access controlled today?</div>
         <div class="opts">
           <label><input type="radio" name="access" value="groups"><span>Static Entra groups &mdash; everyone in the group sees everything</span></label>
           <label><input type="radio" name="access" value="rls"><span>Row-level or per-user entitlement inside the source</span></label>
@@ -844,17 +902,18 @@
         </div>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh4">
-        <div class="qhead" id="qh4"><span class="qn">Q4</span> What is the answer, actually?</div>
+      <fieldset class="q" aria-labelledby="qh5">
+        <div class="qhead" id="qh5"><span class="qn">Q5</span> What is the answer, actually?</div>
         <div class="opts">
           <label><input type="radio" name="kind" value="content"><span>Content &mdash; documents, case notes, records with text</span></label>
           <label><input type="radio" name="kind" value="computed"><span>A computed value &mdash; a measure, an aggregate, a price</span></label>
           <label><input type="radio" name="kind" value="write"><span>An action &mdash; it has to write or transact</span></label>
         </div>
+        <p class="qnote">Narrative density routes to indexed retrieval; numeric density routes to a semantic model; a write is a tool call by definition. Note the trap in the middle: <em>descriptive</em> metadata &mdash; which table holds what, who owns it, what feeds it &mdash; is a search problem over names, not an analytics one, so a catalogue is content even though everything it describes is numbers.</p>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh5">
-        <div class="qhead" id="qh5"><span class="qn">Q5</span> Is the data modelled for analytics?</div>
+      <fieldset class="q" aria-labelledby="qh6">
+        <div class="qhead" id="qh6"><span class="qn">Q6</span> Is the data modelled for analytics?</div>
         <div class="opts">
           <label><input type="radio" name="model" value="have"><span>It is already in a Power BI semantic model</span></label>
           <label><input type="radio" name="model" value="fits"><span>Not yet, but it is dimensional &mdash; facts, dimensions, measures</span></label>
@@ -863,8 +922,31 @@
         <p class="qnote">This only changes the answer where the reason for calling live was a computed value or row-level security. A semantic model is built for both; it is not a document surface, so a catalogue of descriptive metadata still belongs in the index.</p>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh6">
-        <div class="qhead" id="qh6"><span class="qn">Q6</span> How stale may an answer be?</div>
+      <fieldset class="q" aria-labelledby="qh7">
+        <div class="qhead" id="qh7"><span class="qn">Q7</span> Can this data be resident in OneLake?</div>
+        <p class="hint">The question that picks the storage mode, and therefore where the rows physically sit.</p>
+        <div class="opts">
+          <label><input type="radio" name="onelake" value="already"><span>It is already there &mdash; a lakehouse, a warehouse, or a mirrored database</span></label>
+          <label><input type="radio" name="onelake" value="shortcut"><span>A shortcut can register it in place &mdash; ADLS Gen2, S3, GCS, Dataverse. Zero copy</span></label>
+          <label><input type="radio" name="onelake" value="mirror"><span>It is mirrorable &mdash; Azure SQL DB or MI, SQL Server 2025, Cosmos DB, Snowflake, PostgreSQL, Databricks</span></label>
+          <label><input type="radio" name="onelake" value="copy"><span>Only by an explicit pipeline or dataflow copy, on a schedule</span></label>
+          <label><input type="radio" name="onelake" value="never"><span>No &mdash; it cannot leave its current store at all</span></label>
+        </div>
+        <p class="qnote">Import is disqualified where no second copy is permitted, because it makes one. Direct Lake is disqualified where the data cannot be in OneLake, because that is where it reads from. What remains is DirectQuery &mdash; or a shortcut, which registers the data in OneLake without moving it and is the usual way out of that corner.</p>
+      </fieldset>
+
+      <fieldset class="q" aria-labelledby="qh8">
+        <div class="qhead" id="qh8"><span class="qn">Q8</span> How many people will ask, and can the source take it?</div>
+        <p class="hint">On DirectQuery every visual on every page becomes a native query at the source, per user, per interaction.</p>
+        <div class="opts">
+          <label><input type="radio" name="conc" value="few"><span>A handful of analysts</span></label>
+          <label><input type="radio" name="conc" value="dept"><span>A department &mdash; dozens to a few hundred</span></label>
+          <label><input type="radio" name="conc" value="broad"><span>Thousands, or unpredictable</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="q" aria-labelledby="qh9">
+        <div class="qhead" id="qh9"><span class="qn">Q9</span> How stale may an answer be?</div>
         <p class="hint">Freshness is bounded by crawl interval on any index path. Nothing makes an index live.</p>
         <div class="opts">
           <label><input type="radio" name="fresh" value="live"><span>Current to the second or minute</span></label>
@@ -874,8 +956,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh7">
-        <div class="qhead" id="qh7"><span class="qn">Q7</span> Deletion SLA &mdash; how fast must a removed record stop appearing?</div>
+      <fieldset class="q" aria-labelledby="qh10">
+        <div class="qhead" id="qh10"><span class="qn">Q10</span> Deletion SLA &mdash; how fast must a removed record stop appearing?</div>
         <p class="hint">The question people forget. A direct push <em>never</em> deletes; an agent-hosted crawl deletes on its next incremental pass.</p>
         <div class="opts">
           <label><input type="radio" name="del" value="immediate"><span>Immediately &mdash; right to erasure, or a compliance takedown</span></label>
@@ -885,29 +967,33 @@
         </div>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh8">
-        <div class="qhead" id="qh8"><span class="qn">Q8</span> What infrastructure do you actually have?</div>
+      <fieldset class="q" aria-labelledby="qh11">
+        <div class="qhead" id="qh11"><span class="qn">Q11</span> What infrastructure do you actually have?</div>
         <div class="opts">
           <label><input type="radio" name="infra" value="onprem"><span>An on-prem Windows host that can run the Graph connector agent</span></label>
           <label><input type="radio" name="infra" value="cloudjob"><span>No on-prem host &mdash; a VM or scheduled job with outbound HTTPS</span></label>
+          <label><input type="radio" name="infra" value="fabric"><span>A paid Fabric or Power BI Premium capacity we can use</span></label>
           <label><input type="radio" name="infra" value="none"><span>Nothing. It has to be configuration only</span></label>
           <label><input type="radio" name="infra" value="azure"><span>We can stand up Azure with VNet and private endpoints</span></label>
         </div>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh9">
-        <div class="qhead" id="qh9"><span class="qn">Q9</span> What can the source be read through?</div>
+      <fieldset class="q" aria-labelledby="qh12">
+        <div class="qhead" id="qh12"><span class="qn">Q12</span> What can the source be read through?</div>
         <div class="opts">
-          <label><input type="radio" name="src" value="gallery"><span>It's on Microsoft's connector gallery list</span></label>
+          <label><input type="radio" name="src" value="gallery"><span>It's on Microsoft's <em>synced</em> connector gallery list</span></label>
+          <label><input type="radio" name="src" value="fedready"><span>It has a <em>federated</em> Copilot connector in the gallery &mdash; Microsoft- or partner-published</span></label>
           <label><input type="radio" name="src" value="sql"><span>A SQL or otherwise queryable database</span></label>
+          <label><input type="radio" name="src" value="hadoop"><span>A Hadoop or Cloudera cluster &mdash; Impala, Hive, Spark SQL, HDFS or HBase</span></label>
           <label><input type="radio" name="src" value="api"><span>A REST API</span></label>
           <label><input type="radio" name="src" value="mcpready"><span>A ready-made MCP server already exists for it</span></label>
           <label><input type="radio" name="src" value="neither"><span>Neither &mdash; no API, no queryable interface</span></label>
         </div>
+        <p class="qnote">The gallery now holds two kinds of connector and they behave oppositely. A <strong>synced</strong> connector crawls and indexes at org level under admin credentials. A <strong>federated</strong> connector indexes nothing: it fetches over MCP at question time, each user authenticating as themselves, and it is read-only. Several market-data vendors publish federated connectors, which is the first configuration answer this page has ever been able to offer for licensed content.</p>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh10">
-        <div class="qhead" id="qh10"><span class="qn">Q10</span> Roughly how many items?</div>
+      <fieldset class="q" aria-labelledby="qh13">
+        <div class="qhead" id="qh13"><span class="qn">Q13</span> Roughly how many items?</div>
         <div class="opts">
           <label><input type="radio" name="vol" value="small"><span>Under ~50,000</span></label>
           <label><input type="radio" name="vol" value="mid"><span>50,000 to 500,000</span></label>
@@ -915,8 +1001,8 @@
         </div>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh11">
-        <div class="qhead" id="qh11"><span class="qn">Q11</span> How many more sources like this are coming?</div>
+      <fieldset class="q" aria-labelledby="qh14">
+        <div class="qhead" id="qh14"><span class="qn">Q14</span> How many more sources like this are coming?</div>
         <div class="opts">
           <label><input type="radio" name="reuse" value="one"><span>This is the only one</span></label>
           <label><input type="radio" name="reuse" value="few"><span>Two or three more, probably</span></label>
@@ -924,17 +1010,17 @@
         </div>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh12">
-        <div class="qhead" id="qh12"><span class="qn">Q12</span> What does compliance require of the data boundary?</div>
+      <fieldset class="q" aria-labelledby="qh15">
+        <div class="qhead" id="qh15"><span class="qn">Q15</span> What does compliance require of the data boundary?</div>
         <div class="opts">
           <label><input type="radio" name="iso" value="tenant"><span>The M365 tenant boundary is acceptable</span></label>
-          <label><input type="radio" name="iso" value="nocopy"><span>No second copy &mdash; it must not be indexed anywhere</span></label>
+          <label><input type="radio" name="iso" value="nocopy"><span>No second copy &mdash; it must not be indexed or imported anywhere</span></label>
           <label><input type="radio" name="iso" value="vnet"><span>Network isolation, our own region and retention</span></label>
         </div>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh13">
-        <div class="qhead" id="qh13"><span class="qn">Q13</span> Does the model itself have to be governed?</div>
+      <fieldset class="q" aria-labelledby="qh16">
+        <div class="qhead" id="qh16"><span class="qn">Q16</span> Does the model itself have to be governed?</div>
         <div class="opts">
           <label><input type="radio" name="gov" value="pinned"><span>Yes &mdash; the model and its version must be fixed, evaluated and attested before use</span></label>
           <label><input type="radio" name="gov" value="evidence"><span>We need evidence of behaviour &mdash; prompt and response logs, an evaluation set, a documented change process</span></label>
@@ -943,14 +1029,14 @@
         <p class="qnote">This is model-risk governance, not data governance, and it is the reason a bank ends up hosting its own application when every data answer pointed at M365. No M365 surface lets you pin a model version or hold it still while you evaluate it.</p>
       </fieldset>
 
-      <fieldset class="q" aria-labelledby="qh14">
-        <div class="qhead" id="qh14"><span class="qn">Q14</span> Whose retrieval has to be good enough?</div>
+      <fieldset class="q" aria-labelledby="qh17">
+        <div class="qhead" id="qh17"><span class="qn">Q17</span> Whose retrieval has to be good enough?</div>
         <div class="opts">
           <label><input type="radio" name="ret" value="own"><span>Ours &mdash; chunking, embeddings, hybrid search and reranking are things we must tune</span></label>
           <label><input type="radio" name="ret" value="tune"><span>We need to influence relevance, but not own the pipeline</span></label>
           <label><input type="radio" name="ret" value="default"><span>The platform&rsquo;s retrieval is fine if the right content is in scope</span></label>
         </div>
-        <p class="qnote">A Graph connector gives you <em>its</em> retrieval, not yours. What you can change is the schema, the semantic labels and which content is in scope &mdash; not how a document is chunked, what embeds it, or how results are reranked. If retrieval quality is the thing being judged, that is an application you host.</p>
+        <p class="qnote">A synced connector gives you <em>its</em> retrieval, not yours. What you can change is the schema, the semantic labels and which content is in scope &mdash; not how a document is chunked, what embeds it, or how results are reranked. If retrieval quality is the thing being judged, that is an application you host.</p>
       </fieldset>
 
     </form>
@@ -958,7 +1044,7 @@
     <div class="quiz-bar">
       <button type="button" id="run">Show my route</button>
       <button type="button" class="ghost" id="clear">Clear</button>
-      <span class="progress" id="progress">0 of 11 answered</span>
+      <span class="progress" id="progress">0 of 17 answered</span>
     </div>
 
     <div class="result" id="result" hidden>
@@ -985,7 +1071,7 @@
     <div class="section-head">
       <p class="eyebrow">Table 1</p>
       <h2>Surfaces &mdash; where the person is standing</h2>
-      <p class="lede">Rows 1&ndash;12 are your original matrix. The block below the rule is the extension: the questions that decide whether a surface can carry regulated or licensed data at all. <strong>Azure AI Foundry</strong> is added because "the askers aren't M365 users" is a real branch and nothing in the original grid answers it, and <strong>Power BI Copilot &amp; Q&amp;A</strong> because "the answer is a number computed per user" is another. Power BI is the only column here that enforces row-level security live and needs no M365 Copilot licence &mdash; and the only one that sees none of your documents.</p>
+      <p class="lede">Rows 1&ndash;12 are your original matrix. The block below the rule is the extension: the questions that decide whether a surface can carry regulated or licensed data at all. <strong>Azure AI Foundry</strong> is added because "the askers aren't M365 users" is a real branch and nothing in the original grid answers it; <strong>Power BI Copilot &amp; Q&amp;A</strong> because "the answer is a number computed per user" is another; and <strong>Fabric data agent</strong> because it is the surface people reach for when the answer is analytical and then discover it does not land where they needed it. The last two rows are the ones that catch that out: which surfaces need a Fabric capacity, and which of them actually put an answer into M365 Copilot chat.</p>
     </div>
 
     <div class="scroller">
@@ -1003,11 +1089,12 @@
             <th scope="col">Frontier<br>Cowork</th>
             <th scope="col">Frontier<br>Workflows</th>
             <th scope="col" class="new">Power BI<br>Copilot &amp; Q&amp;A</th>
+            <th scope="col" class="new">Fabric<br>data agent</th>
             <th scope="col" class="new">Azure AI<br>Foundry</th>
           </tr>
         </thead>
         <tbody>
-          <tr class="group-row"><th colspan="11" scope="colgroup">Grounding &mdash; what it can see</th></tr>
+          <tr class="group-row"><th colspan="12" scope="colgroup">Grounding &mdash; what it can see</th></tr>
 
           <tr>
             <th class="rowhead" scope="row">Answers from public web</th>
@@ -1019,7 +1106,8 @@
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
-            <td class="val">&ndash;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-partial">&#9686;</span></td>
           </tr>
           <tr>
@@ -1032,7 +1120,8 @@
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-partial">&#9686;</span></td>
-            <td class="val">&ndash;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
           </tr>
           <tr>
@@ -1045,7 +1134,8 @@
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
-            <td class="val">&ndash;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
           </tr>
           <tr>
@@ -1058,11 +1148,12 @@
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
-            <td class="val">&ndash;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
           </tr>
 
-          <tr class="group-row"><th colspan="11" scope="colgroup">Doing &mdash; what it can act on</th></tr>
+          <tr class="group-row"><th colspan="12" scope="colgroup">Doing &mdash; what it can act on</th></tr>
 
           <tr>
             <th class="rowhead" scope="row">Can take actions (read + write data)<sup class="fn">2</sup></th>
@@ -1074,7 +1165,8 @@
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
-            <td class="val">&ndash;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
           </tr>
           <tr>
@@ -1087,7 +1179,8 @@
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
-            <td class="val">&ndash;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
           </tr>
           <tr>
@@ -1100,7 +1193,8 @@
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
-            <td class="val">&ndash;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
             <td><span class="mark m-partial">&#9686;</span></td>
           </tr>
           <tr>
@@ -1113,7 +1207,8 @@
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
-            <td class="val">&#9679;</td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
           </tr>
           <tr>
@@ -1126,11 +1221,12 @@
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
-            <td class="val">&ndash;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
           </tr>
 
-          <tr class="group-row"><th colspan="11" scope="colgroup">Reach &amp; effort</th></tr>
+          <tr class="group-row"><th colspan="12" scope="colgroup">Reach &amp; effort</th></tr>
 
           <tr>
             <th class="rowhead" scope="row">No code needed</th>
@@ -1142,7 +1238,8 @@
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
-            <td class="val">&#9686;</td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
           </tr>
           <tr>
@@ -1155,7 +1252,8 @@
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
-            <td class="val">&#9679;</td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
           </tr>
           <tr>
@@ -1168,11 +1266,12 @@
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
-            <td class="val">&ndash;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
           </tr>
 
-          <tr class="group-row"><th colspan="11" scope="colgroup">Extension &mdash; regulated data, licensing and cost</th></tr>
+          <tr class="group-row"><th colspan="12" scope="colgroup">Extension &mdash; regulated data, licensing and cost</th></tr>
 
           <tr class="new">
             <th class="rowhead" scope="row">Enforces entitlement live at the source<br><span class="note">RLS, per-seat, information barriers</span></th>
@@ -1184,7 +1283,8 @@
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
-            <td class="val">&#9679;</td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
           </tr>
           <tr class="new">
@@ -1197,7 +1297,8 @@
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
-            <td class="val">&#9686;</td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
           </tr>
           <tr class="new">
@@ -1210,7 +1311,8 @@
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
-            <td class="val">&ndash;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
           </tr>
           <tr class="new">
@@ -1223,21 +1325,51 @@
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
-            <td class="val">&ndash;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-full">&#9679;</span></td>
           </tr>
           <tr class="new">
             <th class="rowhead" scope="row">You choose the retrieval<sup class="fn">4</sup></th>
-            <td class="val">&ndash;</td>
-            <td class="val">&ndash;</td>
-            <td class="val">&ndash;</td>
-            <td class="val">&ndash;</td>
-            <td class="val">&#9686;</td>
-            <td class="val">&ndash;</td>
-            <td class="val">&ndash;</td>
-            <td class="val">&ndash;</td>
-            <td class="val">&ndash;</td>
-            <td class="val">&#9679;</td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-partial">&#9686;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Runs without a Fabric or Premium capacity</th>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span><div class="val">F2+; F64 to drop viewer Pro</div></td>
+            <td><span class="mark m-none">&ndash;</span><div class="val">F2+, tenant-enabled</div></td>
+            <td><span class="mark m-full">&#9679;</span><div class="val">Azure, not Fabric</div></td>
+          </tr>
+          <tr class="new">
+            <th class="rowhead" scope="row">Answer appears in M365 Copilot chat<sup class="fn">5</sup></th>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-partial">&#9686;</span><div class="val">if published as a declarative agent</div></td>
+            <td><span class="mark m-full">&#9679;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-none">&ndash;</span></td>
+            <td><span class="mark m-partial">&#9686;</span><div class="val">only via Copilot Studio</div></td>
+            <td><span class="mark m-none">&ndash;</span></td>
           </tr>
           <tr class="new">
             <th class="rowhead" scope="row">Initial build effort</th>
@@ -1249,6 +1381,7 @@
             <td class="val pos">none</td>
             <td class="val pos">none</td>
             <td class="val">hours</td>
+            <td class="val">days&ndash;weeks</td>
             <td class="val">days&ndash;weeks</td>
             <td class="val neg">months</td>
           </tr>
@@ -1263,6 +1396,7 @@
             <td class="val">per licence</td>
             <td class="val">per licence</td>
             <td class="val">capacity</td>
+            <td class="val">capacity</td>
             <td class="val neg">tokens + hosting + ops</td>
           </tr>
           <tr class="new">
@@ -1275,6 +1409,7 @@
             <td class="val">IT</td>
             <td class="val">IT</td>
             <td class="val">IT</td>
+            <td class="val">business unit</td>
             <td class="val">business unit</td>
             <td class="val">business unit + Azure</td>
           </tr>
@@ -1297,28 +1432,33 @@
       <h2>Delivery paths &mdash; how the data gets there</h2>
       <p class="lede">The layer your original matrix doesn't cover, and the one where the money and the licensing risk actually sit. These are not alternatives to the surfaces above; every surface consumes one or more of them.</p>
       <div class="axes">
-        <p><strong>Read the columns carefully &mdash; only some of them are alternatives to each other.</strong> Three axes are in play, and a column is mutually exclusive only with its own neighbours on the same one:</p>
+        <p><strong>Read the columns carefully &mdash; only some of them are alternatives to each other.</strong> Five axes are in play, and a column is mutually exclusive only with its own neighbours on the same one:</p>
         <ul>
-          <li><strong>How the data reaches the model:</strong> pre-indexed retrieval (gallery or custom connector), a <em>semantic model</em>, or live invocation. This is the real fork, and it is what Figure&nbsp;1 turns on. A semantic model is a third answer rather than a flavour of the other two: it holds a copy like an index does, but computes per user and enforces row-level security at query time like a live call does.</li>
+          <li><strong>How the data reaches the model:</strong> pre-indexed retrieval (a synced connector, gallery or custom), a <em>semantic model</em>, or live invocation. This is the real fork, and it is what Figure&nbsp;1 turns on. A semantic model is a third answer rather than a flavour of the other two: it can hold a copy like an index does, but it computes per user and enforces row-level security at query time like a live call does.</li>
           <li><strong>Which custom connector</strong>, once you have chosen to index: <em>agent-hosted</em> or <em>direct push</em>. Not a preference &mdash; your deletion SLA and your hosting decide it. Only the agent deletes, and only the push runs without a Windows host.</li>
-          <li><strong>How a live tool is exposed</strong>, once you have chosen invocation: an API action, an MCP server you build, or a ready-made MCP server somebody else publishes. Same job; different wire protocol, different client reach, and in the third case somebody else&rsquo;s code between Copilot and your data.</li>
+          <li><strong>Which storage mode</strong>, once you have chosen a semantic model: <em>Import</em>, <em>DirectQuery</em> or <em>Direct Lake</em>. Also not a preference. Import copies rows into the model&rsquo;s own store, so it dies wherever a second copy is forbidden. Direct Lake reads Delta Parquet out of OneLake, so it dies wherever the data cannot be resident there. DirectQuery stores nothing and survives both, at the price of latency and source load that scale with concurrency. A composite model mixes modes per table, so one table forcing a mode does not have to force the whole model.</li>
+          <li><strong>How a live tool is exposed</strong>, once you have chosen invocation: a <em>federated Copilot connector</em>, an API action, an MCP server you build, or a ready-made MCP server somebody else publishes. Same job; different wire protocol, different client reach, and in the last case somebody else&rsquo;s code between Copilot and your data. The federated connector is the interesting one, because it is an MCP server that Microsoft fronts: it collapses the old trade-off by reaching M365 Copilot chat with nothing copied and nothing wired per surface &mdash; at the cost of being read-only, limited to four experiences, and connected by each user individually.</li>
           <li><strong>Where the whole thing runs:</strong> M365 surfaces, or an application you host. <strong>Foundry sits on this axis, not the other two</strong> &mdash; inside it you would still choose retrieval versus invocation, with your own index and your own tools. It is here because &ldquo;the askers are not M365 users&rdquo; is a real branch, not because it is a peer of a connector.</li>
         </ul>
-        <p>What the columns genuinely share, and what the cost rows are really measuring, is <strong>reach per unit of build</strong>: a connector is picked up by every M365 surface with nothing told to it, an API action is wired to each agent by hand, an MCP server is wired per client over a shared protocol, and a semantic model reaches whoever already opens Power BI.</p>
+        <p>What the columns genuinely share, and what the cost rows are really measuring, is <strong>reach per unit of build</strong>: a synced connector is picked up by every M365 surface with nothing told to it, a federated one by four of them with nothing built, an API action is wired to each agent by hand, an MCP server is wired per client over a shared protocol, and a semantic model reaches whoever already opens Power BI &mdash; and no further, until a data agent is published through Copilot Studio.</p>
         <p><strong>A catalogue is not an analytics workload, and this is where people go wrong.</strong> Descriptive metadata &mdash; which table holds what, who owns it, what it is tagged with, what feeds it &mdash; is a search problem over names and descriptions, so it belongs in the index however structured it looks. A semantic model earns its place when the answer is a <em>number computed across rows</em>, or when row-level security has to be enforced per user. Those are different questions about the same warehouse, and they take different routes.</p>
       </div>
     </div>
 
     <div class="scroller">
-      <table>
-        <caption>Grounding &amp; invocation paths &middot; cost, freshness, and data fit</caption>
+      <table class="wide">
+        <caption>Grounding &amp; invocation paths &middot; residency, cost, freshness, and data fit</caption>
         <thead>
           <tr>
             <th class="rowhead" scope="col">&nbsp;</th>
-            <th scope="col">Gallery<br>connector</th>
+            <th scope="col">Gallery:<br>synced</th>
             <th scope="col">Custom:<br>agent-hosted</th>
             <th scope="col">Custom:<br>direct push</th>
-            <th scope="col">Power BI<br>semantic model</th>
+            <th scope="col" class="new">Federated<br>connector</th>
+            <th scope="col" class="new">Power&nbsp;BI:<br>Import</th>
+            <th scope="col" class="new">Power&nbsp;BI:<br>DirectQuery</th>
+            <th scope="col" class="new">Power&nbsp;BI:<br>Direct Lake</th>
+            <th scope="col" class="new">Fabric<br>data agent</th>
             <th scope="col">API action<br>/ plugin</th>
             <th scope="col">MCP<br>server</th>
             <th scope="col">Ready-made<br>MCP</th>
@@ -1326,24 +1466,62 @@
           </tr>
         </thead>
         <tbody>
-          <tr class="group-row"><th colspan="9" scope="colgroup">What it is</th></tr>
+          <tr class="group-row"><th colspan="13" scope="colgroup">What it is</th></tr>
+          <tr>
+            <th class="rowhead" scope="row">Plane &mdash; whose governance approves it</th>
+            <td class="val">Graph</td>
+            <td class="val">Graph</td>
+            <td class="val">Graph</td>
+            <td class="val">Graph</td>
+            <td class="val">Fabric</td>
+            <td class="val">Fabric</td>
+            <td class="val">Fabric</td>
+            <td class="val">Fabric</td>
+            <td class="val">agent host</td>
+            <td class="val">yours</td>
+            <td class="val">the publisher&rsquo;s</td>
+            <td class="val neg">yours &mdash; Azure</td>
+          </tr>
           <tr>
             <th class="rowhead" scope="row">Layer &mdash; which axis it sits on</th>
             <td class="val">retrieval</td>
             <td class="val">retrieval</td>
             <td class="val">retrieval</td>
-            <td class="val">semantic model &mdash; a third axis</td>
+            <td class="val">invocation, in M365</td>
+            <td class="val">semantic model</td>
+            <td class="val">semantic model</td>
+            <td class="val">semantic model</td>
+            <td class="val">delegation over a model</td>
             <td class="val">invocation</td>
             <td class="val">invocation</td>
             <td class="val">invocation</td>
             <td class="val neg">hosting &mdash; a different axis</td>
           </tr>
           <tr class="new">
+            <th class="rowhead" scope="row">Where the rows physically sit<sup class="fn">6</sup></th>
+            <td class="val neg">M365 tenant index</td>
+            <td class="val neg">M365 tenant index</td>
+            <td class="val neg">M365 tenant index</td>
+            <td class="val pos">the source &mdash; nothing moves</td>
+            <td class="val neg">VertiPaq, in the capacity region</td>
+            <td class="val pos">the source &mdash; nothing moves</td>
+            <td class="val">OneLake, as Delta Parquet</td>
+            <td class="val">wherever its grounding items sit</td>
+            <td class="val pos">the source</td>
+            <td class="val pos">the source</td>
+            <td class="val pos">the source</td>
+            <td class="val">your Azure</td>
+          </tr>
+          <tr class="new">
             <th class="rowhead" scope="row">Can it stand alone?</th>
             <td class="val pos">yes &mdash; every surface picks it up</td>
             <td class="val pos">yes &mdash; every surface picks it up</td>
             <td class="val pos">yes &mdash; every surface picks it up</td>
+            <td class="val">yes, in four experiences &mdash; and each user connects it</td>
             <td class="val">yes, but the answer lands in Power BI first</td>
+            <td class="val">yes, but the answer lands in Power BI first</td>
+            <td class="val">yes, but the answer lands in Power BI first</td>
+            <td class="val">yes inside Fabric; Copilot Studio to go further</td>
             <td class="val neg">no &mdash; an agent has to host it</td>
             <td class="val">yes as a process, but a client must be wired to it</td>
             <td class="val">yes as a process &mdash; but it is somebody else&rsquo;s</td>
@@ -1354,7 +1532,11 @@
             <td class="val pos">none &mdash; implicit</td>
             <td class="val pos">none &mdash; implicit</td>
             <td class="val pos">none &mdash; implicit</td>
-            <td class="val">none inside Power BI; wired once to reach M365</td>
+            <td class="val">none &mdash; but only in the four it supports</td>
+            <td class="val">none inside Power BI</td>
+            <td class="val">none inside Power BI</td>
+            <td class="val">none inside Power BI</td>
+            <td class="val">one hop &mdash; Copilot Studio &mdash; to leave Fabric</td>
             <td class="val neg">one per agent, by hand</td>
             <td class="val">one per client, shared protocol</td>
             <td class="val">one per client, shared protocol</td>
@@ -1365,7 +1547,11 @@
             <td class="val">crawl interval</td>
             <td class="val">crawl interval</td>
             <td class="val">crawl interval</td>
-            <td class="val">refresh schedule, or live on DirectQuery</td>
+            <td class="val pos">live</td>
+            <td class="val neg">refresh schedule</td>
+            <td class="val pos">live</td>
+            <td class="val">current OneLake state &mdash; so, the shortcut or mirror latency</td>
+            <td class="val">whatever its grounding items are</td>
             <td class="val pos">live</td>
             <td class="val pos">live</td>
             <td class="val pos">live</td>
@@ -1374,9 +1560,13 @@
           <tr class="new">
             <th class="rowhead" scope="row">Deletion latency<br><span class="note">removed record stops appearing</span></th>
             <td class="val">next crawl</td>
-            <td class="val neg">agent-hosted: next incremental crawl<br>direct push: <strong>never</strong></td>
+            <td class="val neg">next incremental crawl</td>
             <td class="val neg">never &mdash; a direct push does not delete</td>
-            <td class="val pos">immediate &mdash; the model is the source</td>
+            <td class="val pos">immediate &mdash; nothing was stored</td>
+            <td class="val">next refresh</td>
+            <td class="val pos">immediate &mdash; the source is the model</td>
+            <td class="val">as soon as OneLake reflects it</td>
+            <td class="val">as soon as its items do</td>
             <td class="val pos">immediate &mdash; nothing was stored</td>
             <td class="val pos">immediate</td>
             <td class="val pos">immediate</td>
@@ -1385,9 +1575,13 @@
           <tr class="new">
             <th class="rowhead" scope="row">Infrastructure you must provide</th>
             <td class="val pos">none</td>
-            <td class="val">Windows host + connector agent, <em>or</em> a scheduled job with outbound HTTPS</td>
+            <td class="val">Windows host + connector agent</td>
             <td class="val">anywhere with outbound HTTPS</td>
-            <td class="val">Power BI capacity</td>
+            <td class="val pos">none &mdash; admin approval and per-user consent</td>
+            <td class="val">Fabric or Premium capacity</td>
+            <td class="val">capacity, plus a source that can take the query load</td>
+            <td class="val">Fabric capacity, F2+, and data in OneLake</td>
+            <td class="val">Fabric capacity, F2+, tenant-enabled</td>
             <td class="val">somewhere to host the action shim</td>
             <td class="val">a host for the server</td>
             <td class="val">a host &mdash; yours or theirs</td>
@@ -1398,31 +1592,43 @@
             <td class="val neg">&ndash;&nbsp; Microsoft&rsquo;s</td>
             <td class="val">&#9686;&nbsp; schema and labels only</td>
             <td class="val">&#9686;&nbsp; schema and labels only</td>
+            <td class="val neg">&ndash;&nbsp; the publisher&rsquo;s tool surface</td>
             <td class="val neg">&ndash;&nbsp; it queries a model</td>
+            <td class="val neg">&ndash;&nbsp; it queries a model</td>
+            <td class="val neg">&ndash;&nbsp; it queries a model</td>
+            <td class="val">&#9686;&nbsp; instructions and example queries</td>
             <td class="val">&#9686;&nbsp; you choose what the call returns</td>
             <td class="val">&#9686;&nbsp; you choose what the call returns</td>
             <td class="val neg">&ndash;&nbsp; theirs</td>
             <td class="val pos">&#9679;&nbsp; entirely yours</td>
           </tr>
 
-          <tr class="group-row"><th colspan="9" scope="colgroup">Cost</th></tr>
+          <tr class="group-row"><th colspan="13" scope="colgroup">Cost</th></tr>
           <tr>
             <th class="rowhead" scope="row">Initial build</th>
             <td class="val pos">hours&ndash;days</td>
             <td class="val neg">weeks<br><span class="note">days for the next one</span></td>
             <td class="val">weeks; days for the next one</td>
+            <td class="val pos">configuration</td>
             <td class="val">days if the model exists, weeks if not</td>
+            <td class="val">days if the model exists, weeks if not</td>
+            <td class="val">days if the model exists, weeks if not</td>
+            <td class="val">days on top of the model</td>
             <td class="val">days&ndash;2 weeks</td>
             <td class="val">days&ndash;2 weeks</td>
             <td class="val pos">hours&ndash;days</td>
             <td class="val neg">months</td>
           </tr>
           <tr>
-            <th class="rowhead" scope="row">Recurrent meter<br><span class="note">read the last two as <em>additive</em></span></th>
+            <th class="rowhead" scope="row">Recurrent meter<br><span class="note">read the invocation columns as <em>additive</em></span></th>
             <td class="val">item quota</td>
             <td class="val">item quota + crawl compute</td>
             <td class="val">item quota</td>
+            <td class="val">the source&rsquo;s own metering</td>
             <td class="val">capacity + refresh</td>
+            <td class="val">capacity + source query cost</td>
+            <td class="val">capacity</td>
+            <td class="val">capacity units, on prompt and response tokens</td>
             <td class="val neg">per downstream call, <strong>on top of</strong> the host agent's own meter</td>
             <td class="val neg">per downstream call, <strong>on top of</strong> each client's own meter</td>
             <td class="val">per downstream call</td>
@@ -1433,20 +1639,28 @@
             <td class="val pos">low &mdash; Microsoft maintains it</td>
             <td class="val neg">append-only schema; orphan reconciliation; source drift</td>
             <td class="val neg">orphans forever &mdash; nothing removes them</td>
-            <td class="val">model maintenance, and refreshes that fail quietly</td>
+            <td class="val neg">per-user adoption &mdash; a user who never connects it silently gets nothing</td>
+            <td class="val neg">a second store to classify, label and audit</td>
+            <td class="val neg">source load that scales with concurrency</td>
+            <td class="val">memory eviction under capacity pressure</td>
+            <td class="val neg">capacity units burned by enthusiastic questioning</td>
             <td class="val neg">LLM fan-out multiplies vendor queries</td>
             <td class="val neg">you own auth, audit and rate limiting</td>
             <td class="val neg">their release cadence becomes yours</td>
             <td class="val neg">headcount &mdash; evals, incidents, model updates</td>
           </tr>
 
-          <tr class="group-row"><th colspan="9" scope="colgroup">Security &amp; data boundary</th></tr>
+          <tr class="group-row"><th colspan="13" scope="colgroup">Security &amp; data boundary</th></tr>
           <tr>
             <th class="rowhead" scope="row">Who enforces access</th>
             <td class="val">Entra ACL, written at push time</td>
             <td class="val">Entra ACL, written at push time</td>
             <td class="val">Entra ACL, written at push time</td>
+            <td class="val pos">the source, live, as the user &mdash; their own OAuth</td>
             <td class="val pos">Power BI RLS, live, as the user</td>
+            <td class="val pos">Power BI RLS, live &mdash; and the source, if SSO reaches it</td>
+            <td class="val pos">Power BI RLS, live, as the user</td>
+            <td class="val">Fabric item permissions and the model&rsquo;s RLS</td>
             <td class="val pos">the source, live, as the user</td>
             <td class="val">the server &mdash; you build it</td>
             <td class="val neg">whatever they built &mdash; confirm it passes identity through</td>
@@ -1456,8 +1670,12 @@
             <th class="rowhead" scope="row">Persistent copy created?</th>
             <td class="val neg">yes &mdash; M365 tenant index</td>
             <td class="val neg">yes &mdash; M365 tenant index</td>
-            <td class="val">yes &mdash; M365 tenant index</td>
-            <td class="val">yes, in the model &mdash; unless DirectQuery</td>
+            <td class="val neg">yes &mdash; M365 tenant index</td>
+            <td class="val pos">no</td>
+            <td class="val neg">yes &mdash; and a further Delta copy if OneLake integration is on</td>
+            <td class="val pos">no rows; the model definition and RLS still persist</td>
+            <td class="val">in OneLake, and nowhere else</td>
+            <td class="val">whatever its grounding items already are</td>
             <td class="val pos">no</td>
             <td class="val pos">no</td>
             <td class="val pos">no</td>
@@ -1468,60 +1686,121 @@
             <td class="val">limited</td>
             <td class="val">limited</td>
             <td class="val">limited</td>
+            <td class="val pos">Microsoft Purview</td>
             <td class="val">Power BI activity log</td>
+            <td class="val">Power BI activity log + source logs</td>
+            <td class="val">Power BI activity log</td>
+            <td class="val">Fabric monitoring + Power BI activity log</td>
             <td class="val pos">source / vendor API logs</td>
             <td class="val">your logs</td>
             <td class="val neg">theirs, if any &mdash; ask before adopting</td>
             <td class="val pos">yours, by design</td>
           </tr>
 
-          <tr class="group-row"><th colspan="9" scope="colgroup">Data fit</th></tr>
+          <tr class="group-row"><th colspan="13" scope="colgroup">Data fit</th></tr>
           <tr>
             <th class="rowhead" scope="row">First-party content, group-shaped access</th>
-            <td><span class="mark m-full">&#9679;</span><div class="val">best fit if listed</div></td>
-            <td><span class="mark m-full">&#9679;</span><div class="val">best fit otherwise</div></td>
+            <td class="val pos">&#9679;&nbsp; best fit if listed</td>
+            <td class="val pos">&#9679;&nbsp; best fit otherwise</td>
             <td class="val pos">&#9679;&nbsp; best fit with no host to run an agent</td>
+            <td class="val">&#9686;&nbsp; works, but org-wide indexing is cheaper here</td>
             <td class="val neg">&ndash;&nbsp; not a document surface</td>
-            <td><span class="mark m-none">&ndash;</span><div class="val">rebuilding search</div></td>
-            <td><span class="mark m-none">&ndash;</span><div class="val">no index</div></td>
+            <td class="val neg">&ndash;&nbsp; not a document surface</td>
+            <td class="val neg">&ndash;&nbsp; not a document surface</td>
+            <td class="val neg">&ndash;&nbsp; not a document surface</td>
+            <td class="val neg">&ndash;&nbsp; rebuilding search</td>
             <td class="val neg">&ndash;&nbsp; no index</td>
-            <td><span class="mark m-partial">&#9686;</span><div class="val">over-engineered</div></td>
+            <td class="val neg">&ndash;&nbsp; no index</td>
+            <td class="val">&#9686;&nbsp; over-engineered</td>
           </tr>
           <tr>
             <th class="rowhead" scope="row">First-party with RLS, MNPI or barriers</th>
-            <td><span class="mark m-none">&ndash;</span><div class="val">loses the model</div></td>
-            <td><span class="mark m-none">&ndash;</span><div class="val">loses the model</div></td>
             <td class="val neg">&ndash;&nbsp; loses the model</td>
-            <td class="val pos">&#9679;&nbsp; RLS enforced per user, live</td>
-            <td><span class="mark m-full">&#9679;</span><div class="val">source enforces</div></td>
-            <td><span class="mark m-partial">&#9686;</span><div class="val">if you build it</div></td>
+            <td class="val neg">&ndash;&nbsp; loses the model</td>
+            <td class="val neg">&ndash;&nbsp; loses the model</td>
+            <td class="val pos">&#9679;&nbsp; the source keeps enforcing</td>
+            <td class="val pos">&#9679;&nbsp; RLS per user, live</td>
+            <td class="val pos">&#9679;&nbsp; RLS per user, and no copy</td>
+            <td class="val pos">&#9679;&nbsp; RLS per user, live</td>
+            <td class="val">&#9686;&nbsp; inherits the model&rsquo;s RLS</td>
+            <td class="val pos">&#9679;&nbsp; source enforces</td>
+            <td class="val">&#9686;&nbsp; if you build it</td>
             <td class="val">&#9686;&nbsp; only if it passes identity through</td>
-            <td><span class="mark m-full">&#9679;</span><div class="val">if isolation is required</div></td>
+            <td class="val pos">&#9679;&nbsp; if isolation is required</td>
           </tr>
           <tr>
             <th class="rowhead" scope="row">Licensed third-party <span class="note">(Moody's, S&amp;P)</span></th>
-            <td><span class="mark m-none">&ndash;</span><div class="val">redistribution</div></td>
-            <td><span class="mark m-none">&ndash;</span><div class="val">redistribution</div></td>
             <td class="val neg">&ndash;&nbsp; redistribution</td>
-            <td class="val">&#9686;&nbsp; only if the licence permits a model</td>
-            <td><span class="mark m-full">&#9679;</span><div class="val">best fit</div></td>
-            <td><span class="mark m-full">&#9679;</span><div class="val">good, multi-client</div></td>
+            <td class="val neg">&ndash;&nbsp; redistribution</td>
+            <td class="val neg">&ndash;&nbsp; redistribution</td>
+            <td class="val pos">&#9679;&nbsp; best fit &mdash; several vendors publish one</td>
+            <td class="val neg">&ndash;&nbsp; a copy, and a redistribution question</td>
+            <td class="val">&#9686;&nbsp; no copy, but check the licence</td>
+            <td class="val neg">&ndash;&nbsp; the data would have to sit in OneLake</td>
+            <td class="val neg">&ndash;&nbsp; it grounds on OneLake items</td>
+            <td class="val pos">&#9679;&nbsp; good fit</td>
+            <td class="val pos">&#9679;&nbsp; good, multi-client</td>
             <td class="val">&#9679;&nbsp; good, if you trust the publisher</td>
-            <td><span class="mark m-partial">&#9686;</span><div class="val">needs licence review</div></td>
+            <td class="val">&#9686;&nbsp; needs licence review</td>
           </tr>
           <tr>
             <th class="rowhead" scope="row">Metadata <em>about</em> licensed data</th>
-            <td><span class="mark m-partial">&#9686;</span></td>
-            <td><span class="mark m-full">&#9679;</span><div class="val">the hybrid pattern</div></td>
+            <td class="val">&#9686;</td>
             <td class="val pos">&#9679;&nbsp; the hybrid pattern</td>
+            <td class="val pos">&#9679;&nbsp; the hybrid pattern</td>
+            <td class="val">&#9686;&nbsp; the other half of the hybrid</td>
             <td class="val neg">&ndash;&nbsp; a catalogue is search, not analytics</td>
-            <td><span class="mark m-none">&ndash;</span></td>
-            <td><span class="mark m-none">&ndash;</span></td>
+            <td class="val neg">&ndash;&nbsp; a catalogue is search, not analytics</td>
+            <td class="val neg">&ndash;&nbsp; a catalogue is search, not analytics</td>
             <td class="val neg">&ndash;</td>
-            <td><span class="mark m-partial">&#9686;</span></td>
+            <td class="val neg">&ndash;</td>
+            <td class="val neg">&ndash;</td>
+            <td class="val neg">&ndash;</td>
+            <td class="val">&#9686;</td>
           </tr>
         </tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- ============ TWO PLANES ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">The boundary people get wrong</p>
+      <h2>Two planes, and what belongs to each</h2>
+      <p class="lede">Grounding mechanisms are attributed to Fabric constantly, and most of them are not Fabric at all. The two planes have separate governance, separate funding and separate approval paths, and knowing which one you are standing in settles arguments that otherwise run for weeks.</p>
+    </div>
+
+    <div class="panels">
+      <div class="panel own">
+        <p class="tag">Microsoft 365 &amp; Graph plane</p>
+        <h3>Retrieval &mdash; content is put where Copilot looks</h3>
+        <ul>
+          <li><strong>Synced connectors</strong> crawl external content into the semantic index, at organisation level, under admin credentials. Gallery, custom agent-hosted, or direct push.</li>
+          <li><strong>Federated connectors</strong> index nothing. They fetch over MCP at question time, each user authenticating as themselves, read-only, auditable in Purview.</li>
+          <li><strong>Graph Connector Agent</strong> is the on-premises crawler for sources behind the firewall &mdash; a Windows host, and the only index model that deletes.</li>
+          <li><strong>Governed by</strong> the Microsoft 365 admin center and the connectors API. No Fabric capacity, no OneLake footprint, no F SKU.</li>
+        </ul>
+        <p class="verdict"><strong>What it buys you:</strong> the answer appears in M365 Copilot chat next to every other connected source, with nothing wired per surface.</p>
+      </div>
+
+      <div class="panel vend">
+        <p class="tag">Fabric plane</p>
+        <h3>Delegation &mdash; a query capability an agent calls</h3>
+        <ul>
+          <li><strong>Semantic models</strong> in one of three storage modes, and <strong>Fabric data agents</strong> grounded on lakehouses, warehouses, KQL databases and models.</li>
+          <li><strong>Fabric MCP servers</strong> &mdash; the local one is generally available; the remote Core, Data Warehouse and data-agent-as-MCP servers are previews. Check status before designing on them.</li>
+          <li><strong>Governed by</strong> Fabric tenant settings and capacity admin, funded by the F SKU. Fabric REST APIs are a separate surface from Microsoft Graph.</li>
+          <li><strong>Cross-geo caution:</strong> Fabric MCP needs F2+ or P1+ with Fabric enabled, plus cross-geo processing and storage for AI switched on in tenant settings &mdash; and responses returned to an MCP client may leave Fabric&rsquo;s compliance boundary and region, handled thereafter under the client&rsquo;s own policies.</li>
+        </ul>
+        <p class="verdict"><strong>What it buys you:</strong> an answer computed over governed data, per user &mdash; but inside Fabric, until you publish it through Copilot Studio.</p>
+      </div>
+    </div>
+
+    <div class="rule-card">
+      <p class="eyebrow">The distinction worth memorising</p>
+      <p class="big">Retrieval versus <em>delegation</em>.</p>
+      <p class="note">A connector pushes content into the index so Copilot retrieves it. Fabric MCP and a data agent expose a query capability an agent calls at runtime. <strong>The two are not substitutable</strong>, and the failure mode is always the same direction: a team picks Fabric to avoid a connector approval, ships it, and discovers the M365 Copilot grounding requirement was never met. Neither Copilot in Fabric nor a data agent makes anything retrievable in M365 Copilot chat on its own. A federated connector is the one mechanism that sits in both frames at once &mdash; delegation by wire, retrieval by placement &mdash; which is exactly why it is the interesting new answer for content that may not be copied.</p>
     </div>
   </section>
 
@@ -1556,13 +1835,14 @@
           <li><strong>Caching windows and attribution.</strong> Many agreements cap retention and require source and as-of timestamp. Last Tuesday's index entry satisfies neither.</li>
         </ul>
         <p class="verdict"><strong>The trap:</strong> the LLM decides how many calls to make. "Compare our exposure across these fifteen counterparties" is fifteen vendor lookups per turn, per user. Model volume at 5&ndash;10&times; human usage, budget per user per day in the action itself, and log call volume from day one.</p>
+        <p class="verdict"><strong>Check the gallery first, though.</strong> Several market-data vendors now publish <em>federated</em> Copilot connectors &mdash; live fetch over MCP, nothing indexed, each user authenticating with their own entitlement. That is the shape this panel has always been arguing for, available as configuration rather than as a build, and it changes the seat-counting conversation from "everyone in the Entra group" to "everyone who connected it".</p>
       </div>
     </div>
 
     <div class="rule-card">
       <p class="eyebrow">The hybrid that resolves all three cases</p>
       <p class="big">Index the metadata. <em>Call for the value.</em></p>
-      <p class="note">Index that you <em>hold</em> a rating for an issuer, its as-of date, the methodology, your own analyst commentary, and a link &mdash; all of which is either yours or non-substantive. Then fetch the rating itself live, entitled and attributed. Copilot answers <em>"which issuers did we downgrade internally last quarter, and what does Moody's say now?"</em> &mdash; first half from the index, second from the call. Neither half alone gets there, and the licensed content never lands in the index. The same shape resolved your Power BI semantic model and your Fabric warehouse.</p>
+      <p class="note">Index that you <em>hold</em> a rating for an issuer, its as-of date, the methodology, your own analyst commentary, and a link &mdash; all of which is either yours or non-substantive. Then fetch the rating itself live, entitled and attributed. Copilot answers <em>"which issuers did we downgrade internally last quarter, and what does Moody's say now?"</em> &mdash; first half from the index, second from the call. Neither half alone gets there, and the licensed content never lands in the index. The same shape resolves a Power BI semantic model and a Fabric warehouse &mdash; index the measure definitions and ownership, and let a data agent or <code>executeQueries</code> compute the numbers, with row-level security still enforced where it lives.</p>
     </div>
   </section>
 
@@ -1573,9 +1853,9 @@
       <h2>Three questions, in order</h2>
     </div>
     <ol class="steps">
-      <li><p><span class="q">Where is the person standing when they ask?</span> Teams, Word or Outlook &rarr; an M365 surface, grounded by a connector. Your public site or a call-centre desktop &rarr; Foundry or Copilot Studio; M365 Copilot is not reachable from there. An IDE or an analyst's tooling &rarr; MCP.</p></li>
-      <li><p><span class="q">Is the answer content, or is it computed?</span> Text that can sit still &mdash; a ticket, a case note, a policy, a measure's <em>definition</em> &mdash; index it. A number that moves, or anything that writes &mdash; call it. Indexing a computed value freezes it, and a frozen number that disagrees with the live report is a control problem, not a nuisance.</p></li>
-      <li><p><span class="q">Who enforces access, and can they still do it afterwards?</span> If the answer is "the source system, live, per user", you cannot index it without losing the enforcement. That single question resolves RLS, MNPI, information barriers and vendor seat licensing in one move.</p></li>
+      <li><p><span class="q">Where is the person standing when they ask &mdash; and where must the answer appear?</span> Teams, Word or Outlook &rarr; an M365 surface, grounded by a connector. A report or a Fabric workspace &rarr; a semantic model and a data agent, which will not reach M365 chat without a Copilot Studio hop. Your public site or a call-centre desktop &rarr; Foundry or Copilot Studio; M365 Copilot is not reachable from there. An IDE or an analyst's tooling &rarr; MCP. These are two questions, not one, and answering only the first is how a connector gets built for a surface that does not read connectors.</p></li>
+      <li><p><span class="q">Is the answer content, or is it computed &mdash; and if it is computed, where may the rows sit?</span> Text that can sit still &mdash; a ticket, a case note, a policy, a measure's <em>definition</em> &mdash; index it. A number that moves, or anything that writes &mdash; call it. Indexing a computed value freezes it, and a frozen number that disagrees with the live report is a control problem, not a nuisance. Once it is a model, residency picks the storage mode for you: in OneLake &rarr; Direct Lake, a copy permitted &rarr; Import, neither &rarr; DirectQuery.</p></li>
+      <li><p><span class="q">Who enforces access, and can they still do it afterwards?</span> If the answer is "the source system, live, per user", you cannot index it without losing the enforcement. That single question resolves RLS, MNPI, information barriers and vendor seat licensing in one move &mdash; and it no longer costs you M365 reach, because a federated connector keeps enforcement at the source and still answers in Copilot chat.</p></li>
     </ol>
   </section>
 
@@ -1588,6 +1868,8 @@
         <li><strong>Row 5, actions from Agent Builder.</strong> Declarative agents built there do support API plugins and actions, so the flat "not available" is likely too strong. Reproduced as photographed; extended rows mark it partial.</li>
         <li><strong>Row 11, Researcher &amp; Analyst without a Copilot licence.</strong> These have historically required an M365 Copilot licence or an agent add-on. Reproduced as photographed &mdash; worth confirming against your own tenant's licensing.</li>
         <li><strong>Frontier Cowork and Frontier Workflows</strong> are early-access programme features. Names, availability and capabilities move quickly and may already differ from both the source and this page.</li>
+        <li><strong>The M365-reach row, and the Fabric data agent column generally.</strong> Both are drawn from the Fabric components briefing and from current Microsoft documentation rather than from a tenant. Which experiences consume a federated connector, and whether a data agent published through Copilot Studio behaves as a declarative agent in every M365 surface, are the two cells most likely to have moved since this was written. Confirm in your own tenant before quoting either in a design.</li>
+        <li><strong>&ldquo;Where the rows physically sit&rdquo; is the row that decides classification scope</strong>, and it is stated for the storage mode alone. Model definition, DAX measures, relationships, row-level security roles and lineage are persisted in the Power BI metadata store whatever mode you choose &mdash; so no column here is truly &ldquo;nothing is stored&rdquo;. If the schema itself is sensitive, that metadata is in scope too.</li>
         <li><strong>No prices anywhere on this page, deliberately.</strong> I cannot verify current M365 Copilot, Copilot Studio or Azure rate cards, and invented figures in a financial-services business case are worse than none. Effort bands and cost <em>shape</em> are what's stable; get the numbers from your licensing desk.</li>
         <li><strong>Vendor licence terms are the gating item.</strong> The third-party column reflects the common shape of market-data agreements, not yours. Redistribution, derived data, caching, AI use and audit clauses need reading by your market-data licensing team, in writing, before engineering starts.</li>
       </ol>
@@ -1597,7 +1879,7 @@
   <footer>
     <p>Reconstructed from a photographed capability matrix and extended with the grounding, cost and data-provenance analysis from the surrounding architecture review.</p>
     <p>Microsoft's Copilot surface naming and capability boundaries move faster than anything else in this stack &mdash; particularly MCP support inside M365 and the line between declarative agents and Copilot Studio. Treat the tables as the shape of the decision, and confirm current boundaries before committing.</p>
-    <p class="stamp">Revision <strong>2026-08-27 &middot; r9</strong> &mdash; 14 questions, 10 routes. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
+    <p class="stamp">Revision <strong>2026-08-28 &middot; r10</strong> &mdash; 17 questions, 12 routes. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
   </footer>
 
 </div>
@@ -1606,16 +1888,22 @@
 (function () {
   "use strict";
 
-  var FIELDS = ["reach","own","access","kind","fresh","del","infra","src","vol","reuse","iso","model","gov","ret"];
+  var FIELDS = ["reach","surface","own","access","kind","model","onelake","conc",
+                "fresh","del","infra","src","vol","reuse","iso","gov","ret"];
 
   var ROUTES = {
     gallery: {
-      name: "Gallery Graph connector",
-      sub: "Configuration, not code. Microsoft maintains it, and it is the only path here with no engineering to own.",
+      name: "Gallery connector — synced",
+      sub: "Configuration, not code. Microsoft maintains it, it crawls and indexes at organisation level under admin credentials, and it is the only path here with no engineering to own.",
       cost: ["build: hours–days", "run: item quota", "maintenance: Microsoft's"]
     },
+    federated: {
+      name: "Federated Copilot connector",
+      sub: "An MCP server Microsoft fronts. It indexes nothing, fetches at question time, and each user authenticates as themselves — so the source keeps enforcing entitlement. The only no-copy path that still lands in M365 Copilot chat.",
+      cost: ["build: configuration + admin approval", "run: the source's own metering", "maintenance: the publisher's, and each user's consent"]
+    },
     custom: {
-      name: "Custom Graph connector",
+      name: "Custom synced connector",
       sub: "Your own crawler or push tool. Weeks for the first one; days for every one after it, once the engine exists.",
       cost: ["build: weeks (then days)", "run: item quota + crawl compute", "maintenance: yours — append-only schema"]
     },
@@ -1625,24 +1913,34 @@
       cost: ["build: days–2 weeks", "run: per downstream call", "maintenance: API contract drift"]
     },
     agent: {
-      name: "Custom connector \u2014 agent-hosted",
+      name: "Custom synced connector — agent-hosted",
       sub: "You write the connector and the Graph connector agent crawls it from a Windows host you run. The only index model that deletes.",
       cost: ["build: weeks; days for the next one", "run: item quota + crawl compute", "maintenance: a host to patch, append-only schema"]
     },
     push: {
-      name: "Custom connector \u2014 direct push",
-      sub: "You write the connector and it calls Graph itself from anywhere with outbound HTTPS. No agent, no Windows host \u2014 and no deletion.",
+      name: "Custom synced connector — direct push",
+      sub: "You write the connector and it calls Graph itself from anywhere with outbound HTTPS. No agent, no Windows host — and no deletion.",
       cost: ["build: weeks; days for the next one", "run: item quota", "maintenance: orphaned items nothing removes"]
     },
-    powerbi: {
-      name: "Power BI semantic model",
-      sub: "The answer is computed at query time from a model that enforces row-level security per user. Copilot and Q&A sit on the model rather than on a copy of its rows.",
-      cost: ["build: days if the model exists, weeks if not", "run: capacity + refresh", "maintenance: the model, and refreshes that fail quietly"]
+    pbidirectlake: {
+      name: "Power BI semantic model — Direct Lake",
+      sub: "The model reads Delta Parquet straight out of OneLake, transcoding column segments into capacity memory on demand. Import-class speed with no refresh cycle and no second copy: OneLake is the storage.",
+      cost: ["build: days if the model exists, weeks if not", "run: Fabric capacity, F2 or higher", "maintenance: the model, and whatever keeps OneLake current"]
+    },
+    pbiimport: {
+      name: "Power BI semantic model — Import",
+      sub: "Rows are copied into the model's in-memory VertiPaq store and persisted in Power BI managed storage in the capacity region. The fastest queries here, and the only mode that creates a governed copy you must classify and audit in its own right.",
+      cost: ["build: days if the model exists, weeks if not", "run: capacity + refresh windows", "maintenance: the model, and refreshes that fail quietly"]
+    },
+    pbidq: {
+      name: "Power BI semantic model — DirectQuery",
+      sub: "No rows are stored. The model holds relationships, measures and security only, and every visual becomes a native query against the source at report runtime. Zero copy, at the price of latency and source load that scale with concurrency.",
+      cost: ["build: days if the model exists, weeks if not", "run: capacity + whatever the source costs to query", "maintenance: the model, and source-side query performance"]
     },
     mcpready: {
       name: "Ready-made MCP server",
-      sub: "Somebody has already built and published the invocation layer for this source. You configure and trust it rather than writing it \u2014 and you inherit its auth model, its tool surface and its release cadence.",
-      cost: ["build: hours\u2013days (configuration)", "run: per downstream call", "maintenance: theirs to ship, yours to review"]
+      sub: "Somebody has already built and published the invocation layer for this source. You configure and trust it rather than writing it — and you inherit its auth model, its tool surface and its release cadence.",
+      cost: ["build: hours–days (configuration)", "run: per downstream call", "maintenance: theirs to ship, yours to review"]
     },
     mcp: {
       name: "MCP server",
@@ -1661,6 +1959,8 @@
     }
   };
 
+  var PBI = { pbidirectlake: 1, pbiimport: 1, pbidq: 1 };
+
   function read() {
     var a = {};
     FIELDS.forEach(function (f) {
@@ -1672,6 +1972,46 @@
 
   function answered(a) {
     return FIELDS.filter(function (f) { return a[f]; }).length;
+  }
+
+  // Which storage mode, once a semantic model is the answer. Residency and the
+  // no-copy rule pick it; nothing here is a preference. Import makes a copy, so
+  // it dies where no copy is allowed. Direct Lake reads from OneLake, so it dies
+  // where the data cannot be there. What survives both is DirectQuery.
+  function pbiMode(a) {
+    var zeroCopy = (a.onelake === "already" || a.onelake === "shortcut");
+    var inLake = zeroCopy || a.onelake === "mirror" || a.onelake === "copy";
+
+    if (a.iso === "nocopy" && !zeroCopy) { return "pbidq"; }
+    if (!a.onelake) { return "pbidq"; }
+    if (inLake) {
+      if (a.fresh === "live" && a.onelake === "copy") { return "pbidq"; }
+      return "pbidirectlake";
+    }
+    if (a.fresh === "live") { return "pbidq"; }
+    return "pbiimport";
+  }
+
+  function modeWhy(mode, a) {
+    if (mode === "pbidq" && a.iso === "nocopy") {
+      return "DirectQuery, because compliance forbids a second copy. Import creates one by definition and Direct Lake needs the data resident in OneLake, so both are out — unless a shortcut can register the data in OneLake without moving it, which is the one way back to Direct Lake from here.";
+    }
+    if (mode === "pbidq" && !a.onelake) {
+      return "DirectQuery until the residency question is answered. It is the reversible mode: it stores nothing, so it commits you to nothing that a later residency decision would have to undo.";
+    }
+    if (mode === "pbidq" && a.onelake === "never") {
+      return "DirectQuery, because the data cannot leave its store and the answer must be current. Nothing is copied; every visual becomes a native query at the source instead.";
+    }
+    if (mode === "pbidq") {
+      return "DirectQuery, because a scheduled pipeline copy into OneLake cannot deliver an answer that is current to the minute. Nothing is stored, and the query runs at the source.";
+    }
+    if (mode === "pbidirectlake" && (a.onelake === "already" || a.onelake === "shortcut")) {
+      return "Direct Lake, because the data is in OneLake already or a shortcut puts it there in place. That is import-class performance with no refresh cycle and no new copy to govern — OneLake is the storage.";
+    }
+    if (mode === "pbidirectlake") {
+      return "Direct Lake, because the data can land in OneLake as Delta Parquet. The model reads it there rather than holding its own copy, which removes the refresh cycle and the second store at once.";
+    }
+    return "Import, because the data cannot be in OneLake and the answer need not be live. Rows are copied into the model's in-memory store — the fastest queries here, and a governed copy in its own right.";
   }
 
   function decide(a) {
@@ -1699,6 +2039,16 @@
     gate(a.gov === "pinned", "foundry",
       "The model itself has to be pinned and validated. No M365 surface lets you fix a model version or hold it still while you evaluate it — the model changes on Microsoft's cadence, which is the thing model-risk governance will not accept.");
 
+    // The federated connector, before every gate that would otherwise send this
+    // to a bare API action. It satisfies the same constraints - no copy, the
+    // source entitles per caller - and unlike an action it lands in M365 Copilot
+    // chat with nothing wired per surface. It is read-only, so a write skips it.
+    gate(a.src === "fedready" && a.kind !== "write" &&
+         (a.iso === "nocopy" || a.own === "vendor" || a.own === "unknown" ||
+          a.access === "rls" || a.access === "barriers" ||
+          a.fresh === "live" || a.del === "immediate"), "federated",
+      "Something here forbids a copy, and a federated Copilot connector is published for this source. It fetches over MCP at question time, indexes nothing, and each user authenticates as themselves — so the source keeps enforcing entitlement. Unlike an API action it needs no agent built around it to appear in M365 Copilot chat.");
+
     gate(a.iso === "nocopy", "action",
       "Compliance forbids a second copy. Every index path creates one by definition, so the answer has to be fetched at the moment it is asked.");
 
@@ -1715,7 +2065,7 @@
       "Access is row-level inside the source. Flattening rows into items discards that enforcement silently — the push succeeds, the search works, and nobody notices.");
 
     gate(a.kind === "write", "action",
-      "It has to write. That is a tool call by definition; retrieval cannot do it.");
+      "It has to write. That is a tool call by definition; retrieval cannot do it, and a federated connector is read-only.");
 
     gate(a.kind === "computed", "action",
       "The answer is computed. Indexing freezes one result, and a frozen number that disagrees with the live report is a control problem rather than a nuisance.");
@@ -1727,10 +2077,10 @@
       "A removed record must disappear immediately. No index path can promise that: a direct push never deletes at all, and a crawl deletes on its next pass at best.");
 
     gate(a.src === "gallery", "gallery",
-      "Owned, group-shaped content, and the source is already on Microsoft's list. Take the configuration answer before writing anything.");
+      "Owned, group-shaped content, and the source is already on Microsoft's synced connector list. Take the configuration answer before writing anything.");
 
     gate(a.own !== null && a.access === "groups" && a.kind === "content", "custom",
-      "Owned content, group-shaped access, and no freshness or deletion pressure. This is what a Graph connector is for: one build, security-trimmed, appearing across every M365 surface.");
+      "Owned content, group-shaped access, and no freshness or deletion pressure. This is what a synced connector is for: one build, security-trimmed, appearing across every M365 surface.");
 
     if (!route) {
       route = "custom";
@@ -1744,10 +2094,11 @@
     if (route === "action" &&
         (a.kind === "computed" || a.access === "rls") &&
         (a.model === "have" || a.model === "fits")) {
-      route = "powerbi";
       why.push(a.model === "have"
         ? "The answer is computed or row-level secured, and a semantic model already holds it. Power BI computes per user and enforces RLS at query time — which is the property the index path cannot give you."
         : "The answer is computed or row-level secured, and the data is dimensional. Modelling it is a bigger build than an action, but it is the only route that answers aggregate questions and enforces row-level security without you rebuilding either.");
+      route = pbiMode(a);
+      why.push(modeWhy(route, a));
     }
 
     if (route === "action" && a.reuse === "many") {
@@ -1789,6 +2140,8 @@
   function warnings(a, route) {
     var w = [];
     var index = (route === "gallery" || route === "agent" || route === "push");
+    var pbi = !!PBI[route];
+    var live = (route === "action" || route === "mcp" || route === "mcpready" || route === "federated");
 
     if (index && a.del === "sameday") {
       w.push("<strong>Same-day deletion constrains which index model you may use.</strong> Only the agent-hosted connector deletes, and only on its next incremental crawl — so you need a soft-delete column, crawls scheduled inside the SLA, and a monitor proving they ran. Direct push cannot meet this at all.");
@@ -1820,36 +2173,103 @@
     if (route === "push") {
       w.push("<strong>A direct push never deletes.</strong> Every record that leaves scope keeps its item in the index until somebody removes it by hand. Budget for periodic reconciliation and name who runs it, before the first crawl rather than after the first audit.");
     }
-    if (route === "powerbi") {
+    if (index && a.surface === "fabric") {
+      w.push("<strong>You are building a connector for a surface that does not read connectors.</strong> Graph-indexed content grounds M365 Copilot; it does not appear in Power BI or in a Fabric data agent. If the answer only ever has to show up on a Fabric surface, this build has no consumer — settle the surface question before the schema.");
+    }
+
+    // ---- the semantic model, and the mode it landed on ----
+    if (pbi) {
       w.push("<strong>Copilot needs a paid capacity, and Pro or PPU on its own is not one.</strong> The workspace must sit on paid Fabric <strong>F2 or higher</strong>, or Power BI Premium <strong>P1 or higher</strong>. A Pro or PPU workspace supports it only once assigned to a Fabric Copilot capacity. <strong>Trial SKUs and trial capacities are not supported at all</strong>, which is the usual reason a proof of concept works and the pilot does not.");
-      w.push("There is no separate per-user Copilot licence, and no M365 Copilot licence is required either. It draws on Fabric capacity units, metered on the tokens in prompts and responses — so the cost lands on whoever owns the capacity, and an enthusiastic pilot shows up as capacity pressure rather than as a bill somebody approved.");
+      w.push("<strong>F2 and F64 are two different thresholds and both bite.</strong> F2 is where Copilot and data agents become available at all; <strong>F64</strong> is where report consumers stop needing an individual Power BI Pro licence. Between them you are paying per viewer as well as per capacity unit, and that line usually decides the SKU rather than the compute does.");
       w.push("<strong>Copilot is not supported with Private Link or in closed network environments.</strong> If this data sits behind network isolation, this route does not exist for you and the answer is an application you host. Check it before anything else — it is the constraint most likely to end the conversation.");
       w.push("<strong>Check the region before you design the model.</strong> The capacity must be in a Fabric-supported region, and where Azure OpenAI is not available in yours, Copilot works only if an admin enables <em>data sent to Azure OpenAI can be processed outside your capacity’s geographic region, compliance boundary, or national cloud</em>. For regulated data that is a decision with a paper trail, not a toggle.");
-      w.push("<strong>Row-level security only enforces if somebody wrote the roles.</strong> \u201cPower BI enforces RLS\u201d is a statement about the product, not about your model. Confirm the roles exist, that they are assigned, and that they have been tested as a real user rather than as an admin.");
-      w.push("It answers about the model, not about your documents. A question like \u201cwhich contract has the break clause\u201d does not belong here — that is the index path, and the two routes complement each other rather than competing.");
+      w.push("<strong>The storage mode governs the rows, not the model.</strong> Its definition, DAX measures, relationships, row-level security roles and lineage are persisted in the Power BI metadata store whatever mode you pick — so “DirectQuery stores nothing” is a statement about your data, not about your model. Classify the metadata too if the schema itself is sensitive.");
+      w.push("<strong>Composite models mix modes per table</strong>, so this is not all-or-nothing: a model can hold slow-moving dimensions in memory and query the fact table live. If one table is what forced your mode, model that table differently rather than moving the whole thing.");
+      w.push("<strong>Row-level security only enforces if somebody wrote the roles.</strong> “Power BI enforces RLS” is a statement about the product, not about your model. Confirm the roles exist, that they are assigned, and that they have been tested as a real user rather than as an admin.");
+      w.push("It answers about the model, not about your documents. A question like “which contract has the break clause” does not belong here — that is the index path, and the two routes complement each other rather than competing.");
     }
-    if (route === "powerbi" && a.model === "fits") {
+    if (route === "pbiimport") {
+      w.push("<strong>Import creates a governed copy, and it is yours to govern.</strong> Rows land in the VertiPaq store, persisted in Power BI managed storage in the capacity region — a second store that has to be classified, labelled, retained and audited independently of the source. If OneLake integration is switched on for the model, that writes a further read-only Delta copy, so you are governing three.");
+      w.push("<strong>Freshness is the refresh window, nothing better.</strong> Size the refresh against the memory the capacity has, and alert on refresh failure — a model that silently stops refreshing keeps answering, confidently, from last week.");
+    }
+    if (route === "pbidq") {
+      w.push("<strong>DirectQuery moves the cost to the source.</strong> Every visual on every page becomes a native query, per user, per interaction — and an LLM asking on someone's behalf fans that out further. Agree the query budget with whoever owns the source before the first report is published.");
+      if (a.conc === "broad") {
+        w.push("<strong>Thousands of users on DirectQuery is the combination that fails in production.</strong> Latency and source load scale with concurrency, and nothing in Power BI throttles it for you. If a copy is permitted anywhere, Import or Direct Lake is the honest answer; if it is not, the source needs capacity planning as a project in its own right.");
+      }
+      if (a.onelake === "never") {
+        w.push("Before accepting that the data can never be in OneLake, check whether a <strong>shortcut</strong> is possible. A shortcut references data in place in ADLS Gen2, S3, GCS or Dataverse — no copy, no schedule, no compute, and the source system stays authoritative. That single option is what turns most “DirectQuery only” answers into Direct Lake ones.");
+      }
+    }
+    if (route === "pbidirectlake") {
+      w.push("<strong>Direct Lake needs Fabric capacity and Delta Parquet in OneLake, and both are hard requirements.</strong> There is no Premium-only or Pro-only version of this mode. Confirm the capacity exists and the tables are actually Delta before designing around it.");
+      w.push("Column segments are transcoded into capacity memory on demand and <strong>evicted under pressure</strong>. On a capacity that is already busy, that shows up as first-query latency rather than as an error — watch the Capacity Metrics app rather than waiting for complaints.");
+      if (a.onelake === "mirror") {
+        w.push("<strong>Mirroring is still a replica.</strong> The platform maintains it from the source's change feed with no pipeline to build, and storage is free up to capacity limits — but a copy of the data now exists in OneLake, and it is inside your compliance boundary rather than outside your governance obligations. Classify and label it like any other copy.");
+      }
+      if (a.onelake === "copy") {
+        w.push("Because the data reaches OneLake by a scheduled pipeline, freshness is that schedule — Direct Lake reads the current OneLake state, and the current OneLake state is as old as the last run. Alert on pipeline failure, not just on refresh failure.");
+      }
+    }
+    if (pbi && a.model === "fits") {
       w.push("<strong>You are committing to building the semantic model, not just pointing at one.</strong> That is weeks of modelling — grain, relationships, measures, RLS roles — and it needs an owner afterwards. If nobody owns it, the model rots and the answers quietly go wrong.");
+    }
+    if (pbi && a.surface === "m365") {
+      w.push("<strong>The answer has to land in M365 Copilot chat, and a semantic model does not put it there.</strong> Power BI Copilot and Q&amp;A answer inside Power BI; a Fabric data agent answers inside Fabric. Reaching M365 Copilot chat means publishing the data agent as a tool to a Copilot Studio agent, and surfacing that agent in Teams or as a declarative agent — a second build, a second approval, and a second thing to operate. Choosing Fabric to avoid a connector approval leaves this requirement unmet.");
+    }
+    if (pbi && (a.surface === "fabric" || a.surface === "teams")) {
+      w.push("Since a Fabric or Teams surface is acceptable, the natural-language layer over this model is a <strong>Fabric data agent</strong> rather than a connector: it grounds on selected lakehouses, warehouses, KQL databases and semantic models, and answers by generating and running a query. It needs F2 or higher and tenant-level enablement, and it can later be published to Copilot Studio if the M365 requirement appears.");
+    }
+    if (pbi && a.infra && a.infra !== "fabric") {
+      w.push("<strong>You have not named a Fabric or Premium capacity, and every route on this branch needs one.</strong> Settle who owns it and which workspace sits on it before design, because the capacity is also the thing the cost lands on.");
+    }
+
+    // ---- the federated connector ----
+    if (route === "federated") {
+      w.push("<strong>Confirm the connector exists for this source, and that an admin will enable it.</strong> Federated connectors are Microsoft-published or partner-published and Microsoft-approved, and an admin turns them on per tenant in the Microsoft 365 admin center — with staged rollout to Entra groups if you want a pilot first. Partner connectors need explicit approval before they can be enabled at all.");
+      w.push("<strong>It is read-only, and it reaches four experiences, not every M365 surface.</strong> M365 Copilot Chat, Copilot in Excel, the Researcher agent and Cowork. If the answer has to appear somewhere else, or has to write anything, this is not the route.");
+      w.push("<strong>Every user authenticates individually, and that is a rollout task rather than a footnote.</strong> Each person connects the source from Copilot Chat settings or the Researcher sources menu and consents with their own credentials — so adoption is per head, and a user who has not connected simply gets no answer rather than an error you can monitor centrally.");
+      w.push("<strong>The upside is the one this page has been arguing for all along:</strong> nothing is copied into M365, the source enforces its own permissions, and calls can be audited in Microsoft Purview. For vendor-licensed content that is the entitlement story a redistribution clause actually permits — but read the licence anyway, because per-seat counting is now per connected user rather than per Entra group.");
+      w.push("Tool availability is decided by the publisher's MCP server, and Copilot selects among those tools at runtime. Review the tool list the same way you would a ready-made MCP server: what it can reach is what Copilot can reach.");
+    }
+    if (a.src === "fedready" && route !== "federated" && !index) {
+      w.push("A federated Copilot connector exists for this source. It did not win here, but check it before building the invocation layer yourself — it is configuration rather than code, and it reaches M365 Copilot chat without an agent wrapped around it.");
+    }
+    if (a.src === "fedready" && index) {
+      w.push("<strong>This source has both kinds of gallery connector, and they are not interchangeable.</strong> The synced one indexes at org level and grounds every M365 surface; the federated one indexes nothing and each user connects it themselves. You have landed on synced because the content is owned and group-shaped — but if the licence, the freshness or the deletion SLA changes, the federated one is the answer that does not need a rebuild.");
+    }
+
+    // ---- Hadoop / CDP ----
+    if (a.src === "hadoop" && (pbi || index)) {
+      w.push("<strong>Power BI connects to query engines, never to a cluster in the abstract</strong>, and the engine decides the mode. Impala through a CDW virtual warehouse is the recommended path and supports both Import and DirectQuery. Hive on Tez is batch, so it is Import-only in practice. Raw HDFS files over WebHDFS have no predicate pushdown and are not viable at volume. HBase through Phoenix or a Hive external table is Import-only. Iceberg can go through Impala for DirectQuery, or through a OneLake shortcut for Direct Lake — but only where the storage is cloud object storage, not local HDFS.");
+      w.push("<strong>Authentication is what usually decides it.</strong> A Kerberized CDP cluster needs the on-premises data gateway plus Kerberos SSO through constrained delegation for per-user identity to reach Impala. Knox with LDAP over HTTPS is simpler but breaks per-user filtering unless Ranger policies are applied through a service-account proxy — at which point every caller is one identity and row-level enforcement is gone.");
+      w.push("<strong>Settle Ranger enforcement versus Power BI row-level security before design, not after.</strong> They are two enforcement engines over the same rows, and deciding late means either duplicating the policy in DAX or discovering that the gateway flattened every user into a proxy account.");
+    }
+
+    if (live && (a.own === "vendor" || a.own === "rider")) {
+      w.push("<strong>Model query volume at 5–10× human usage.</strong> The model decides how many calls to make, and one question about fifteen counterparties is fifteen metered vendor lookups. Put a per-user daily budget in the action itself and log call volume from day one.");
+      w.push("If you reach for a cache to control that volume, read the retention clause first — caching may be the thing the live call was avoiding. A short TTL agreed explicitly with the vendor is the usual middle ground.");
+    }
+    if (live && a.reach === "mixed") {
+      w.push("Not everyone is Copilot licensed. Confirm which surfaces your unlicensed users can actually reach before assuming the answer is available to them.");
+    }
+    if ((route === "action" || route === "mcp" || route === "mcpready") && a.surface === "m365") {
+      w.push("<strong>An action reaches M365 Copilot chat only from inside an agent you build and publish.</strong> It is not picked up the way indexed content is — a declarative or Copilot Studio agent has to host it, and users have to find that agent. If a federated connector exists for this source, it gets to the same place as configuration.");
+    }
+    if (a.surface === "app" && route !== "foundry") {
+      w.push("The answer has to appear in your own application, and this route does not put it there by itself. Either embed a Copilot Studio agent in the app, or call the same source directly from the app — and if the app is the real deliverable, price that against Foundry before committing.");
+    }
+    if (route === "mcpready") {
+      w.push("<strong>You are adopting somebody else’s tool surface, not just their transport.</strong> Read the tool list before you connect it: an MCP server that exposes a write or a delete alongside the read you wanted has handed Copilot that capability too, and the model decides when to use it.");
+      w.push("<strong>Check whose identity it acts as.</strong> A server holding one service credential flattens every caller into that identity, and the per-user trimming the rest of this page is about disappears — everyone sees whatever the service account can see. Confirm it passes the caller’s identity through, or treat its whole reach as granted to every user you connect.");
+      w.push("<strong>Decide who may publish an update, and how you would know.</strong> A ready-made server is a supply chain: its release cadence is not yours, and a tool added in a later version arrives without a project behind it. Pin a version if the publisher supports it, and put its changelog somewhere a person actually reads.");
+      w.push("Ask for its audit trail before adopting it rather than after. A server that logs calls to its own console and nothing to yours cannot answer “who asked for that record, and when” — which is a question this customer will be asked eventually.");
     }
     if ((route === "agent" || route === "push") && a.reuse === "one") {
       w.push("For a single source, weeks of engineering never amortises. Push hard on whether a gallery connector or a small action would do before committing.");
     }
     if ((route === "agent" || route === "push") && a.reuse === "many") {
       w.push("Build the shared engine before the second connector, not after the third. The marginal source should cost a class and a config file, not another copy of the program.");
-    }
-    if (route === "mcpready") {
-      w.push("<strong>You are adopting somebody else\u2019s tool surface, not just their transport.</strong> Read the tool list before you connect it: an MCP server that exposes a write or a delete alongside the read you wanted has handed Copilot that capability too, and the model decides when to use it.");
-      w.push("<strong>Check whose identity it acts as.</strong> A server holding one service credential flattens every caller into that identity, and the per-user trimming the rest of this page is about disappears \u2014 everyone sees whatever the service account can see. Confirm it passes the caller\u2019s identity through, or treat its whole reach as granted to every user you connect.");
-      w.push("<strong>Decide who may publish an update, and how you would know.</strong> A ready-made server is a supply chain: its release cadence is not yours, and a tool added in a later version arrives without a project behind it. Pin a version if the publisher supports it, and put its changelog somewhere a person actually reads.");
-      w.push("Ask for its audit trail before adopting it rather than after. A server that logs calls to its own console and nothing to yours cannot answer \u201cwho asked for that record, and when\u201d \u2014 which is a question this customer will be asked eventually.");
-    }
-
-    if ((route === "action" || route === "mcp" || route === "mcpready") && (a.own === "vendor" || a.own === "rider")) {
-      w.push("<strong>Model query volume at 5–10× human usage.</strong> The model decides how many calls to make, and one question about fifteen counterparties is fifteen metered vendor lookups. Put a per-user daily budget in the action itself and log call volume from day one.");
-      w.push("If you reach for a cache to control that volume, read the retention clause first — caching may be the thing the live call was avoiding. A short TTL agreed explicitly with the vendor is the usual middle ground.");
-    }
-    if ((route === "action" || route === "mcp" || route === "mcpready") && a.reach === "mixed") {
-      w.push("Not everyone is Copilot licensed. Confirm which surfaces your unlicensed users can actually reach before assuming the action is available to them.");
     }
     if (route === "foundry" && a.reuse !== "many") {
       w.push("<strong>Foundry is months, and then headcount.</strong> For a single use case, check whether Copilot Studio published to an external channel clears the bar first — it usually does, unless the constraint was network isolation.");
