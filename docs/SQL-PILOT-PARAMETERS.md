@@ -24,7 +24,7 @@ agent crawled; the difference is everything around the write.
 | | **Agent-hosted** | **Direct push** |
 |---|---|---|
 | Needs a Windows host | **Yes** — runs the Graph connector agent | No — anywhere with outbound HTTPS |
-| Deletes removed records | **Yes**, on the next incremental crawl | **Never** — items stay until removed by hand |
+| Deletes removed records | **Detected for you**, on the next crawl | **Not detected** — the API can delete an item, but only when your own code calls it |
 | Scheduling | The admin centre runs it | You own the timer |
 | Health visible in the admin centre | **Yes** | No — only in your own logs |
 | Change detection | The agent hashes and skips unchanged rows | You send everything, or build your own |
@@ -102,7 +102,7 @@ Skip this section if 0.1 and 0.2 pointed at agent-hosted.
 
 **0.1 decides the architecture, not the schedule.** "How fast must a deleted
 record disappear" sounds operational and is structural: direct push never
-deletes at all, and the agent deletes only on its next incremental crawl. A
+detects deletions at all, and the agent detects them only on its next crawl. A
 same-day answer forces the agent-hosted path even where there is no host to run
 it on — in which case the SLA, not the design, is what has to change.
 

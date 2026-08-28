@@ -632,7 +632,7 @@
     <p class="lede">Your surface matrix, reconstructed and extended with the layer it doesn't cover: how data actually reaches those surfaces, what each path costs to build and to run, and why data you own and data you licence take different routes.</p>
     <div class="meta">
       <span>Rows 1&ndash;12 reconstructed from source</span>
-      <span>Fabric rows from the components briefing</span>
+      <span>Fabric &amp; connector claims re-verified 2026-08-28</span>
       <span>Extended rows &amp; tables marked</span>
       <span>Verify against current docs</span>
     </div>
@@ -657,7 +657,7 @@
 
     <figure>
       <div class="figbox">
-        <svg viewBox="0 0 1554 1000" role="img" aria-label="Decision tree for routing a Copilot question. Gate one: do the askers hold M365 licences — if not, Azure AI Foundry. Gate two: who owns the data. Owned data passes a content-and-group-access gate and then a freshness-and-deletion-SLA gate before being indexed by a synced Copilot connector. Data that is row-level secured or computed, and that models cleanly, goes to a Power BI semantic model, whose storage mode — Direct Lake, Import or DirectQuery — is picked by OneLake residency and by whether a second copy is permitted. Vendor-licensed data goes to a live tool call unless a signed AI rider permits indexing. The live-call branch offers four leaves: a federated Copilot connector, which is an MCP server Microsoft fronts and the only no-copy path that reaches Microsoft 365 Copilot chat; an API action; an MCP server you build; and a ready-made MCP server somebody else publishes. Azure AI Foundry is the escape hatch, forced by askers outside the tenant, network isolation, a model that must be pinned and validated, or retrieval you control.">
+        <svg viewBox="0 0 1554 1030" role="img" aria-label="Decision tree for routing a Copilot question. Gate one: do the askers hold M365 licences — if not, Azure AI Foundry. Gate two: who owns the data. Owned data passes a content-and-group-access gate and then a freshness-and-deletion-SLA gate before being indexed by a synced Copilot connector. Data that is row-level secured or computed, and that models cleanly, goes to a Power BI semantic model, whose storage mode — Direct Lake, Import or DirectQuery — is picked by OneLake residency and by whether a second copy is permitted. Vendor-licensed data goes to a live tool call unless a signed AI rider permits indexing. The live-call branch offers four leaves: a federated Copilot connector, which is an MCP server Microsoft fronts and the only no-copy path that reaches Microsoft 365 Copilot chat; an API action; an MCP server you build; and a ready-made MCP server somebody else publishes. Azure AI Foundry is the escape hatch, forced by askers outside the tenant, network isolation, a model that must be pinned and validated, or retrieval you control.">
           <defs>
             <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" class="head"/>
@@ -718,7 +718,7 @@
           <rect class="n-gate" x="60" y="400" width="280" height="76" rx="3"/>
           <text class="t-body" x="200" y="427" text-anchor="middle">Can you live with crawl-interval</text>
           <text class="t-body" x="200" y="446" text-anchor="middle">freshness and crawl-bound deletion?</text>
-          <text class="t-cost" x="200" y="464" text-anchor="middle">a direct push never deletes at all</text>
+          <text class="t-cost" x="200" y="464" text-anchor="middle">a direct push deletes only when you call it</text>
 
           <path class="edge" d="M140,476 L140,598" marker-end="url(#ar)"/>
           <text class="t-edge" x="150" y="530">yes</text>
@@ -740,11 +740,11 @@
           <!-- OUTCOME BANDS -->
           <rect class="n-index" x="60" y="600" width="388" height="52" rx="3"/>
           <text class="t-accent" x="254" y="624" text-anchor="middle">INDEX IT</text>
-          <text class="t-cost" x="254" y="641" text-anchor="middle">synced connector &#183; a copy in the Graph index, M365-wide</text>
+          <text class="t-cost" x="254" y="641" text-anchor="middle">synced Copilot connector &#183; a copy in the M365 index</text>
 
           <rect class="n-model" x="478" y="600" width="436" height="52" rx="3"/>
           <text class="t-title" x="696" y="624" text-anchor="middle">MODEL IT</text>
-          <text class="t-cost" x="696" y="641" text-anchor="middle">Fabric plane &#183; computed per user &#183; RLS at query time</text>
+          <text class="t-cost" x="696" y="641" text-anchor="middle">Fabric plane &#183; computed per user &#183; residency picks the mode</text>
 
           <rect class="n-call" x="944" y="600" width="550" height="52" rx="3"/>
           <text class="t-title" x="1219" y="624" text-anchor="middle">CALL IT</text>
@@ -781,16 +781,16 @@
           <text class="t-title" x="386" y="700" text-anchor="middle">Custom: push</text>
           <text class="t-leaf" x="386" y="719" text-anchor="middle">build: weeks</text>
           <text class="t-leaf" x="386" y="734" text-anchor="middle">runs anywhere</text>
-          <text class="t-leafr" x="386" y="749" text-anchor="middle">never deletes</text>
+          <text class="t-leafr" x="386" y="749" text-anchor="middle">you must delete</text>
           <text class="t-leaf" x="386" y="764" text-anchor="middle">org-level ACLs</text>
 
           <!-- MODEL leaves -->
           <rect class="n-box" x="478" y="678" width="140" height="104" rx="3"/>
           <text class="t-title" x="548" y="700" text-anchor="middle">Direct Lake</text>
           <text class="t-leaf" x="548" y="719" text-anchor="middle">needs it in OneLake</text>
-          <text class="t-leaf" x="548" y="734" text-anchor="middle">no copy, no refresh</text>
-          <text class="t-leaf" x="548" y="749" text-anchor="middle">needs F2+ capacity</text>
-          <text class="t-leaf" x="548" y="764" text-anchor="middle">import-class speed</text>
+          <text class="t-leaf" x="548" y="734" text-anchor="middle">no copy; framing only</text>
+          <text class="t-leaf" x="548" y="749" text-anchor="middle">F2+ or P1+, guardrails</text>
+          <text class="t-leafr" x="548" y="764" text-anchor="middle">SQL-endpoint RLS off</text>
 
           <rect class="n-box" x="626" y="678" width="140" height="104" rx="3"/>
           <text class="t-title" x="696" y="700" text-anchor="middle">Import</text>
@@ -837,19 +837,21 @@
 
           <!-- how the model gets asked -->
           <path class="tick" d="M696,782 L696,806"/>
-          <rect class="n-gate" x="478" y="808" width="436" height="76" rx="3"/>
+          <rect class="n-gate" x="478" y="808" width="436" height="92" rx="3"/>
           <text class="t-title" x="696" y="830" text-anchor="middle">Asked in words by</text>
-          <text class="t-cost" x="696" y="849" text-anchor="middle">Power BI Copilot &amp; Q&amp;A &#183; Fabric data agent &#183; both need F2+</text>
+          <text class="t-cost" x="696" y="849" text-anchor="middle">Power BI Copilot &#183; Fabric data agent &#183; both need F2+ or P1+</text>
           <text class="t-cost" x="696" y="863" text-anchor="middle">F64 is the separate threshold that drops viewer Pro licences</text>
-          <text class="t-risk" x="696" y="877" text-anchor="middle">neither reaches M365 chat alone &#8212; Copilot Studio is the hop</text>
+          <text class="t-risk" x="696" y="877" text-anchor="middle">Q&amp;A retires December 2026 &#8212; Copilot is the replacement</text>
+          <text class="t-risk" x="696" y="891" text-anchor="middle">M365 chat: the Agent Store (preview), or via Copilot Studio</text>
 
-          <text class="t-cost" x="777" y="916" text-anchor="middle">Build effort assumes the source system and its API already exist. If they do not, that is the real project.</text>
-          <text class="t-cost" x="777" y="934" text-anchor="middle">Only the agent-hosted connector deletes. Only DirectQuery and the CALL leaves store nothing. Only the federated connector does both &#8212; no copy, and M365 chat reach.</text>
-          <text class="t-cost" x="777" y="952" text-anchor="middle">Storage mode is not a preference: OneLake residency and your no-copy rule pick it, and a shortcut registers data in OneLake without moving it.</text>
-          <text class="t-risk" x="777" y="970" text-anchor="middle">A federated connector is read-only and reaches Copilot Chat, Excel, Researcher and Cowork &#8212; not every surface, and never a write. Each user authenticates as themselves.</text>
+          <text class="t-cost" x="777" y="928" text-anchor="middle">Build effort assumes the source system and its API already exist. If they do not, that is the real project.</text>
+          <text class="t-cost" x="777" y="946" text-anchor="middle">Only a crawl detects deletions on its own; a direct push removes an item only when your code calls the API. Only DirectQuery and the CALL leaves store nothing at all.</text>
+          <text class="t-cost" x="777" y="964" text-anchor="middle">Storage mode is not a preference: OneLake residency and your no-copy rule pick it. A shortcut registers data in OneLake without moving it &#8212; but Direct Lake cannot use any gateway, so nothing behind one qualifies.</text>
+          <text class="t-risk" x="777" y="982" text-anchor="middle">Direct Lake on OneLake does not apply SQL-endpoint row-level or column security, and its own RLS is recommended with a fixed identity. Where the row rule lives at the source, prove it survives.</text>
+          <text class="t-risk" x="777" y="1000" text-anchor="middle">A federated connector is read-only and reaches Copilot Chat, Excel, Researcher and Cowork &#8212; not every surface, and never a write. Each user authenticates as themselves.</text>
         </svg>
       </div>
-      <figcaption><strong>Figure 1.</strong> Ownership routes the question before cost does, and each branch then has one decision it cannot make on preference. The index branch has the SLA gate &mdash; crawl-interval freshness and crawl-bound deletion are the two promises no index path improves on. The model branch has residency: OneLake residency and your no-copy rule pick the storage mode, not taste. The call branch has reach &mdash; only the federated leaf lands in M365 Copilot chat, and only in four of its surfaces. The dashed red path is the only route that puts licensed vendor content into an index; it exists, but it needs a rider your market-data team has to negotiate, and it re-imports every entitlement obligation into a system that counts seats by Entra group.</figcaption>
+      <figcaption><strong>Figure 1.</strong> Ownership routes the question before cost does, and each branch then has one decision it cannot make on preference. The index branch has the SLA gate &mdash; crawl-interval freshness and crawl-bound deletion are the two promises no index path improves on. The model branch has residency: OneLake residency and your no-copy rule pick the storage mode, not taste &mdash; and the mode then decides whether your row-level security survives, which is why Direct Lake carries a warning rather than a recommendation. The call branch has reach &mdash; only the federated leaf lands in M365 Copilot chat, and only in four of its surfaces. The dashed red path is the only route that puts licensed vendor content into an index; it exists, but it needs a rider your market-data team has to negotiate, and it re-imports every entitlement obligation into a system that counts seats by Entra group.</figcaption>
     </figure>
   </section>
 
@@ -880,7 +882,7 @@
           <label><input type="radio" name="surface" value="teams"><span>Teams, or a purpose-built agent, is acceptable</span></label>
           <label><input type="radio" name="surface" value="app"><span>Our own application</span></label>
         </div>
-        <p class="qnote">The question that separates a Copilot connector from a Fabric data agent, and the one most often skipped. Neither Power BI Copilot nor a Fabric data agent puts anything into M365 Copilot chat on its own &mdash; reaching it from the Fabric side means publishing the data agent as a tool to a Copilot Studio agent. Choosing Fabric to avoid a connector approval leaves the M365 grounding requirement unmet.</p>
+        <p class="qnote">The question that separates a Copilot connector from a Fabric data agent, and the one most often skipped. Neither Power BI Copilot nor a Fabric data agent grounds M365 Copilot chat the way indexed content does &mdash; reaching it from the Fabric side means publishing the data agent, either to the M365 Agent Store (preview) or as a tool to a Copilot Studio agent, and in both cases a person invokes it by name. Choosing Fabric to avoid a connector approval leaves the M365 grounding requirement unmet.</p>
       </fieldset>
 
       <fieldset class="q" aria-labelledby="qh3">
@@ -932,7 +934,7 @@
           <label><input type="radio" name="onelake" value="copy"><span>Only by an explicit pipeline or dataflow copy, on a schedule</span></label>
           <label><input type="radio" name="onelake" value="never"><span>No &mdash; it cannot leave its current store at all</span></label>
         </div>
-        <p class="qnote">Import is disqualified where no second copy is permitted, because it makes one. Direct Lake is disqualified where the data cannot be in OneLake, because that is where it reads from. What remains is DirectQuery &mdash; or a shortcut, which registers the data in OneLake without moving it and is the usual way out of that corner.</p>
+        <p class="qnote">Import is disqualified where no second copy is permitted, because it makes one. Direct Lake is disqualified where the data cannot be in OneLake, because that is where it reads from. What remains is DirectQuery &mdash; or a shortcut, which registers the data in OneLake without moving it and is the usual way out of that corner. Two constraints narrow it further: Direct Lake supports cloud connections only and <strong>cannot use a gateway of any kind</strong>, so nothing on-premises qualifies however it is shortcut; and the model workspace must sit in the same region as the data source workspace.</p>
       </fieldset>
 
       <fieldset class="q" aria-labelledby="qh8">
@@ -989,7 +991,7 @@
           <label><input type="radio" name="src" value="mcpready"><span>A ready-made MCP server already exists for it</span></label>
           <label><input type="radio" name="src" value="neither"><span>Neither &mdash; no API, no queryable interface</span></label>
         </div>
-        <p class="qnote">The gallery now holds two kinds of connector and they behave oppositely. A <strong>synced</strong> connector crawls and indexes at org level under admin credentials. A <strong>federated</strong> connector indexes nothing: it fetches over MCP at question time, each user authenticating as themselves, and it is read-only. Several market-data vendors publish federated connectors, which is the first configuration answer this page has ever been able to offer for licensed content.</p>
+        <p class="qnote">The gallery now holds two kinds of connector and they behave oppositely. A <strong>synced</strong> connector crawls and indexes at org level under admin credentials. A <strong>federated</strong> connector indexes nothing: it fetches over MCP at question time, each user authenticating as themselves, and it is read-only. Note what a synced connector does <em>not</em> do for a partner-built or custom source: Microsoft has no visibility into deletions there, and its first sight of any change is your own call to the Graph API. Several market-data vendors publish federated connectors, which is the first configuration answer this page has ever been able to offer for licensed content.</p>
       </fieldset>
 
       <fieldset class="q" aria-labelledby="qh13">
@@ -1071,7 +1073,7 @@
     <div class="section-head">
       <p class="eyebrow">Table 1</p>
       <h2>Surfaces &mdash; where the person is standing</h2>
-      <p class="lede">Rows 1&ndash;12 are your original matrix. The block below the rule is the extension: the questions that decide whether a surface can carry regulated or licensed data at all. <strong>Azure AI Foundry</strong> is added because "the askers aren't M365 users" is a real branch and nothing in the original grid answers it; <strong>Power BI Copilot &amp; Q&amp;A</strong> because "the answer is a number computed per user" is another; and <strong>Fabric data agent</strong> because it is the surface people reach for when the answer is analytical and then discover it does not land where they needed it. The last two rows are the ones that catch that out: which surfaces need a Fabric capacity, and which of them actually put an answer into M365 Copilot chat.</p>
+      <p class="lede">Rows 1&ndash;12 are your original matrix. The block below the rule is the extension: the questions that decide whether a surface can carry regulated or licensed data at all. <strong>Azure AI Foundry</strong> is added because "the askers aren't M365 users" is a real branch and nothing in the original grid answers it; <strong>Power BI Copilot</strong> because "the answer is a number computed per user" is another; and <strong>Fabric data agent</strong> because it is the surface people reach for when the answer is analytical and then discover it does not land where they needed it. The last two rows are the ones that catch that out: which surfaces need a Fabric capacity, and which of them actually put an answer into M365 Copilot chat.</p>
     </div>
 
     <div class="scroller">
@@ -1088,7 +1090,7 @@
             <th scope="col">Researcher<br>&amp; Analyst</th>
             <th scope="col">Frontier<br>Cowork</th>
             <th scope="col">Frontier<br>Workflows</th>
-            <th scope="col" class="new">Power BI<br>Copilot &amp; Q&amp;A</th>
+            <th scope="col" class="new">Power BI<br>Copilot<sup class="fn">7</sup></th>
             <th scope="col" class="new">Fabric<br>data agent</th>
             <th scope="col" class="new">Azure AI<br>Foundry</th>
           </tr>
@@ -1368,7 +1370,7 @@
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
             <td><span class="mark m-none">&ndash;</span></td>
-            <td><span class="mark m-partial">&#9686;</span><div class="val">only via Copilot Studio</div></td>
+            <td><span class="mark m-partial">&#9686;</span><div class="val">Agent Store (preview), or Copilot Studio</div></td>
             <td><span class="mark m-none">&ndash;</span></td>
           </tr>
           <tr class="new">
@@ -1436,7 +1438,7 @@
         <ul>
           <li><strong>How the data reaches the model:</strong> pre-indexed retrieval (a synced connector, gallery or custom), a <em>semantic model</em>, or live invocation. This is the real fork, and it is what Figure&nbsp;1 turns on. A semantic model is a third answer rather than a flavour of the other two: it can hold a copy like an index does, but it computes per user and enforces row-level security at query time like a live call does.</li>
           <li><strong>Which custom connector</strong>, once you have chosen to index: <em>agent-hosted</em> or <em>direct push</em>. Not a preference &mdash; your deletion SLA and your hosting decide it. Only the agent deletes, and only the push runs without a Windows host.</li>
-          <li><strong>Which storage mode</strong>, once you have chosen a semantic model: <em>Import</em>, <em>DirectQuery</em> or <em>Direct Lake</em>. Also not a preference. Import copies rows into the model&rsquo;s own store, so it dies wherever a second copy is forbidden. Direct Lake reads Delta Parquet out of OneLake, so it dies wherever the data cannot be resident there. DirectQuery stores nothing and survives both, at the price of latency and source load that scale with concurrency. A composite model mixes modes per table, so one table forcing a mode does not have to force the whole model.</li>
+          <li><strong>Which storage mode</strong>, once you have chosen a semantic model: <em>Import</em>, <em>DirectQuery</em> or <em>Direct Lake</em>. Also not a preference. Import copies rows into the model&rsquo;s own store, so it dies wherever a second copy is forbidden. Direct Lake reads Delta Parquet out of OneLake, so it dies wherever the data cannot be resident there. DirectQuery stores nothing and survives both, at the price of latency and source load that scale with concurrency. A composite model mixes modes per table, so one table forcing a mode does not have to force the whole model. <strong>Direct Lake is itself two modes</strong> &mdash; on OneLake, which never falls back but does not apply the SQL endpoint&rsquo;s row or column security, and on SQL, which honours that security by falling back to DirectQuery.</li>
           <li><strong>How a live tool is exposed</strong>, once you have chosen invocation: a <em>federated Copilot connector</em>, an API action, an MCP server you build, or a ready-made MCP server somebody else publishes. Same job; different wire protocol, different client reach, and in the last case somebody else&rsquo;s code between Copilot and your data. The federated connector is the interesting one, because it is an MCP server that Microsoft fronts: it collapses the old trade-off by reaching M365 Copilot chat with nothing copied and nothing wired per surface &mdash; at the cost of being read-only, limited to four experiences, and connected by each user individually.</li>
           <li><strong>Where the whole thing runs:</strong> M365 surfaces, or an application you host. <strong>Foundry sits on this axis, not the other two</strong> &mdash; inside it you would still choose retrieval versus invocation, with your own index and your own tools. It is here because &ldquo;the askers are not M365 users&rdquo; is a real branch, not because it is a peer of a connector.</li>
         </ul>
@@ -1505,7 +1507,7 @@
             <td class="val pos">the source &mdash; nothing moves</td>
             <td class="val neg">VertiPaq, in the capacity region</td>
             <td class="val pos">the source &mdash; nothing moves</td>
-            <td class="val">OneLake, as Delta Parquet</td>
+            <td class="val">OneLake, as Delta Parquet &mdash; never behind a gateway</td>
             <td class="val">wherever its grounding items sit</td>
             <td class="val pos">the source</td>
             <td class="val pos">the source</td>
@@ -1550,7 +1552,7 @@
             <td class="val pos">live</td>
             <td class="val neg">refresh schedule</td>
             <td class="val pos">live</td>
-            <td class="val">current OneLake state &mdash; so, the shortcut or mirror latency</td>
+            <td class="val">current OneLake state &mdash; the shortcut or mirror latency. Framing, not a data refresh</td>
             <td class="val">whatever its grounding items are</td>
             <td class="val pos">live</td>
             <td class="val pos">live</td>
@@ -1560,8 +1562,8 @@
           <tr class="new">
             <th class="rowhead" scope="row">Deletion latency<br><span class="note">removed record stops appearing</span></th>
             <td class="val">next crawl</td>
-            <td class="val neg">next incremental crawl</td>
-            <td class="val neg">never &mdash; a direct push does not delete</td>
+            <td class="val">next crawl &mdash; Microsoft advises one at least every 14 days</td>
+            <td class="val neg">only when your own code calls the delete API</td>
             <td class="val pos">immediate &mdash; nothing was stored</td>
             <td class="val">next refresh</td>
             <td class="val pos">immediate &mdash; the source is the model</td>
@@ -1580,7 +1582,7 @@
             <td class="val pos">none &mdash; admin approval and per-user consent</td>
             <td class="val">Fabric or Premium capacity</td>
             <td class="val">capacity, plus a source that can take the query load</td>
-            <td class="val">Fabric capacity, F2+, and data in OneLake</td>
+            <td class="val">F2+ or P1+, data in OneLake, same region, and <strong>no gateway</strong></td>
             <td class="val">Fabric capacity, F2+, tenant-enabled</td>
             <td class="val">somewhere to host the action shim</td>
             <td class="val">a host for the server</td>
@@ -1642,7 +1644,7 @@
             <td class="val neg">per-user adoption &mdash; a user who never connects it silently gets nothing</td>
             <td class="val neg">a second store to classify, label and audit</td>
             <td class="val neg">source load that scales with concurrency</td>
-            <td class="val">memory eviction under capacity pressure</td>
+            <td class="val">Delta maintenance &mdash; blow the guardrails and framing fails, and the model stops answering</td>
             <td class="val neg">capacity units burned by enthusiastic questioning</td>
             <td class="val neg">LLM fan-out multiplies vendor queries</td>
             <td class="val neg">you own auth, audit and rate limiting</td>
@@ -1659,7 +1661,7 @@
             <td class="val pos">the source, live, as the user &mdash; their own OAuth</td>
             <td class="val pos">Power BI RLS, live, as the user</td>
             <td class="val pos">Power BI RLS, live &mdash; and the source, if SSO reaches it</td>
-            <td class="val pos">Power BI RLS, live, as the user</td>
+            <td class="val neg">model RLS only &mdash; on Direct Lake on OneLake the SQL endpoint&rsquo;s row and column security are <strong>not</strong> applied, and a fixed identity is recommended</td>
             <td class="val">Fabric item permissions and the model&rsquo;s RLS</td>
             <td class="val pos">the source, live, as the user</td>
             <td class="val">the server &mdash; you build it</td>
@@ -1719,9 +1721,9 @@
             <td class="val neg">&ndash;&nbsp; loses the model</td>
             <td class="val neg">&ndash;&nbsp; loses the model</td>
             <td class="val pos">&#9679;&nbsp; the source keeps enforcing</td>
-            <td class="val pos">&#9679;&nbsp; RLS per user, live</td>
-            <td class="val pos">&#9679;&nbsp; RLS per user, and no copy</td>
-            <td class="val pos">&#9679;&nbsp; RLS per user, live</td>
+            <td class="val">&#9686;&nbsp; model RLS &mdash; the source&rsquo;s own rules must be duplicated in it</td>
+            <td class="val pos">&#9679;&nbsp; RLS per user, no copy, and the source still enforces</td>
+            <td class="val neg">&#9686;&nbsp; model RLS only &mdash; the SQL endpoint&rsquo;s is not applied</td>
             <td class="val">&#9686;&nbsp; inherits the model&rsquo;s RLS</td>
             <td class="val pos">&#9679;&nbsp; source enforces</td>
             <td class="val">&#9686;&nbsp; if you build it</td>
@@ -1778,7 +1780,7 @@
         <ul>
           <li><strong>Synced connectors</strong> crawl external content into the semantic index, at organisation level, under admin credentials. Gallery, custom agent-hosted, or direct push.</li>
           <li><strong>Federated connectors</strong> index nothing. They fetch over MCP at question time, each user authenticating as themselves, read-only, auditable in Purview.</li>
-          <li><strong>Graph Connector Agent</strong> is the on-premises crawler for sources behind the firewall &mdash; a Windows host, and the only index model that deletes.</li>
+          <li><strong>Graph Connector Agent</strong> is the on-premises crawler for sources behind the firewall &mdash; a Windows host, and the only index model where deletions are detected for you rather than pushed by your own code.</li>
           <li><strong>Governed by</strong> the Microsoft 365 admin center and the connectors API. No Fabric capacity, no OneLake footprint, no F SKU.</li>
         </ul>
         <p class="verdict"><strong>What it buys you:</strong> the answer appears in M365 Copilot chat next to every other connected source, with nothing wired per surface.</p>
@@ -1788,19 +1790,19 @@
         <p class="tag">Fabric plane</p>
         <h3>Delegation &mdash; a query capability an agent calls</h3>
         <ul>
-          <li><strong>Semantic models</strong> in one of three storage modes, and <strong>Fabric data agents</strong> grounded on lakehouses, warehouses, KQL databases and models.</li>
+          <li><strong>Semantic models</strong> in one of three storage modes, and <strong>Fabric data agents</strong> grounded on lakehouses, warehouses, KQL databases, mirrored databases and models &mdash; publishable to the M365 Agent Store or to Copilot Studio.</li>
           <li><strong>Fabric MCP servers</strong> &mdash; the local one is generally available; the remote Core, Data Warehouse and data-agent-as-MCP servers are previews. Check status before designing on them.</li>
           <li><strong>Governed by</strong> Fabric tenant settings and capacity admin, funded by the F SKU. Fabric REST APIs are a separate surface from Microsoft Graph.</li>
           <li><strong>Cross-geo caution:</strong> Fabric MCP needs F2+ or P1+ with Fabric enabled, plus cross-geo processing and storage for AI switched on in tenant settings &mdash; and responses returned to an MCP client may leave Fabric&rsquo;s compliance boundary and region, handled thereafter under the client&rsquo;s own policies.</li>
         </ul>
-        <p class="verdict"><strong>What it buys you:</strong> an answer computed over governed data, per user &mdash; but inside Fabric, until you publish it through Copilot Studio.</p>
+        <p class="verdict"><strong>What it buys you:</strong> an answer computed over governed data, per user &mdash; but inside Fabric, until you publish the agent outward. Note that publishing it into Microsoft 365 moves the response out of Fabric&rsquo;s compliance boundary and region, under M365&rsquo;s terms thereafter.</p>
       </div>
     </div>
 
     <div class="rule-card">
       <p class="eyebrow">The distinction worth memorising</p>
       <p class="big">Retrieval versus <em>delegation</em>.</p>
-      <p class="note">A connector pushes content into the index so Copilot retrieves it. Fabric MCP and a data agent expose a query capability an agent calls at runtime. <strong>The two are not substitutable</strong>, and the failure mode is always the same direction: a team picks Fabric to avoid a connector approval, ships it, and discovers the M365 Copilot grounding requirement was never met. Neither Copilot in Fabric nor a data agent makes anything retrievable in M365 Copilot chat on its own. A federated connector is the one mechanism that sits in both frames at once &mdash; delegation by wire, retrieval by placement &mdash; which is exactly why it is the interesting new answer for content that may not be copied.</p>
+      <p class="note">A connector pushes content into the index so Copilot retrieves it. Fabric MCP and a data agent expose a query capability an agent calls at runtime. <strong>The two are not substitutable</strong>, and the failure mode is always the same direction: a team picks Fabric to avoid a connector approval, ships it, and discovers the M365 Copilot grounding requirement was never met. Neither Copilot in Fabric nor a data agent makes anything <em>retrievable</em> in M365 Copilot chat the way indexed content is; a published data agent is something a person invokes by name, not grounding that arrives on its own. A federated connector is the one mechanism that sits in both frames at once &mdash; delegation by wire, retrieval by placement &mdash; which is exactly why it is the interesting new answer for content that may not be copied.</p>
     </div>
   </section>
 
@@ -1854,7 +1856,7 @@
     </div>
     <ol class="steps">
       <li><p><span class="q">Where is the person standing when they ask &mdash; and where must the answer appear?</span> Teams, Word or Outlook &rarr; an M365 surface, grounded by a connector. A report or a Fabric workspace &rarr; a semantic model and a data agent, which will not reach M365 chat without a Copilot Studio hop. Your public site or a call-centre desktop &rarr; Foundry or Copilot Studio; M365 Copilot is not reachable from there. An IDE or an analyst's tooling &rarr; MCP. These are two questions, not one, and answering only the first is how a connector gets built for a surface that does not read connectors.</p></li>
-      <li><p><span class="q">Is the answer content, or is it computed &mdash; and if it is computed, where may the rows sit?</span> Text that can sit still &mdash; a ticket, a case note, a policy, a measure's <em>definition</em> &mdash; index it. A number that moves, or anything that writes &mdash; call it. Indexing a computed value freezes it, and a frozen number that disagrees with the live report is a control problem, not a nuisance. Once it is a model, residency picks the storage mode for you: in OneLake &rarr; Direct Lake, a copy permitted &rarr; Import, neither &rarr; DirectQuery.</p></li>
+      <li><p><span class="q">Is the answer content, or is it computed &mdash; and if it is computed, where may the rows sit?</span> Text that can sit still &mdash; a ticket, a case note, a policy, a measure's <em>definition</em> &mdash; index it. A number that moves, or anything that writes &mdash; call it. Indexing a computed value freezes it, and a frozen number that disagrees with the live report is a control problem, not a nuisance. Once it is a model, residency picks the storage mode for you: in OneLake &rarr; Direct Lake, a copy permitted &rarr; Import, neither &rarr; DirectQuery. Then check the mode against question three, because Direct Lake on OneLake does not reproduce the source&rsquo;s own row-level security.</p></li>
       <li><p><span class="q">Who enforces access, and can they still do it afterwards?</span> If the answer is "the source system, live, per user", you cannot index it without losing the enforcement. That single question resolves RLS, MNPI, information barriers and vendor seat licensing in one move &mdash; and it no longer costs you M365 reach, because a federated connector keeps enforcement at the source and still answers in Copilot chat.</p></li>
     </ol>
   </section>
@@ -1870,6 +1872,8 @@
         <li><strong>Frontier Cowork and Frontier Workflows</strong> are early-access programme features. Names, availability and capabilities move quickly and may already differ from both the source and this page.</li>
         <li><strong>The M365-reach row, and the Fabric data agent column generally.</strong> Both are drawn from the Fabric components briefing and from current Microsoft documentation rather than from a tenant. Which experiences consume a federated connector, and whether a data agent published through Copilot Studio behaves as a declarative agent in every M365 surface, are the two cells most likely to have moved since this was written. Confirm in your own tenant before quoting either in a design.</li>
         <li><strong>&ldquo;Where the rows physically sit&rdquo; is the row that decides classification scope</strong>, and it is stated for the storage mode alone. Model definition, DAX measures, relationships, row-level security roles and lineage are persisted in the Power BI metadata store whatever mode you choose &mdash; so no column here is truly &ldquo;nothing is stored&rdquo;. If the schema itself is sensitive, that metadata is in scope too.</li>
+        <li><strong>Power BI Q&amp;A is deprecated.</strong> Microsoft has published a December 2026 retirement for the Q&amp;A experiences and directs you to Copilot for Power BI instead, so the column above is named for Copilot alone. Q&amp;A itself was free to all users on any licence; Copilot needs F2+ or P1+, so replacing one with the other is a cost change as well as a feature change.</li>
+        <li><strong>The Direct Lake security rows are the ones to re-read before you design.</strong> Direct Lake on OneLake does not apply SQL analytics endpoint row-level, object-level or column-level security, and Microsoft recommends running its own row-level security on a fixed identity connection. Direct Lake on SQL honours endpoint security but falls back to DirectQuery to do it. This page treats them as two modes because on the question it exists to answer &mdash; does enforcement survive &mdash; they behave differently.</li>
         <li><strong>No prices anywhere on this page, deliberately.</strong> I cannot verify current M365 Copilot, Copilot Studio or Azure rate cards, and invented figures in a financial-services business case are worse than none. Effort bands and cost <em>shape</em> are what's stable; get the numbers from your licensing desk.</li>
         <li><strong>Vendor licence terms are the gating item.</strong> The third-party column reflects the common shape of market-data agreements, not yours. Redistribution, derived data, caching, AI use and audit clauses need reading by your market-data licensing team, in writing, before engineering starts.</li>
       </ol>
@@ -1879,7 +1883,7 @@
   <footer>
     <p>Reconstructed from a photographed capability matrix and extended with the grounding, cost and data-provenance analysis from the surrounding architecture review.</p>
     <p>Microsoft's Copilot surface naming and capability boundaries move faster than anything else in this stack &mdash; particularly MCP support inside M365 and the line between declarative agents and Copilot Studio. Treat the tables as the shape of the decision, and confirm current boundaries before committing.</p>
-    <p class="stamp">Revision <strong>2026-08-28 &middot; r10</strong> &mdash; 17 questions, 12 routes. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
+    <p class="stamp">Revision <strong>2026-08-28 &middot; r11</strong> &mdash; 17 questions, 12 routes, claims re-verified against Microsoft docs. If this line is older than the one you were told to expect, you are looking at a cached copy: hard-reload the page.</p>
   </footer>
 
 </div>
@@ -1914,18 +1918,18 @@
     },
     agent: {
       name: "Custom synced connector — agent-hosted",
-      sub: "You write the connector and the Graph connector agent crawls it from a Windows host you run. The only index model that deletes.",
+      sub: "You write the connector and the Graph connector agent crawls it from a Windows host you run. The only index model where deletions are detected for you.",
       cost: ["build: weeks; days for the next one", "run: item quota + crawl compute", "maintenance: a host to patch, append-only schema"]
     },
     push: {
       name: "Custom synced connector — direct push",
-      sub: "You write the connector and it calls Graph itself from anywhere with outbound HTTPS. No agent, no Windows host — and no deletion.",
+      sub: "You write the connector and it calls Graph itself from anywhere with outbound HTTPS. No agent, no Windows host — and no deletion detection: the API removes an item when your code asks it to, and never otherwise.",
       cost: ["build: weeks; days for the next one", "run: item quota", "maintenance: orphaned items nothing removes"]
     },
     pbidirectlake: {
       name: "Power BI semantic model — Direct Lake",
-      sub: "The model reads Delta Parquet straight out of OneLake, transcoding column segments into capacity memory on demand. Import-class speed with no refresh cycle and no second copy: OneLake is the storage.",
-      cost: ["build: days if the model exists, weeks if not", "run: Fabric capacity, F2 or higher", "maintenance: the model, and whatever keeps OneLake current"]
+      sub: "The model reads Delta Parquet straight out of OneLake, transcoding column segments into capacity memory on demand. Import-class speed with no data refresh and no second copy: OneLake is the storage. It also carries the sharpest security caveat on this page — read the first watch-out before committing.",
+      cost: ["build: days if the model exists, weeks if not", "run: Fabric capacity F2+, or Premium P1+", "maintenance: the model, framing, and whatever keeps OneLake current"]
     },
     pbiimport: {
       name: "Power BI semantic model — Import",
@@ -2074,7 +2078,7 @@
       "The answer must be current to the minute. Nothing makes an index live — freshness on any index path is bounded by the crawl interval.");
 
     gate(a.del === "immediate", "action",
-      "A removed record must disappear immediately. No index path can promise that: a direct push never deletes at all, and a crawl deletes on its next pass at best.");
+      "A removed record must disappear immediately. No index path can promise that: a crawl detects the deletion on its next pass at best, and a direct push detects nothing at all — removal there is a call your own code has to make, on a schedule you run.");
 
     gate(a.src === "gallery", "gallery",
       "Owned, group-shaped content, and the source is already on Microsoft's synced connector list. Take the configuration answer before writing anything.");
@@ -2121,16 +2125,16 @@
     if (route === "custom") {
       if (a.del === "sameday" || a.del === "immediate") {
         route = "agent";
-        why.push("Removed records have to stop appearing on a deadline, and the agent-hosted model is the only index path that deletes at all — on its next incremental crawl.");
+        why.push("Removed records have to stop appearing on a deadline, and the agent-hosted model is the only index path where deletion is detected for you at all — on its next crawl. A direct push can still delete, but only because your own code calls the API to do it.");
       } else if (a.infra === "onprem") {
         route = "agent";
-        why.push("You have a Windows host for the connector agent, so take the agent-hosted model: it deletes on recrawl, which the direct push never does.");
+        why.push("You have a Windows host for the connector agent, so take the agent-hosted model: deletions are detected for you on the next crawl, which on a direct push is code you would have to write and run yourself.");
       } else if (a.infra === null) {
         route = "agent";
         why.push("Agent-hosted by default until the hosting question is answered — it is the fuller model, and the one that deletes.");
       } else {
         route = "push";
-        why.push("No on-prem Windows host, and no deletion deadline, so the direct push model fits: it calls Graph itself from anywhere with outbound HTTPS. It never deletes, which is the price.");
+        why.push("No on-prem Windows host, and no deletion deadline, so the direct push model fits: it calls Graph itself from anywhere with outbound HTTPS. Nothing detects deletions for you, which is the price — the delete path is yours to build.");
       }
     }
 
@@ -2144,13 +2148,13 @@
     var live = (route === "action" || route === "mcp" || route === "mcpready" || route === "federated");
 
     if (index && a.del === "sameday") {
-      w.push("<strong>Same-day deletion constrains which index model you may use.</strong> Only the agent-hosted connector deletes, and only on its next incremental crawl — so you need a soft-delete column, crawls scheduled inside the SLA, and a monitor proving they ran. Direct push cannot meet this at all.");
+      w.push("<strong>Same-day deletion constrains which index model you may use.</strong> Only a crawled connection detects deletions on its own, and only on its next crawl — so you need a soft-delete column, crawls scheduled inside the SLA, and a monitor proving they ran. Microsoft recommends crawling at least every 14 days simply to keep detection reliable, which tells you what this mechanism is built for. Direct push cannot meet a same-day SLA unless you build the delete path yourself.");
     }
     if (index && a.del === "crawl" && a.infra !== "onprem") {
-      w.push("<strong>Without an on-prem host you are on the direct push model, which never deletes.</strong> Excluded rows leave their items in the index indefinitely. Budget for periodic reconciliation and someone to run the deletes it finds.");
+      w.push("<strong>Without an on-prem host you are on the direct push model, and nothing detects deletions for you.</strong> Excluded rows keep their items in the index until your own code calls the delete API. Budget for periodic reconciliation and someone to run the deletes it finds.");
     }
     if (index && a.del === "never") {
-      w.push("“Never deleted” is worth re-checking with the record owner. Retention schedules, erasure requests and legal holds all delete things a system diagram calls permanent.");
+      w.push("“Never deleted” is worth re-checking with the record owner. Retention schedules, erasure requests and legal holds all delete things a system diagram calls permanent. Note the platform backstop too: where connection failures stop delete detection working reliably, items not rediscovered by a crawl for 28 days are removed from the index automatically — a compliance safety net, not a mechanism you may design against.");
     }
     if (index && a.fresh === "hour") {
       w.push("<strong>Hourly freshness is tight for a crawl.</strong> It needs a watermark column, incremental crawls, and an alert when the watermark chain breaks — a silent break looks exactly like “nothing changed today”.");
@@ -2171,7 +2175,7 @@
       w.push("<strong>The agent-hosted model needs a Windows host and you have said there is none.</strong> Your deletion SLA is what forced it — so either find a host, or renegotiate the SLA, because the direct push cannot meet it at any price.");
     }
     if (route === "push") {
-      w.push("<strong>A direct push never deletes.</strong> Every record that leaves scope keeps its item in the index until somebody removes it by hand. Budget for periodic reconciliation and name who runs it, before the first crawl rather than after the first audit.");
+      w.push("<strong>Nothing deletes for you on a direct push.</strong> Microsoft has no visibility into what disappeared from your source — its first sight of any change is the moment your code calls the Graph API. The API <em>does</em> delete an external item by its id, so this is something you must build and run, not something you cannot do. Budget for periodic reconciliation, name who runs it, and write the delete path before the first crawl rather than after the first audit.");
     }
     if (index && a.surface === "fabric") {
       w.push("<strong>You are building a connector for a surface that does not read connectors.</strong> Graph-indexed content grounds M365 Copilot; it does not appear in Power BI or in a Fabric data agent. If the answer only ever has to show up on a Fabric surface, this build has no consumer — settle the surface question before the schema.");
@@ -2180,13 +2184,14 @@
     // ---- the semantic model, and the mode it landed on ----
     if (pbi) {
       w.push("<strong>Copilot needs a paid capacity, and Pro or PPU on its own is not one.</strong> The workspace must sit on paid Fabric <strong>F2 or higher</strong>, or Power BI Premium <strong>P1 or higher</strong>. A Pro or PPU workspace supports it only once assigned to a Fabric Copilot capacity. <strong>Trial SKUs and trial capacities are not supported at all</strong>, which is the usual reason a proof of concept works and the pilot does not.");
-      w.push("<strong>F2 and F64 are two different thresholds and both bite.</strong> F2 is where Copilot and data agents become available at all; <strong>F64</strong> is where report consumers stop needing an individual Power BI Pro licence. Between them you are paying per viewer as well as per capacity unit, and that line usually decides the SKU rather than the compute does.");
+      w.push("<strong>F2 and F64 are two different thresholds and both bite.</strong> F2 (or Premium P1) is where Copilot and data agents become available at all; <strong>F64</strong> is where report consumers stop needing an individual Power BI Pro licence. Between them you are paying per viewer as well as per capacity unit, and that line usually decides the SKU rather than the compute does.");
       w.push("<strong>Copilot is not supported with Private Link or in closed network environments.</strong> If this data sits behind network isolation, this route does not exist for you and the answer is an application you host. Check it before anything else — it is the constraint most likely to end the conversation.");
       w.push("<strong>Check the region before you design the model.</strong> The capacity must be in a Fabric-supported region, and where Azure OpenAI is not available in yours, Copilot works only if an admin enables <em>data sent to Azure OpenAI can be processed outside your capacity’s geographic region, compliance boundary, or national cloud</em>. For regulated data that is a decision with a paper trail, not a toggle.");
       w.push("<strong>The storage mode governs the rows, not the model.</strong> Its definition, DAX measures, relationships, row-level security roles and lineage are persisted in the Power BI metadata store whatever mode you pick — so “DirectQuery stores nothing” is a statement about your data, not about your model. Classify the metadata too if the schema itself is sensitive.");
       w.push("<strong>Composite models mix modes per table</strong>, so this is not all-or-nothing: a model can hold slow-moving dimensions in memory and query the fact table live. If one table is what forced your mode, model that table differently rather than moving the whole thing.");
       w.push("<strong>Row-level security only enforces if somebody wrote the roles.</strong> “Power BI enforces RLS” is a statement about the product, not about your model. Confirm the roles exist, that they are assigned, and that they have been tested as a real user rather than as an admin.");
       w.push("It answers about the model, not about your documents. A question like “which contract has the break clause” does not belong here — that is the index path, and the two routes complement each other rather than competing.");
+      w.push("<strong>Power BI Q&amp;A is being retired in December 2026.</strong> If a design names Q&amp;A as its natural-language surface, it is naming something with a published end date inside most pilot horizons — Microsoft directs you to Copilot for Power BI instead. Q&amp;A was free to every user and needed no capacity; Copilot needs F2+ or P1+, so this is a cost change as well as a feature change.");
     }
     if (route === "pbiimport") {
       w.push("<strong>Import creates a governed copy, and it is yours to govern.</strong> Rows land in the VertiPaq store, persisted in Power BI managed storage in the capacity region — a second store that has to be classified, labelled, retained and audited independently of the source. If OneLake integration is switched on for the model, that writes a further read-only Delta copy, so you are governing three.");
@@ -2202,8 +2207,14 @@
       }
     }
     if (route === "pbidirectlake") {
-      w.push("<strong>Direct Lake needs Fabric capacity and Delta Parquet in OneLake, and both are hard requirements.</strong> There is no Premium-only or Pro-only version of this mode. Confirm the capacity exists and the tables are actually Delta before designing around it.");
+      w.push("<strong>Direct Lake on OneLake does not apply SQL analytics endpoint row-level security — nor its object-level or column-level security.</strong> It reads the files, and file access in OneLake does not observe SQL-based RLS, so a query the warehouse would have filtered simply succeeds in full. If your row rule lives at the source rather than in the semantic model, this mode drops it silently: the same failure this page refuses everywhere else. Prove the enforcement survives, as a real user, before shipping.");
+      w.push("<strong>Model-level RLS does work here, but Microsoft recommends running it on a fixed identity connection</strong> — and a fixed identity flattens every caller into one account, which is the pattern this page warns about for ready-made MCP servers and for a Ranger service-account proxy. Adopt it and the per-user trimming happens in the model alone; nothing underneath enforces anything.");
+      w.push("<strong>&ldquo;Direct Lake&rdquo; is two modes, and they differ on the properties you chose this route for.</strong> <em>Direct Lake on OneLake</em> reads Fabric sources directly and never falls back. <em>Direct Lake on SQL</em> goes through the SQL analytics endpoint, honours its security, and <strong>falls back to DirectQuery</strong> on SQL views, on RLS, and when guardrails are exceeded — so its performance profile is not the one you designed for. Decide which you are building.");
+      w.push("<strong>Direct Lake cannot use a gateway — on-premises or VNet.</strong> It supports cloud connections only. Anything reached through the on-premises data gateway, which is every on-prem source including a Kerberised CDP cluster, cannot be Direct Lake at all.");
+      w.push("<strong>The model workspace must sit in the same region as the data source workspace.</strong> Cross-region is unsupported; the workaround is a lakehouse in the other region with shortcuts to the tables.");
+      w.push("<strong>F2 is the floor, not the target.</strong> F2 through F8 give you 10&nbsp;GB max model size, 3&nbsp;GB max memory and 300 million rows per table. Premium P SKUs do work, contrary to the Fabric-only framing usually quoted. Size against the guardrail table before assuming the smallest paid SKU is enough.");
       w.push("Column segments are transcoded into capacity memory on demand and <strong>evicted under pressure</strong>. On a capacity that is already busy, that shows up as first-query latency rather than as an error — watch the Capacity Metrics app rather than waiting for complaints.");
+      w.push("<strong>There is a refresh, and it can fail.</strong> A Direct Lake refresh is <em>framing</em> — metadata only, seconds rather than hours — but exceed the capacity guardrails and on Direct Lake on OneLake the refresh fails and <strong>the model cannot be queried at all</strong> until the Delta tables are optimised. Table maintenance is an operational commitment here, not an optimisation.");
       if (a.onelake === "mirror") {
         w.push("<strong>Mirroring is still a replica.</strong> The platform maintains it from the source's change feed with no pipeline to build, and storage is free up to capacity limits — but a copy of the data now exists in OneLake, and it is inside your compliance boundary rather than outside your governance obligations. Classify and label it like any other copy.");
       }
@@ -2215,10 +2226,11 @@
       w.push("<strong>You are committing to building the semantic model, not just pointing at one.</strong> That is weeks of modelling — grain, relationships, measures, RLS roles — and it needs an owner afterwards. If nobody owns it, the model rots and the answers quietly go wrong.");
     }
     if (pbi && a.surface === "m365") {
-      w.push("<strong>The answer has to land in M365 Copilot chat, and a semantic model does not put it there.</strong> Power BI Copilot and Q&amp;A answer inside Power BI; a Fabric data agent answers inside Fabric. Reaching M365 Copilot chat means publishing the data agent as a tool to a Copilot Studio agent, and surfacing that agent in Teams or as a declarative agent — a second build, a second approval, and a second thing to operate. Choosing Fabric to avoid a connector approval leaves this requirement unmet.");
+      w.push("<strong>The answer has to land in M365 Copilot chat, and a semantic model does not put it there by itself.</strong> Power BI Copilot answers inside Power BI. A Fabric data agent has two ways out: publish it to the <strong>Agent Store in Microsoft 365 Copilot</strong>, where people chat with it directly or mention it from the main chat, or publish it as a tool to a Copilot Studio agent. The Agent Store route is in <strong>preview</strong>, needs a Microsoft 365 Copilot licence per user, and is an <em>agent somebody invokes</em> rather than grounding that turns up on its own the way indexed connector content does.");
+      w.push("<strong>The Agent Store route leaves Fabric&rsquo;s compliance boundary, and Microsoft says so explicitly.</strong> Responses returned by a Fabric data agent consumed in Microsoft 365 may be sent outside Fabric&rsquo;s compliance boundary or geographic region, and are processed and stored thereafter under Microsoft 365&rsquo;s terms rather than Fabric&rsquo;s. It also requires cross-geo processing and cross-geo storing for AI in tenant settings. For a regulated customer that is a control decision with a paper trail, not a publish button.");
     }
     if (pbi && (a.surface === "fabric" || a.surface === "teams")) {
-      w.push("Since a Fabric or Teams surface is acceptable, the natural-language layer over this model is a <strong>Fabric data agent</strong> rather than a connector: it grounds on selected lakehouses, warehouses, KQL databases and semantic models, and answers by generating and running a query. It needs F2 or higher and tenant-level enablement, and it can later be published to Copilot Studio if the M365 requirement appears.");
+      w.push("Since a Fabric or Teams surface is acceptable, the natural-language layer over this model is a <strong>Fabric data agent</strong> rather than a connector: it grounds on selected lakehouses, warehouses, KQL databases and semantic models, and answers by generating and running a query. It needs F2+ or P1+ and tenant-level enablement, and row-level and column-level security on the underlying sources are respected. It can later be published to the M365 Agent Store or to Copilot Studio if the M365 requirement appears.");
     }
     if (pbi && a.infra && a.infra !== "fabric") {
       w.push("<strong>You have not named a Fabric or Premium capacity, and every route on this branch needs one.</strong> Settle who owns it and which workspace sits on it before design, because the capacity is also the thing the cost lands on.");
