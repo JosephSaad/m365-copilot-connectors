@@ -75,7 +75,7 @@ One page plus the artifacts that cannot be allowed to drift from it:
 | `COPILOT-ROUTING.md` | The prose version of the whole argument |
 
 The page contains, in order: the rule card; the routing tree (inline SVG); an
-eighteen-question router with a JavaScript engine; a capability-by-surface
+nineteen-question router with a JavaScript engine; a capability-by-surface
 matrix; a delivery-paths matrix; a side-by-side of the three live-call
 packagings; a two-planes section; owned-vs-licensed panels; the hybrid pattern;
 the short-version questions; and a caveats section holding **only what the
@@ -151,10 +151,10 @@ own registered server; read-only; per-user auth; Copilot add-on per user) ·
 `pbiimport` · `pbidq` · `pbidirectlake` (three distinct routes, not one with a
 footnote) · `action` · `mcp` · `mcpready` · `foundry` · `blocked`.
 
-## 4. The eighteen questions
+## 4. The nineteen questions
 
 Fields in engine order: `reach, surface, own, access, kind, model, onelake,
-join, conc, fresh, del, infra, src, vol, reuse, iso, gov, ret`. The ones that
+join, conc, fresh, del, infra, gw, src, vol, reuse, iso, gov, ret`. The ones that
 exist because their absence cost something:
 
 - **Q2 `surface`** — *where must the answer appear.* The question most often
@@ -179,6 +179,13 @@ exist because their absence cost something:
   deletions on a direct push; removal is an API call your own code makes; a
   crawled connection detects them on its next pass.* Never write "a push
   never deletes" — the API deletes by id; what is absent is detection.
+- **Q13 `gw`** — is there an approved gateway pattern for MCP in the estate.
+  Shapes warnings, never the route: where no pattern exists, the MCP-flavoured
+  routes inherit a critical path of pattern approval that dwarfs their build
+  cost, and the near-term answer shifts to routes that ride ordinary HTTPS.
+  Came from a real working group discovering it late; the capability (APIM's
+  remote MCP server mode) was never the gap — the deployed, approved pattern
+  was.
 
 ## 5. The engine
 
