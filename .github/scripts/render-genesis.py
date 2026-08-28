@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+# Renders GENESIS-PROMPT-COPILOT-ROUTER.md as a styled HTML page for the
+# Pages site, in the Copilot Router's design family. Run by pages.yml at
+# deploy time so the page can never drift from the markdown source.
+import sys, markdown, pathlib, html as h
+
+src, out = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+md = src.read_text()
+body = markdown.markdown(md, extensions=["tables", "fenced_code"])
+
+TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Copilot Router Genesis Prompt</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Spectral:wght@500;600&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --ground: #0C1214; --surface: #141C1E; --alt: #1B2427;
+    --ink: #E4EBEA; --muted: #94A3A6; --faint: #6E7C80;
+    --rule: #253032; --rule-strong: #354245;
+    --accent: #58C4AF; --accent-soft: #16302E;
+    --risk: #E38175;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+    font-size: 16px; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: clamp(2rem,5vw,4rem) clamp(1rem,4vw,2rem) 5rem; }
+  h1, h2 { font-family: Spectral, Georgia, "Times New Roman", serif; font-weight: 600; line-height: 1.15; text-wrap: balance; }
+  h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); letter-spacing: -0.015em; margin: 2.8rem 0 1rem;
+       padding-top: 2.2rem; border-top: 2px solid var(--ink); }
+  .wrap > h1:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+  h2 { font-size: 1.3rem; margin: 2.2rem 0 0.7rem; color: var(--ink); }
+  p { margin: 0 0 1rem; max-width: 68ch; }
+  li { max-width: 65ch; margin-bottom: 0.45rem; }
+  ul, ol { padding-left: 1.3rem; margin: 0 0 1rem; }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  strong { color: var(--ink); }
+  em { color: var(--muted); }
+  code { font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.85em; background: var(--alt); border: 1px solid var(--rule);
+    border-radius: 3px; padding: 0.08em 0.35em; }
+  blockquote { margin: 1.2rem 0; padding: 0.9rem 1.2rem; background: var(--accent-soft);
+    border-left: 3px solid var(--accent); border-radius: 0 3px 3px 0; }
+  blockquote p { margin: 0.2rem 0; }
+  hr { border: none; border-top: 1px solid var(--rule-strong); margin: 2.5rem 0; }
+  .scroller { overflow-x: auto; border: 1px solid var(--rule); border-radius: 3px;
+    background: var(--surface); margin: 0 0 1.2rem; }
+  table { border-collapse: collapse; width: 100%; min-width: 540px; font-size: 0.88rem; }
+  th, td { padding: 0.55rem 0.8rem; border-top: 1px solid var(--rule); text-align: left; vertical-align: top; }
+  thead th { border-top: none; background: var(--alt);
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.68rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  footer { margin-top: 3.5rem; padding-top: 1.3rem; border-top: 1px solid var(--rule);
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.72rem; color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+__BODY__
+<footer>The tool this prompt produces: <a href="copilot-router.html">the Copilot Router</a>. Where this document and the page disagree, the page is right.</footer>
+</div>
+</body>
+</html>
+"""
+
+# wrap tables so wide ones scroll instead of stretching the page
+body = body.replace("<table>", '<div class="scroller"><table>').replace("</table>", "</table></div>")
+out.write_text(TEMPLATE.replace("__BODY__", body))
+print("wrote", out, out.stat().st_size, "bytes")

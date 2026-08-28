@@ -1,12 +1,15 @@
-# The public Pages site serves exactly one document: the Copilot decision
-# matrix. Everything else in docs/ is repository documentation, readable as
-# source on GitHub but deliberately not published as a website.
+# The public Pages site serves two documents: the Copilot Router and the
+# genesis prompt that rebuilds it. Everything else in docs/ is repository
+# documentation, readable as source on GitHub but deliberately not
+# published as a website.
 name: pages
 on:
   push:
     branches: [main]
     paths:
       - docs/copilot-router.html
+      - docs/GENESIS-PROMPT-COPILOT-ROUTER.md
+      - .github/scripts/render-genesis.py
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -27,12 +30,18 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Stage the one published document
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Stage the published documents
         run: |
+          pip install --quiet markdown
           mkdir _site
           cp docs/copilot-router.html _site/copilot-router.html
-          # The site root is the same document, so the bare URL works too.
+          # The site root is the router, so the bare URL works too.
           cp docs/copilot-router.html _site/index.html
+          python .github/scripts/render-genesis.py \
+            docs/GENESIS-PROMPT-COPILOT-ROUTER.md _site/genesis-prompt.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
