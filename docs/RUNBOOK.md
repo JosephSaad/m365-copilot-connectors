@@ -238,6 +238,62 @@ item ID (`ticket1234`) and query SQL directly.
 write to this file. `SqlGraphPush` and `SqlHierarchyPush` write beside their own
 executables, and the CDP connectors are covered in section 6.2.
 
+### 3.1 Where a slow push spent its time
+
+Every push run ends with an attribution table, after the summary line:
+
+```
+Timing attribution over 1,118 row(s). Milliseconds, except where noted.
+
+  segment                  p50        p95        p99        max      share
+  ------------------------------------------------------------------------
+  source read              2.08       3.29       3.29       3.29      0.1%
+  prepare item             0.08       0.12       0.13       0.13      0.0%
+  write in flight           326        392        400        400      9.3%
+  write backoff            3867       4000       4000       4000     90.6%
+  commit                   0.50       0.84       0.85       0.85      0.0%
+  ------------------------------------------------------------------------
+  ROW TOTAL                4404       4404       4404       4404    100.0%
+```
+
+Percentiles, not means: one row parked behind a 60-second `Retry-After` moves a
+mean and tells you nothing about the other thousand. They are approximate by
+construction — read a figure as "somewhere in this bucket" — and the `max` is
+exact. The table costs 1.5 KB however many rows the run has, so it is always on.
+
+**Read `write backoff` first.** If it dominates, the run is throttle-bound and
+adding writers makes it worse. If the time is in flight instead, the last line
+of the report says so and also says what it *cannot* tell you, which matters:
+time inside the call would include any retry the Graph SDK performed on its own.
+The SDK's retry handler is removed for exactly that reason (`GraphPipeline`), so
+from v1.2.22 the engine is the only thing that retries and `throttleWaits=` is
+worth believing.
+
+**A `--dry-run` is measured too.** It writes nothing and needs no tenant, so what
+it reports is the whole non-Graph cost of the pipeline — the cheapest reading
+available, and the one to take before blaming Graph.
+
+### 3.2 Tuning a push: `Settings:Writers`
+
+| | |
+|---|---|
+| Default | `4` |
+| Range | Clamped to 1–16; a higher number is logged and reduced |
+| Effect | How many items may be written to Graph at once |
+
+Graph documents that "an application is limited to 25 concurrent operations on a
+connection", and this run makes others of its own, so 16 is the ceiling. Start at
+2 and raise it while watching `throttleWaits=`: the sustainable rate is not
+published anywhere and has to be found.
+
+**It does nothing for a source that keeps a watermark, and that is deliberate.**
+The engine writes concurrently only where the source declares it keeps no
+position at all (`IPushSource.RequiresOrderedCommit`, which defaults to true).
+Today that is the SQL push, which re-reads its whole query every run. Every CDP
+connector keeps a checkpoint and so keeps serial writes, because out-of-order
+completion is precisely what would let a checkpoint pass an item that never
+reached the index. Setting `Writers` on one of those changes nothing.
+
 ---
 
 ## 4. The five most likely failures

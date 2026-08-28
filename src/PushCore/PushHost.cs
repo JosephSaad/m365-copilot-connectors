@@ -226,7 +226,7 @@ public static class PushHost
             }
 
             // The same credential authenticates to Graph. Scope is unchanged.
-            var graph = new GraphServiceClient(credential, new[] { GraphScope });
+            var graph = new GraphServiceClient(GraphPipeline.Create(), credential, new[] { GraphScope });
 
             var context = new PushSourceContext(options, credential, secrets, Log.Logger);
             var engine = new PushEngine(connector, options, graph, Log.Logger, dryRun);

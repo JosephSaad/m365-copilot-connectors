@@ -332,7 +332,12 @@ rather than an implemented operation. Fetching known IDs is the only way.
 1. **Throttling that outlasted the backoff.** The engine honours `Retry-After`
    and retries an item five times before giving up, so a throttled write is
    normally survived rather than lost — the run summary reports
-   `throttleWaits=`, and a number there is the tell. The summary also reports
+   `throttleWaits=`, and a number there is the tell. That number only became
+   trustworthy in v1.2.22: before it, the Graph SDK's own retry handler
+   absorbed 429s inside the call (three attempts, three seconds apart), so the
+   engine never saw them and `throttleWaits=0` could be reported by a run that
+   was throttled from end to end. The SDK handler is now removed —
+   `GraphPipeline` — and the engine is the only component that retries. The summary also reports
    `duplicates=`: rows whose item ID repeated an earlier row's, where the later
    row silently overwrote the earlier item in the upsert — the row count and
    the distinct-item count are both printed, and a gap between them is a source
@@ -340,9 +345,18 @@ rather than an implemented operation. Fetching known IDs is the only way.
    fails the run with exit code 4 rather than skipping the item silently.
    `Compare-SourceToIndex.ps1` honours `Retry-After` itself and reports how
    often it was throttled reading.
-2. **The run stopped partway.** Exit code 4. The log's last
-   `Indexed ticketNNNN` line is the high-water mark, and because the query is
-   `ORDER BY TicketId` everything above that ID is what is missing.
+2. **The run stopped partway.** Exit code 4. Re-run it: a SQL push re-reads its
+   whole query every time and the write is an upsert, so a second run repairs a
+   partial one with no reasoning required.
+
+   Do not read the last `Indexed` line as a high-water mark. Two things now
+   make that wrong. The per-item line is at `Debug`, as the runbook has always
+   documented it, so it is absent at the default level; and when the source
+   keeps no position the engine writes with several writers at once
+   (`Settings:Writers`), so the last line to be printed is simply the last
+   write to finish — items after it may well have landed, and items before it
+   may not have. A high-water mark is a property of the serial path, which is
+   what every source that keeps a watermark still gets.
 3. **The row is newer than the last push.** Nothing is scheduled here.
 
 **Items exist but nobody can find them**: check the ACL. The script prints the
