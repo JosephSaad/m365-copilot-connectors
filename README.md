@@ -1,6 +1,6 @@
 # SQL Tickets Copilot Connector
 
-[![build](https://github.com/JosephSaad/m365-copilot-sql-connector/actions/workflows/build.yml/badge.svg)](https://github.com/JosephSaad/m365-copilot-sql-connector/actions/workflows/build.yml)
+[![build](https://github.com/JosephSaad/m365-copilot-connectors/actions/workflows/build.yml/badge.svg)](https://github.com/JosephSaad/m365-copilot-connectors/actions/workflows/build.yml)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
 A Visual Studio solution containing working paths from SQL Server to Microsoft
@@ -29,12 +29,6 @@ byte and unmodified.
 
 Connector ID: `9e5e2b95-e7ab-4266-98c7-4f7868d377bf`
 Default port: `30303`
-
-> **This is the `release/net9` branch — the .NET 9 line, for Visual Studio 2022.**
-> `main` targets `net10.0`, which Visual Studio 2022 cannot open. The only
-> differences here are the target framework in `Directory.Build.props`, the SDK
-> pinned in `global.json`, and the package list that follows from them. Fixes
-> come from `main`; releases from this branch are tagged `-net9`.
 
 **Before reviewing or deploying this, read [`docs/SECURITY.md`](docs/SECURITY.md)
 (control mapping), [`docs/RUNBOOK.md`](docs/RUNBOOK.md) (rotation and failure
@@ -72,13 +66,13 @@ installed.
 
 | Release | Framework | For |
 |---|---|---|
-| [**Latest `-net9` release**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases?q=net9&expanded=true) | `net9.0` | **This branch.** Visual Studio 2022 17.12 or later, or the .NET 9 SDK |
-| [**Latest release**](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/latest) | `net10.0` | `main`. Visual Studio 2026, or the .NET 10 SDK |
+| [**Latest release**](https://github.com/JosephSaad/m365-copilot-connectors/releases/latest) | `net10.0` | Visual Studio 2026, or the .NET 10 SDK |
+| [**Latest `-net9` release**](https://github.com/JosephSaad/m365-copilot-connectors/releases?q=net9&expanded=true) | `net9.0` | Visual Studio 2022 17.12 or later, or the .NET 9 SDK |
 
 Both lines are released together and carry the same version number. These links
 follow the current one rather than naming a version, so they cannot rot: the
-first lists the `-net9` line newest first, the second resolves to whichever
-release is marked latest.
+first resolves to whichever release is marked latest, the second lists the
+`-net9` line newest first.
 
 Each carries the same four assets:
 
@@ -224,10 +218,13 @@ tests/
 ## Prerequisites
 
 **Build machine**
-- Visual Studio 2022 17.12 or later with the .NET desktop development workload,
-  or the .NET 9 SDK alone. `global.json` pins the SDK to 9.0.x, so a machine with
-  newer SDKs installed still builds this branch with .NET 9
-- Nothing here needs Visual Studio 2026 or the .NET 10 SDK — that is `main`
+- The .NET 10 SDK, alone or through Visual Studio 2026
+- **Visual Studio 2022 cannot open this configuration.** It has no .NET 10
+  support, so a `net10.0` project will not load there whatever SDK is installed.
+  Use the .NET 9 line instead: the
+  [latest `-net9` release](https://github.com/JosephSaad/m365-copilot-connectors/releases?q=net9&expanded=true)
+  to deploy, the [`release/net9`](https://github.com/JosephSaad/m365-copilot-connectors/tree/release/net9)
+  branch to build — see [Visual Studio 2022 and .NET 9](#visual-studio-2022-and-net-9)
 - NuGet access to `api.nuget.org`, or a package folder staged from a connected
   machine — see [Building without NuGet access](#building-without-nuget-access)
 
@@ -267,7 +264,7 @@ To produce the transfer package:
 
 ```powershell
 .\Build.ps1
-.\Build.ps1 -SelfContained          # server has no .NET 9 runtime
+.\Build.ps1 -SelfContained          # server has no .NET 10 runtime
 .\Build.ps1 -EnableOtlpExporter     # include the optional OpenTelemetry sink
 ```
 
@@ -312,35 +309,50 @@ that make it possible travel inside `source\build\`.
 CI fails the build if any of the above is missing from the archive, and if
 `bin/`, `obj/` or `.git/` leak into `source/`.
 
-### Relationship to main
+### Visual Studio 2022 and .NET 9
 
-`main` targets `net10.0`; this branch targets `net9.0`, because Visual Studio
-2022 has no .NET 10 support and will not load a `net10.0` project whatever SDK is
-installed. The difference is two files:
+Visual Studio 2022 has no .NET 10 support, so this configuration will not load
+there. There is a .NET 9 line for that, and three ways into it depending on what
+you want.
 
-| File | Here | On `main` |
-|---|---|---|
-| `Directory.Build.props` | `ConnectorTargetFramework` is `net9.0` | `net10.0` |
-| `global.json` | pins the SDK to 9.0.x | absent |
+**To deploy, download nothing else:**
+the [**latest `-net9` release**](https://github.com/JosephSaad/m365-copilot-connectors/releases?q=net9&expanded=true)
+— the same package as the mainline release of the same version, self-contained
+with .NET 9.0.19 bundled, built by the .NET 9 SDK rather than merely targeted at
+it. Releases on this line carry
+the `-net9` suffix; the unsuffixed ones are .NET 10.
 
-Everything else — the connector, the security library, the tests, the gates, the
-docs — is the same code. Take fixes from `main` and keep it that way; CI on
-`main` builds and tests `net9.0` on every push, with the .NET 9 SDK alone, so
-that branch cannot quietly break this one between releases.
-
-The package list under `build\` is larger here (80 packages rather than 68):
-`net9.0` needs `System.Text.Json`, `System.IO.Pipelines` and their neighbours as
-NuGet packages, where `net10.0` has them in the shared framework.
-
-To build this tree the way `main` does, without switching branches:
+**To work in Visual Studio 2022:** clone the
+[**`release/net9`**](https://github.com/JosephSaad/m365-copilot-connectors/tree/release/net9)
+branch, where the solution opens and builds with no arguments:
 
 ```powershell
-dotnet build .\SqlTicketsConnector.sln -c Release -p:ConnectorTargetFramework=net10.0
+git clone --branch release/net9 https://github.com/JosephSaad/m365-copilot-connectors.git
 ```
 
+It is this code with two files changed — `Directory.Build.props` sets the target
+framework to `net9.0`, and `global.json` pins the SDK to 9.0.x so a machine with
+newer SDKs installed still builds it with .NET 9. Fixes flow from `main`.
+
+**To build a .NET 9 package from here,** without switching branches, since the
+target framework lives in one place:
+
+```powershell
+dotnet build .\SqlTicketsConnector.sln -c Release -p:ConnectorTargetFramework=net9.0
+.\Build.ps1 -SelfContained -TargetFramework net9.0
+```
+
+The framework then appears in the package name — `SqlTicketsConnector-deploy-net9.0-*.zip` —
+because two zips that differ only in their bundled runtime are otherwise
+indistinguishable on a server.
+
+CI builds and tests `net9.0` from `main` on every push, using the .NET 9 SDK
+alone — the toolchain a VS 2022 machine actually has — so `main` cannot drift
+away from a branch nobody looks at between releases.
+
 Nothing changes for the target server. The release packages are self-contained,
-so the bundled runtime is whichever one the package was built against — .NET 9
-for releases tagged `-net9` — and the server needs neither installed.
+so the bundled runtime is whichever one the package was built against, and the
+server needs neither installed.
 
 ### Building without NuGet access
 
@@ -371,12 +383,12 @@ dotnet build   .\SqlTicketsConnector.sln -c Release --no-restore
 dotnet test    .\SqlTicketsConnector.sln -c Release --no-build
 ```
 
-89 packages, 227 MB, in three sets:
+77 packages, 215 MB, in three sets:
 
 | Set | Packages | Size | Needed for |
 |---|---:|---:|---|
-| Base | 80 | 132 MB | any build or test run |
-| Runtime packs | 4 | 92 MB | `Build.ps1 -SelfContained`. `-SkipRuntimePacks` |
+| Base | 68 | 119 MB | any build or test run |
+| Runtime packs | 4 | 93 MB | `Build.ps1 -SelfContained`. `-SkipRuntimePacks` |
 | OpenTelemetry | 5 | 3 MB | `Build.ps1 -EnableOtlpExporter`. `-SkipOtlp` |
 
 The runtime packs are the bundled .NET runtime. Two of the four are requested

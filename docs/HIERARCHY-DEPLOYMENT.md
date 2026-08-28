@@ -64,8 +64,8 @@ the `SqlGraphPush` registration or create a second one.
 
 | | |
 |---|---|
-| **.NET 10** | [Latest release](https://github.com/JosephSaad/m365-copilot-sql-connector/releases/latest) → `SqlTicketsConnector-<tag>.zip` |
-| **.NET 9** | [Latest `-net9` release](https://github.com/JosephSaad/m365-copilot-sql-connector/releases?q=net9&expanded=true) → `SqlTicketsConnector-<tag>-net9.zip` |
+| **.NET 10** | [Latest release](https://github.com/JosephSaad/m365-copilot-connectors/releases/latest) → `SqlTicketsConnector-<tag>.zip` |
+| **.NET 9** | [Latest `-net9` release](https://github.com/JosephSaad/m365-copilot-connectors/releases?q=net9&expanded=true) → `SqlTicketsConnector-<tag>-net9.zip` |
 
 Both are self-contained: the runtime is inside, and the host needs neither .NET
 installed. Verify the checksum before unzipping — a document library round trip
@@ -95,7 +95,7 @@ dotnet publish .\src\SqlHierarchyPush\SqlHierarchyPush.csproj -c Release -r win-
 **.NET 9**, either from the `release/net9` branch with no arguments:
 
 ```powershell
-git clone --branch release/net9 https://github.com/JosephSaad/m365-copilot-sql-connector.git
+git clone --branch release/net9 https://github.com/JosephSaad/m365-copilot-connectors.git
 dotnet build .\SqlTicketsConnector.sln -c Release
 dotnet publish .\src\SqlHierarchyPush\SqlHierarchyPush.csproj -c Release -r win-x64 --self-contained true -o .\out\SqlHierarchyPush
 ```
