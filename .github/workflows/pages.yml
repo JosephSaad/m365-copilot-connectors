@@ -1,5 +1,6 @@
-# The public Pages site serves two documents: the Copilot Router and the
-# genesis prompt that rebuilds it. Everything else in docs/ is repository
+# The public Pages site serves three documents: the Copilot Router, the
+# genesis prompt that rebuilds it, and the release diff for the range the
+# connector is currently on. Everything else in docs/ is repository
 # documentation, readable as source on GitHub but deliberately not
 # published as a website.
 name: pages
@@ -9,6 +10,7 @@ on:
     paths:
       - docs/copilot-router.html
       - docs/GENESIS-PROMPT-COPILOT-ROUTER.md
+      - docs/release-diff.html
       - .github/scripts/render-genesis.py
       - .github/workflows/pages.yml
   workflow_dispatch:
@@ -40,6 +42,8 @@ jobs:
           cp docs/copilot-router.html _site/copilot-router.html
           # The site root is the router, so the bare URL works too.
           cp docs/copilot-router.html _site/index.html
+          # Self-contained already - a full document, not a fragment.
+          cp docs/release-diff.html _site/release-diff.html
           python .github/scripts/render-genesis.py \
             docs/GENESIS-PROMPT-COPILOT-ROUTER.md _site/genesis-prompt.html
       - uses: actions/upload-pages-artifact@v3

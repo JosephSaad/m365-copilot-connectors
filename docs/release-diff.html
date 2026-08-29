@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>v1.2.20 to v1.2.23 &middot; m365-copilot-connectors</title>
+<meta name="description" content="Every file that changed between v1.2.20 and v1.2.23 of the M365 Copilot connectors for SQL Server and Cloudera CDP, with what each change does and why.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128256;</text></svg>">
+<style>
+/* Reset. The artifact host supplies one; a page served from Pages does not. */
+html{-webkit-text-size-adjust:100%}
+body,h1,h2,h3,p,figure{margin:0}
+img,svg{max-width:100%;height:auto}
+table{border-collapse:collapse}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Source+Sans+3:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap">
+<style>
+:root{
+  --bg:#F7F7F5; --surface:#FFF; --surface-2:#EFEFEC; --hair:#E2E2DD; --hair-2:#CBCBC4;
+  --ink:#17181A; --ink-2:#4E5257; --ink-3:#82868C;
+  --accent:#0E7490; --accent-soft:#DCEEF2;
+  --add:#1A7F45; --add-soft:#DDF0E4; --add-bar:#3FA968;
+  --del:#A32C21; --del-soft:#F8E2DF; --del-bar:#D4685C;
+  --shadow:0 1px 2px rgba(23,24,26,.05),0 10px 30px -18px rgba(23,24,26,.3);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111214; --surface:#191B1E; --surface-2:#212429; --hair:#2B2F34; --hair-2:#3A3F46;
+  --ink:#EDEEF0; --ink-2:#A6ABB2; --ink-3:#767C84;
+  --accent:#4FC3DE; --accent-soft:#123039;
+  --add:#5FCB8A; --add-soft:#12281B; --add-bar:#3E9E63;
+  --del:#F0857A; --del-soft:#2B1614; --del-bar:#B75449;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 30px -18px rgba(0,0,0,.8);
+}}
+:root[data-theme="dark"]{
+  --bg:#111214; --surface:#191B1E; --surface-2:#212429; --hair:#2B2F34; --hair-2:#3A3F46;
+  --ink:#EDEEF0; --ink-2:#A6ABB2; --ink-3:#767C84;
+  --accent:#4FC3DE; --accent-soft:#123039;
+  --add:#5FCB8A; --add-soft:#12281B; --add-bar:#3E9E63;
+  --del:#F0857A; --del-soft:#2B1614; --del-bar:#B75449;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);margin:0;padding:0 20px 100px;
+  font-family:"Source Sans 3",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace}
+
+header.mast{padding:70px 0 0}
+.eyebrow{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+h1{font-family:"Source Serif 4",Georgia,serif;font-weight:700;
+  font-size:clamp(36px,5.6vw,58px);line-height:1.02;letter-spacing:-.02em;
+  margin:0 0 20px;text-wrap:balance}
+h1 .mono{font-size:.82em;font-weight:500;letter-spacing:-.03em}
+.stand{font-size:clamp(17px,2vw,20px);line-height:1.5;color:var(--ink-2);max-width:62ch;margin:0 0 36px}
+.stand strong{color:var(--ink);font-weight:600}
+
+.totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;
+  background:var(--hair);border:1px solid var(--hair);border-radius:4px;overflow:hidden;margin:0 0 14px}
+.t{background:var(--surface);padding:18px 18px 16px}
+.t b{display:block;font-family:"JetBrains Mono",monospace;font-size:25px;font-weight:700;
+  letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+.t span{display:block;font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.35}
+.t b.a{color:var(--add)} .t b.d{color:var(--del)} .t b.k{color:var(--accent)}
+
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:26px 0 46px}
+.sp{background:var(--surface);border:1px solid var(--hair);border-radius:4px;padding:20px 22px;box-shadow:var(--shadow)}
+.sp h3{margin:0 0 4px;font-family:"JetBrains Mono",monospace;font-size:15px;font-weight:700;letter-spacing:-.01em}
+.sp .n{font-size:12px;font-family:"JetBrains Mono",monospace;color:var(--ink-3);
+  text-transform:uppercase;letter-spacing:.1em;margin:0 0 10px}
+.sp p{margin:0;font-size:14.5px;color:var(--ink-2);line-height:1.5}
+
+section{margin:0 0 54px}
+h2{font-family:"Source Serif 4",Georgia,serif;font-size:27px;font-weight:600;letter-spacing:-.015em;
+  margin:0 0 6px}
+.blurb{color:var(--ink-2);font-size:15.5px;margin:0 0 12px;max-width:74ch}
+.tally{display:flex;gap:14px;margin:0 0 14px;font-family:"JetBrains Mono",monospace;
+  font-size:12.5px;font-variant-numeric:tabular-nums}
+.tally span:first-child{color:var(--ink-3)}
+
+.scroll{overflow-x:auto;border:1px solid var(--hair);border-radius:4px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:760px}
+th{text-align:left;font-family:"JetBrains Mono",monospace;font-size:10.5px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);background:var(--surface-2);
+  padding:11px 14px;border-bottom:1px solid var(--hair-2);white-space:nowrap}
+td{padding:14px;border-bottom:1px solid var(--hair);vertical-align:top;line-height:1.52}
+tr:last-child td{border-bottom:none}
+td.st{width:56px;padding-right:0}
+td.pathcell{width:270px}
+td.pathcell code{font-size:12.5px;display:block;word-break:break-all;line-height:1.45;color:var(--ink)}
+td.num{width:104px;white-space:nowrap;font-family:"JetBrains Mono",monospace;font-size:12px;
+  font-variant-numeric:tabular-nums;text-align:right}
+td.sum{color:var(--ink-2);font-size:14.5px}
+
+.chip{display:inline-block;font-family:"JetBrains Mono",monospace;font-size:9.5px;font-weight:700;
+  letter-spacing:.07em;padding:3px 6px;border-radius:2px}
+.ch-added{background:var(--add-soft);color:var(--add)}
+.ch-modified{background:var(--surface-2);color:var(--ink-2)}
+.ch-deleted{background:var(--del-soft);color:var(--del)}
+
+.bar{display:flex;height:5px;margin-top:8px;border-radius:3px;overflow:hidden;background:var(--surface-2);width:100%}
+.bar i{display:block;height:100%}
+.bar i.add{background:var(--add-bar)} .bar i.del{background:var(--del-bar)}
+.binary{display:inline-block;margin-top:8px;font-family:"JetBrains Mono",monospace;
+  font-size:10px;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.c-add{color:var(--add)} .c-del{color:var(--del)} .c-bin{color:var(--ink-3)}
+
+.note{background:var(--surface);border:1px solid var(--hair);border-left:3px solid var(--accent);
+  border-radius:4px;padding:20px 24px;margin:0 0 26px;box-shadow:var(--shadow)}
+.note.warn{border-left-color:var(--del)}
+.note .tag{font-family:"JetBrains Mono",monospace;font-size:10.5px;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:9px}
+.note.warn .tag{color:var(--del)}
+.note p{margin:0 0 12px;max-width:74ch}.note p:last-child{margin-bottom:0}
+p{max-width:74ch}
+a{color:var(--accent);text-underline-offset:2px}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+.foot{border-top:1px solid var(--hair);margin-top:50px;padding-top:22px;font-size:13.5px;color:var(--ink-3)}
+@media (max-width:640px){body{padding:0 15px 70px}header.mast{padding-top:44px}.split{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="mast">
+  <p class="eyebrow">m365-copilot-connectors &middot; release diff</p>
+  <h1><span class="mono">v1.2.20</span> &rarr; <span class="mono">v1.2.23</span></h1>
+  <p class="stand">Thirty-two commits across <strong>41 files</strong>, and they are three unrelated
+  pieces of work that happen to share a range. Only three of those commits changed how items reach
+  Graph; four changed who can see them; twenty-four are documentation; and the last one corrects what
+  the timing report <em>says</em> about the first three.</p>
+
+  <div class="totals">
+    <div class="t"><b>41</b><span>Files touched</span></div>
+    <div class="t"><b class="a">+6,786</b><span>Lines added</span></div>
+    <div class="t"><b class="d">&minus;1,962</b><span>Lines removed</span></div>
+    <div class="t"><b>13</b><span>Added &middot; 1 deleted</span></div>
+    <div class="t"><b class="k">+15</b><span>Tests, 268&nbsp;&rarr;&nbsp;283</span></div>
+  </div>
+
+  <div class="split">
+    <div class="sp">
+      <p class="n">29 commits</p>
+      <h3>v1.2.21</h3>
+      <p>Ranger access-control fixes, the Copilot Router and pilot documentation, and the timing
+      instrumentation. Everything except the write path.</p>
+    </div>
+    <div class="sp">
+      <p class="n">2 commits</p>
+      <h3>v1.2.22</h3>
+      <p>The SDK retry removal and concurrent writes. Small in commits, and the only part of this
+      range that changes how the connector talks to Graph.</p>
+    </div>
+    <div class="sp">
+      <p class="n">1 commit</p>
+      <h3>v1.2.23</h3>
+      <p>No behaviour change at all. The timing report stopped describing a retry handler the
+      previous release had already removed, and now states the precondition its reading rests on.</p>
+    </div>
+  </div>
+
+  <div class="note warn">
+    <span class="tag">Found while writing this, and shipped as v1.2.23</span>
+    <p>An adversarial pass over this diff caught a defect <em>shipped in v1.2.22</em>.
+    <code>PushTiming</code>'s header and its mostly-in-flight verdict still described Kiota's
+    <code>RetryHandler</code> as sitting inside <code>PutAsync</code>, and closed by advising the
+    operator to &ldquo;re-run with <code>RetryHandlerOption.MaxRetry&nbsp;=&nbsp;0</code>&rdquo; to
+    settle whether the run was throttled.</p>
+    <p><code>GraphPipeline</code> does exactly that, in the same release. So v1.2.22 told an
+    operator to perform a fix already in the build, and withheld a conclusion the build had earned.
+    The prose was written in v1.2.21 when it was true; the commit that removed the handler touched
+    that file only to make its counters interlocked. The tests did not catch it because they asserted
+    the stale string.</p>
+    <p><strong>v1.2.23 is that correction and nothing else</strong> &mdash; two files, no behaviour
+    change. The verdict now reads <code>LATENCY-BOUND</code> and names <code>GraphPipeline</code> as
+    the reason it is allowed to, so re-adding a retrying handler contradicts a sentence somebody can
+    read rather than silently invalidating the table.</p>
+  </div>
+
+  <div class="note">
+    <span class="tag">The one change to watch on deployment</span>
+    <p><strong>RNG-01 is live.</strong> A CDP cluster using Ranger <em>security zones</em> now refuses
+    to index rather than reading zone-blind &mdash; exit code 4, no opt-out. That was the intended
+    fix, but it shipped while the cluster team still has not answered whether they use zones. The SQL
+    connector is unaffected.</p>
+  </div>
+</header>
+
+  <section>
+    <h2>The push engine</h2>
+    <p class="blurb">Instrumentation, then concurrency. The only area whose changes alter how items reach Graph.</p>
+    <p class="tally"><span>7 files</span><span class="c-add">+1,096</span><span class="c-del">&minus;132</span></p>
+    <div class="scroll"><table>
+      <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
+      <tbody>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/PushCore/PushEngine.cs</code><span class="bar" title="+478 -115"><i class="add" style="width:38.71%"></i><i class="del" style="width:9.31%"></i></span></td>
+        <td class="num"><span class="c-add">+478</span> <span class="c-del">&minus;115</span></td>
+        <td class="sum">PushItemsAsync was split into two paths: the original serial WriteInOrderAsync and a new WriteConcurrentlyAsync that runs one reader thread feeding N writers over a bounded Channel&lt;Pending&gt; (writers = Settings:Writers, default 4, clamped to 16 because Graph allows 25 concurrent operations per connection), with ResolveWriterCount forcing 1 writer for dry runs and for sources whose RequiresOrderedCommit is true. Per-row work was factored into Prepare/CommitAsync, the read loop is now driven by hand through GetAsyncEnumerator so MoveNextAsync time is attributable to the source, and WriteWithRetryAsync now separately accumulates in-flight versus backoff microseconds and records both in a finally so a row that gave up still reports what it spent. Two operational behaviour changes ride along: the per-item &quot;Indexed {ItemId}&quot; line dropped from Information to Debug and was replaced by an &quot;Indexed {Count} items so far&quot; line every 250 rows, and concurrent failures are unwrapped so the reader&#x27;s fault (or the first non-cancellation exception) surfaces instead of the OperationCanceledException it caused.</td>
+      </tr>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/PushCore/PushTiming.cs</code><span class="bar" title="+415 -0"><i class="add" style="width:40.17%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+415</span></td>
+        <td class="sum">New fixed-memory timing subsystem: TimingSeries is a lock-free quarter-octave histogram (48 octaves x 4 sub-buckets, 192 counters, ~1.5 KB regardless of run size) with interlocked count/sum/nonZero, a compare-and-swap max, and percentiles interpolated inside the containing bucket; PushTiming holds one series each for source read, prepare, write in flight, write backoff, commit, row total and content bytes. Report() renders the p50/p95/p99/max/share table the host prints - share taken against summed row total, not wall clock, so the run&#x27;s fixed setup cost is not attributed to a segment - and Verdict() classifies the run as THROTTLE-BOUND (backoff &gt;= 40% of per-row time), LATENCY-BOUND (in-flight &gt;= 50%), or NEITHER. It records only durations and byte counts, never IDs, properties or content, so it is safe to leave on in production. The verdict changed name across this range, and the reason is the whole story: v1.2.21 shipped MOSTLY IN FLIGHT under a header section titled &quot;ONE BLIND SPOT, AND IT IS LOAD-BEARING&quot;, because Kiota&#x27;s RetryHandler sat inside PutAsync and made a throttled run indistinguishable from a slow one; v1.2.22 removed that handler but edited this file only to interlock TimingSeries, leaving prose that asserted the handler was still there and told the operator to settle the question by re-running with RetryHandlerOption.MaxRetry = 0 - which GraphPipeline.cs and PushHost.cs had already done in the same commit. v1.2.23 rewrites both: the section is now &quot;WHY &#x27;WRITE IN FLIGHT&#x27; CAN BE BELIEVED, AND WHAT WOULD BREAK IT&quot;, the verdict is LATENCY-BOUND, and it carries its own precondition - that GraphPipeline removed the SDK retry handler and PushConcurrencyTests pins its absence - so the guarantee is stated as exactly one line deep rather than assumed.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/PushCore/PushSummary.cs</code><span class="bar" title="+83 -16"><i class="add" style="width:16.45%"></i><i class="del" style="width:3.17%"></i></span></td>
+        <td class="num"><span class="c-add">+83</span> <span class="c-del">&minus;16</span></td>
+        <td class="sum">Every counter became thread-safe because several writers now increment them at once: Truncated, ThrottleWaits, Skipped and Duplicates moved from internal-set auto-properties, and Total from a private-set auto-property mutated only inside Count(), to Volatile.Read over interlocked backing fields, with new internal CountTruncated/CountThrottleWait/CountSkipped(count)/CountDuplicate methods replacing direct assignment. The byType dictionary is now behind a lock, ByType returns a copy and Describe() reads under the same lock, Count(itemType) changed from void to int and returns the running total straight from Interlocked.Increment so a caller pacing progress on it sees each number exactly once, and a Timing property was added carrying the run&#x27;s PushTiming to the host without new plumbing.</td>
+      </tr>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/PushCore/GraphPipeline.cs</code><span class="bar" title="+76 -0"><i class="add" style="width:17.19%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+76</span></td>
+        <td class="sum">New static GraphPipeline: CreateHandlers() takes GraphClientFactory.CreateDefaultHandlers(), removes and disposes every handler whose type name contains &quot;RetryHandler&quot;, and Create() builds the HttpClient over what is left in the SDK&#x27;s own order. The name test rather than a type test is chosen because the retry handler already moved package once (Microsoft.Graph.Core v1 to Kiota) and a name match survives that; it can still be defeated by a rename, and the file is explicit that PushPipelineTests is what stops it from quietly matching nothing. This removes Kiota&#x27;s hidden MaxRetry 3 / 3s retry on 429, 503 and 504, which previously never reached the engine: it left ThrottleWaits reading zero on a fully throttled run, charged its sleeps to write-in-flight time, stacked up to 20 HTTP requests per row (five engine attempts around four SDK attempts), and threw AggregateException on exhaustion, which matched none of PushHost&#x27;s typed catches.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/PushCore.Sql/SqlPushSource.cs</code><span class="bar" title="+14 -0"><i class="add" style="width:7.38%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+14</span></td>
+        <td class="sum">SqlPushSource overrides RequiresOrderedCommit to return false, which is what actually switches the SQL connector onto the engine&#x27;s concurrent write path. The justification is that a SQL push re-reads its whole query every run, so OnItemCommittedAsync records nothing and there is no marker for out-of-order completion to move past; the remark instructs that any future incremental-read implementation must delete this override in the same change.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/PushCore/PushHost.cs</code><span class="bar" title="+6 -1"><i class="add" style="width:4.47%"></i><i class="del" style="width:0.75%"></i></span></td>
+        <td class="num"><span class="c-add">+6</span> <span class="c-del">&minus;1</span></td>
+        <td class="sum">The GraphServiceClient is now constructed over GraphPipeline.Create() instead of the SDK default, which is the wiring that actually takes Kiota&#x27;s retry handler out of the running process. A separate Log.Information call was added after the summary line to print summary.Timing.Report() as a multi-line block, kept out of the structured summary message on purpose so the table stays readable in both places.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/PushCore/IPushSource.cs</code><span class="bar" title="+24 -0"><i class="add" style="width:9.66%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+24</span></td>
+        <td class="sum">Added a RequiresOrderedCommit member defaulting to true, so every existing source keeps serial writes and the watermark guarantee that comes with them. The contract documented on it is narrow: a source may return false only if it keeps no position at all (OnItemCommittedAsync does nothing), because only then is there no checkpoint for out-of-order completion to push past an item the index never received.</td>
+      </tr>
+      </tbody>
+    </table></div>
+  </section>
+  <section>
+    <h2>CDP access control</h2>
+    <p class="blurb">Four Ranger findings. One of them stops a cluster indexing rather than reading it wrong.</p>
+    <p class="tally"><span>5 files</span><span class="c-add">+448</span><span class="c-del">&minus;26</span></p>
+    <div class="scroll"><table>
+      <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
+      <tbody>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/CdpConnector.Source/Ranger/RangerPolicyClient.cs</code><span class="bar" title="+158 -7"><i class="add" style="width:24.26%"></i><i class="del" style="width:1.07%"></i></span></td>
+        <td class="num"><span class="c-add">+158</span> <span class="c-del">&minus;7</span></td>
+        <td class="sum">PoliciesAsync now pages the Ranger REST policy list instead of issuing one unpaged GET: a new private PageAsync appends pageSize=1000&amp;startIndex=N, and the loop advances startIndex by the page&#x27;s actual count (Ranger clamps pageSize to ranger.db.maxrows.default, typically 200, so advancing by the requested size would silently skip policies), de-duplicates by policy Id, breaks when a page adds nothing new (a server ignoring startIndex), and throws past a MaxPolicies backstop of 100,000. A new RefuseSecurityZones guard throws InvalidOperationException listing the affected zones when any policy carries a non-empty zoneName, and Parse now reads that zoneName field (absent or empty both meaning unzoned). Operationally this fixes truncated policy reads on large clusters and stops the connector evaluating a zoned cluster zone-blind, where an unzoned legacy grant would be applied to a resource a zone protects.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/CdpConnector.Source/Hdfs/HdfsPushSource.cs</code><span class="bar" title="+104 -3"><i class="add" style="width:19.83%"></i><i class="del" style="width:0.57%"></i></span></td>
+        <td class="num"><span class="c-add">+104</span> <span class="c-del">&minus;3</span></td>
+        <td class="sum">The crawl now carries a traversal gate down the tree: a new NarrowAsync intersects the inherited group set with HdfsAclBuilder.TraverseGroups for each directory entered (a world-traversable directory passes the gate and the everyone flag through untouched), WalkAsync threads (gate, everyone) through recursion, and each indexable file&#x27;s pair is recorded in a new `reachable` dictionary - one GETACLSTATUS per directory rather than per file. Roots are narrowed by their own status before the walk begins; a root whose StatusAsync returns null is treated as (null, true), so both the gate AND the world-traversable flag stay open - that branch fails open, and a world-readable file beneath an unreadable root can still reach the otherReadable group. When grants are built, by contrast, a file missing from `reachable` is gated shut with an empty set and everyone=false, so a walk gap costs an item rather than leaking one. The ungated ClusterGroups call in the &quot;resolves to no Entra group&quot; warning at line 502 was not updated, so that log line still reports pre-gate groups.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/CdpConnector.Source/Acl/HdfsAclBuilder.cs</code><span class="bar" title="+70 -6"><i class="add" style="width:15.84%"></i><i class="del" style="width:1.36%"></i></span></td>
+        <td class="num"><span class="c-add">+70</span> <span class="c-del">&minus;6</span></td>
+        <td class="sum">ClusterGroups takes a new optional `traversable` gate and filters the POSIX-derived groups through it before adding the Ranger-granted groups, which are deliberately left ungated because a Ranger path policy authorises the path itself rather than deferring to the POSIX walk; a null gate means unrestricted and is explicitly not the same as an empty one. A new TraverseGroups returns the groups that may execute one directory plus a world-traversable flag, resolving the mode&#x27;s group digit as the ACL mask when an extended ACL is present. BuildAsync gains `traversable` and `everyoneCanTraverse` parameters and now withholds the configured otherReadable group unless the whole path is world-traversable, so a 644 file under a 750 directory is no longer published to everyone on the cluster.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/CdpConnector.Source/Ranger/RangerPolicy.cs</code><span class="bar" title="+46 -10"><i class="add" style="width:12.12%"></i><i class="del" style="width:2.64%"></i></span></td>
+        <td class="num"><span class="c-add">+46</span> <span class="c-del">&minus;10</span></td>
+        <td class="sum">Pattern() gains an explicit ignoreCase parameter, and the shared private PathMatches helper now compiles case-SENSITIVE regexes (CultureInvariant, no IgnoreCase) while Hive identifier matching in Matches - database/table/column - stays case-insensitive with CultureInvariant. HDFS is case-sensitive, so /data/Finance and /data/finance were previously folded together. Because PathMatches serves both CoversPath and CoversPathForDeny, this cuts both ways: a grant written for one path is no longer applied to the other (the over-grant this was aimed at), and a deny written for one no longer catches the other either - RoutingEvaluator.EvaluatePath consults CoversPathForDeny before any grant, so a mis-cased deny that used to stop a path from being indexed now does not. Also adds the ZoneName property, parsed here but never evaluated, purely so RangerPolicyClient can refuse a zoned policy set rather than read it as though the zones were not there.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/CdpConnector.Source/Hdfs/HdfsModels.cs</code><span class="bar" title="+70 -0"><i class="add" style="width:16.50%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+70</span></td>
+        <td class="sum">Adds the execute-bit half of the permission model that the traversal gate needs: HdfsFileStatus.GroupCanExecute and OtherCanExecute read the execute bit from the group and other digits, and HdfsAclStatus gains OwningGroupCanExecute, the static MaskGrantsExecute, the GroupsGrantedExecute enumerator over named access entries (default: entries skipped, mask applied), and a private GrantsExecute bit test. Pure additions mirroring the existing read-side accessors; no existing behaviour changes here, but nothing in the traversal fix works without them.</td>
+      </tr>
+      </tbody>
+    </table></div>
+  </section>
+  <section>
+    <h2>Tests and scaffolding</h2>
+    <p class="blurb">Two independent workstreams needed proving: the Ranger gating and the concurrent writer.</p>
+    <p class="tally"><span>7 files</span><span class="c-add">+1,038</span><span class="c-del">&minus;11</span></p>
+    <div class="scroll"><table>
+      <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
+      <tbody>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/CdpTraverseAndPagingTests.cs</code><span class="bar" title="+472 -0"><i class="add" style="width:42.85%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+472</span></td>
+        <td class="sum">New xUnit class of 13 tests across four Ranger findings. Three are over-grant defects asserted from the leaking side: RNG-09 pins that RoutingEvaluator.EvaluatePath treats /data/Finance and /data/finance as distinct while EvaluateCatalogueEntry still folds Hive database/table case, and that a path deny stays case-sensitive; RNG-04 exercises HdfsAclBuilder.TraverseGroups and the new traversable gate argument on ClusterGroups, including the load-bearing null-gate (no ancestor restricted anyone) versus empty-gate (nobody passes) distinction, the exemption for Ranger-granted groups, and ACL mask handling where the mode&#x27;s group digit is the mask; RNG-05 drives a PagingRanger stub serving 200 rows however many are asked for, proving RangerPolicyClient.PoliciesAsync steps by the rows a page actually returned (startIndexes 0/200/400/600) and terminates rather than spinning against a server that ignores startIndex. The fourth, RNG-01, is asserted from the refusal side instead: a ZonedRanger stub proves a zoned policy set throws InvalidOperationException naming every zone and the service, while null, empty and whitespace zoneName all read normally so the guard cannot fire on an ordinary cluster.</td>
+      </tr>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/PushTimingTests.cs</code><span class="bar" title="+230 -0"><i class="add" style="width:29.91%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+230</span></td>
+        <td class="sum">New class of eight facts pinning the TimingSeries histogram&#x27;s accuracy contract and the PushTiming verdict logic. It states exactly how much exactness the fixed-memory buckets cost - Max, Count and Sum stay exact while a percentile is only guaranteed inside its power-of-two bucket (median in [512,1024), p99 in [2097152,4194304)), asserted as `p99 &gt; median * 100` with a comment noting a mean would have read ~61ms for a population where no row was near that - and that an empty series answers 0 rather than dividing by its count. The behavioural half asserts that backoff time and time in flight are never summed: a row with 200ms in flight and 4s asleep after a 429 reports THROTTLE-BOUND, while a 3s in-flight row with no backoff reports LATENCY-BOUND and names GraphPipeline as what that reading rests on - v1.2.23 renamed that test from A_run_that_is_mostly_in_flight_refuses_to_call_itself_latency_bound to A_run_that_is_mostly_in_flight_reads_as_latency_bound_and_says_what_that_rests_on and flipped its assertions with the verdict, which is the change that would have caught the stale prose had it existed a release earlier; a further test pins that the report carries only phase labels and durations, never an item id or its content. Two end-to-end tests confirm a real run records one RowTotal per item and one extra SourceRead for the terminal MoveNextAsync, and that a dry run measures Prepare and RowTotal while recording no WriteInFlight or Commit samples.</td>
+      </tr>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/PushConcurrencyTests.cs</code><span class="bar" title="+204 -0"><i class="add" style="width:28.17%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+204</span></td>
+        <td class="sum">New class asserting the ordered-commit gate as an observed fact rather than an inference, reading StubGraphAdapter.MaxConcurrentWrites: a source with RequiresOrderedCommit=false genuinely overlaps writes, while a watermarked source is held to exactly one write in flight even with Writers=8 configured, preserving the commit order the checkpoint depends on. Also pins that a dry run never goes concurrent and writes nothing, that a failing write surfaces the originating ODataError (status 400) rather than the OperationCanceledException it triggers in sibling writers and leaves Completed false, that Writers=999 is clamped well under the 25 concurrent operations Graph documents, and that 200 items are each written exactly once with zero duplicates. The last test asserts GraphPipeline.CreateHandlers() contains no RetryHandler — so the SDK cannot retry invisibly inside PutAsync and mis-attribute its sleeps to time in flight — plus a NotEmpty guard so an SDK rename cannot make the check vacuous.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/TestSupport/StubGraphAdapter.cs</code><span class="bar" title="+71 -5"><i class="add" style="width:16.06%"></i><i class="del" style="width:1.13%"></i></span></td>
+        <td class="num"><span class="c-add">+71</span> <span class="c-del">&minus;5</span></td>
+        <td class="sum">The stub gained the instrumentation the concurrency tests read. SendAsync became async and now honours a settable WriteDelay so writes can actually overlap (a stub returning instantly can be driven by eight writers and still never show two in flight), and EnterWrite/LeaveWrite bracket that delay while maintaining an interlocked high-water mark exposed as MaxConcurrentWrites via a CompareExchange loop - so the counter reflects overlap of the simulated delay window, which is why every test asserting on it sets WriteDelay first. Appends to WrittenItemIds, WrittenBodies and Writes are now made in two blocks that both take the same lock object, so a torn List&lt;T&gt; cannot fail a concurrency test for reasons unrelated to the engine.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/TestSupport/FakePushSource.cs</code><span class="bar" title="+26 -3"><i class="add" style="width:9.52%"></i><i class="del" style="width:1.10%"></i></span></td>
+        <td class="num"><span class="c-add">+26</span> <span class="c-del">&minus;3</span></td>
+        <td class="sum">Added a requiresOrderedCommit constructor parameter surfacing the new IPushSource.RequiresOrderedCommit property, defaulted to true so every pre-existing test keeps exercising the serial path it was written for. OnItemCommittedAsync now appends to Committed under a lock, since an unordered source is committed from several writer threads at once; the doc comment now notes the list is in completion order for unordered sources.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/TestSupport/FakeWebHdfs.cs</code><span class="bar" title="+19 -3"><i class="add" style="width:7.99%"></i><i class="del" style="width:1.26%"></i></span></td>
+        <td class="num"><span class="c-add">+19</span> <span class="c-del">&minus;3</span></td>
+        <td class="sum">Directory() was widened from a one-argument helper that hardcoded a 755 entry into `Directory(path, permission = &quot;755&quot;, group = &quot;hadoop-contracts-read&quot;, params string[] aclEntries)`, so a future test can stage a non-traversable parent the way File() already stages a restricted file. No test in this diff uses it: the only caller remains the ancestor auto-fill loop inside File(), which passes the path alone and takes every default, and the RNG-04 traversal tests construct HdfsFileStatus objects by hand rather than going through the fake. The `group` default matches FakeHdfsEntry&#x27;s existing default, so auto-filled parents are unchanged. The rest of the change is a comment recording that the auto-fill loop&#x27;s `!entries.ContainsKey(parent)` guard - which pre-dates this diff - leaves a deliberately configured parent untouched. Significance: low.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/ControlEvidenceTests.cs</code><span class="bar" title="+16 -0"><i class="add" style="width:7.89%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+16</span></td>
+        <td class="sum">Registered seven CdpTraverseAndPagingTests methods in the protected evidence list, so none can be renamed or deleted without failing the control check. Five cover the Ranger findings that hold on any cluster regardless of configuration; the other two are both halves of the zone guard — that a zoned policy set stops the run, and that an unzoned one is still read normally, since a guard nobody can switch off is only safe while it cannot fire on an ordinary cluster.</td>
+      </tr>
+      </tbody>
+    </table></div>
+  </section>
+  <section>
+    <h2>Documentation, Pages and CI</h2>
+    <p class="blurb">The largest area by volume, and almost none of it is about the connector&#x27;s behaviour.</p>
+    <p class="tally"><span>22 files</span><span class="c-add">+4,204</span><span class="c-del">&minus;1,793</span></p>
+    <div class="scroll"><table>
+      <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
+      <tbody>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>docs/copilot-router.html</code><span class="bar" title="+2571 -0"><i class="add" style="width:100.00%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+2,571</span></td>
+        <td class="sum">New self-contained decision tool replacing copilot-decision-matrix.html: nineteen questions (Q1-Q19) driving twelve routes through a JS engine of decide/gate/pbiMode/modeWhy/warnings functions, plus three reference tables (capability by surface, grounding &amp; invocation paths, the three live-call packagings) and a &#x27;two planes&#x27; section. It has zero external references — five IBM Plex/Spectral woff2 faces are embedded as base64 data URIs and the palette is pinned to dark via color-scheme, so it renders identically offline and from file://. Footer carries a revision stamp: 2026-08-28 · r19.</td>
+      </tr>
+      <tr class="s-deleted">
+        <td class="st"><span class="chip ch-deleted">DEL</span></td>
+        <td class="pathcell"><code>docs/copilot-decision-matrix.html</code><span class="bar" title="+0 -1665"><i class="add" style="width:0.00%"></i><i class="del" style="width:80.47%"></i></span></td>
+        <td class="num"><span class="c-del">&minus;1,665</span></td>
+        <td class="sum">The previous eleven-question decision tool (80 KB, Google Fonts loaded over the network, light/dark auto palette) is removed outright rather than edited. Its successor is docs/copilot-router.html; every inbound reference — README, COPILOT-ROUTING.md, the build.yml release manifest — was repointed in the same range.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/COPILOT-ROUTING.md</code><span class="bar" title="+470 -30"><i class="add" style="width:41.45%"></i><i class="del" style="width:2.65%"></i></span></td>
+        <td class="num"><span class="c-add">+470</span> <span class="c-del">&minus;30</span></td>
+        <td class="sum">Rewritten from four gates/two outcomes to five gates and three outcomes, adding MODEL IT (Power BI semantic model) as a peer of INDEX IT and CALL IT, and adding the federated Copilot connector as a fourth CALL leaf. New sections cover the three storage modes and their security consequences (the central warning: Direct Lake on OneLake does not apply SQL-endpoint row- or column-level security), the three constraints that disqualify Direct Lake (no gateway of any kind, same-region workspaces, guardrail-failed refresh blocking all queries), Fabric capacity thresholds F2/F64, Power BI against Cloudera per engine, the MCP gateway question, merging/joining, audience-size economics, and the M365-vs-Fabric plane split. Note one stale figure: line 274 still states the embedded PNG is 2480×1692 while the checked-in file is 3108×2132.</td>
+      </tr>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>docs/GENESIS-PROMPT-COPILOT-ROUTER.md</code><span class="bar" title="+400 -0"><i class="add" style="width:39.44%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+400</span></td>
+        <td class="sum">The full instruction set that regenerates copilot-router.html from an empty directory — role and failure asymmetry (over-granting ends engagements, mis-costing merely embarrasses), doctrine, the nineteen questions, the engine, platform facts stamped &#x27;verified 2026-08-28&#x27;, design system, verification, decisions not to re-open, and landmines. It explicitly subordinates itself to the page: where the two disagree the page is right. Sections 2-5 are portable doctrine; section 6 is dated platform fact that must be re-verified rather than copied.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/copilot-route-decision-tree.svg</code><span class="bar" title="+155 -76"><i class="add" style="width:20.11%"></i><i class="del" style="width:9.86%"></i></span></td>
+        <td class="num"><span class="c-add">+155</span> <span class="c-del">&minus;76</span></td>
+        <td class="sum">The editable drawing is rebuilt from a 1000×830 viewBox with four leaves to 1554×1066 with ten, splitting INDEX IT into gallery/agent-hosted/direct-push, adding the MODEL IT branch (Direct Lake, Import, DirectQuery) on a new dashed .n-model node style, and adding Federated to the CALL IT leaves. A .t-leafr risk-coloured leaf style is introduced to mark the caveat line on a leaf (Direct Lake&#x27;s &#x27;SQL-endpoint RLS off&#x27;, direct push&#x27;s &#x27;you must delete&#x27;), and the aria-label and desc are rewritten to describe all five gates.</td>
+      </tr>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>docs/SQL-PILOT-PARAMETERS.md</code><span class="bar" title="+123 -0"><i class="add" style="width:21.87%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+123</span></td>
+        <td class="sum">New client-facing parameter request for a SQL Server pilot, structured so section 0 (&#x27;how fast must a deleted record stop appearing&#x27;) decides agent-hosted versus direct push before anything else is asked, with the two paths compared row by row. Sections 4 and 5 are path-specific and mutually skippable. Every authentication row asks for a reference — a Key Vault secret&#x27;s name, a certificate thumbprint, an account to grant — never a value, and the closing note says an attached credential would have to be treated as an incident.</td>
+      </tr>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>docs/PRODUCTION-ONBOARDING.md</code><span class="bar" title="+120 -0"><i class="add" style="width:21.60%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+120</span></td>
+        <td class="sum">New Gate/Check checklist for promoting either connector from pilot to supported service, with an owner and state column on every row because the stated failure mode is a control nobody owns. Covers go/no-go gates (deletion SLA met by the chosen path, ACL staleness bound written into the risk register, a named connection owner, a rehearsed backout), then identity, access model, capacity, monitoring, change management, and CDP- and SQL-only sections, ending with a sign-off table and the three rows that habitually get skipped.</td>
+      </tr>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>docs/CDP-PILOT-PARAMETERS.md</code><span class="bar" title="+92 -0"><i class="add" style="width:18.92%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+92</span></td>
+        <td class="sum">New client-facing parameter request for a CDP pilot, ordered by lead time: identity and trust first (Kerberos realm trust, the frequently-missed cm_atlas entity-read grant, cluster group names and their Entra object IDs), then endpoints, scope, network, and a Ranger policy-model section. Section 5 exists to establish whether the connector will refuse to run at all — a yes to 5.1 (security zones) stops the pilot until it is designed for — and 5.4 asks for Ranger Admin&#x27;s policy count so a truncated read is detectable. It also warns that Atlas hdfs_path will catalogue nothing, since a path entry matches no Hive policy and fails closed.</td>
+      </tr>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>.github/scripts/render-genesis.py</code><span class="bar" title="+75 -0"><i class="add" style="width:17.08%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+75</span></td>
+        <td class="sum">Renders GENESIS-PROMPT-COPILOT-ROUTER.md to a styled HTML page at deploy time using python-markdown with the tables and fenced_code extensions, wrapping every &lt;table&gt; in a .scroller div so wide tables scroll rather than stretching the page. Styling is an inline dark-only template in the router&#x27;s design family, with Google Fonts linked rather than embedded. Running it at deploy time is what stops the published page drifting from the markdown source.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/RUNBOOK.md</code><span class="bar" title="+57 -1"><i class="add" style="width:14.76%"></i><i class="del" style="width:0.26%"></i></span></td>
+        <td class="num"><span class="c-add">+57</span> <span class="c-del">&minus;1</span></td>
+        <td class="sum">Adds §3.1 documenting the new per-run timing attribution table (p50/p95/p99/max and share across source read, prepare item, write in flight, write backoff, commit; percentiles not means, always on at a fixed 1.5 KB cost) with &#x27;read write backoff first&#x27; as the tuning rule, and §3.2 documenting Settings:Writers — default 4, clamped 1-16, and deliberately inert for any source that keeps a watermark because IPushSource.RequiresOrderedCommit defaults to true. The cdphdfsdocs row in §6 is amended to say grants are intersected with the groups that can traverse every directory above the file.</td>
+      </tr>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>.github/workflows/pages.yml</code><span class="bar" title="+49 -0"><i class="add" style="width:13.81%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+49</span></td>
+        <td class="sum">New GitHub Pages deployment publishing exactly two documents — copilot-router.html (also copied to _site/index.html so the bare URL works) and the genesis prompt rendered to HTML — with contents:read, pages:write and id-token:write permissions and a cancel-in-progress &#x27;pages&#x27; concurrency group. Automatic runs are narrowed to pushes to main touching the router, the genesis markdown, the render script or the workflow itself, so the rest of docs/ stays repository source rather than a website; workflow_dispatch is also declared, so it can be redeployed by hand. Two is right for this range: the commit that publishes the page you are reading makes it three, and lands after v1.2.23.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/TROUBLESHOOTING-DIRECT-PUSH.md</code><span class="bar" title="+18 -4"><i class="add" style="width:7.57%"></i><i class="del" style="width:1.68%"></i></span></td>
+        <td class="num"><span class="c-add">+18</span> <span class="c-del">&minus;4</span></td>
+        <td class="sum">Documents two v1.2.22 behaviour changes an operator would otherwise mis-diagnose. throttleWaits= only became trustworthy now, because the Graph SDK&#x27;s own retry handler used to absorb 429s inside the call (three attempts, three seconds apart) and has been removed from GraphPipeline; and the &#x27;last Indexed line is the high-water mark&#x27; recovery advice is withdrawn, because that line is at Debug and because concurrent writers (Settings:Writers) mean the last line printed is simply the last write to finish. The replacement advice is to re-run, since a SQL push re-reads its whole query and writes are upserts.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/SECURITY.md</code><span class="bar" title="+5 -1"><i class="add" style="width:4.03%"></i><i class="del" style="width:0.81%"></i></span></td>
+        <td class="num"><span class="c-add">+5</span> <span class="c-del">&minus;1</span></td>
+        <td class="sum">Adds four Ranger/HDFS control rows with their proving tests: CDP-14 (HdfsPushSource.WalkAsync now carries a traversal gate, intersecting HdfsAclBuilder.TraverseGroups down the walk so read-on-file without execute-on-ancestors no longer publishes a file), CDP-15 (RangerPolicyClient.PoliciesAsync pages and advances by what a page actually held, because Ranger clamps pageSize to ranger.db.maxrows.default), CDP-16 (RangerPolicy.PathMatches drops IgnoreCase for path while Matches keeps it for Hive identifiers), and CDP-17 (RangerPolicyClient.RefuseSecurityZones stops the run rather than reading a zoned service zone-blind, with no setting to disable it). The evidence command&#x27;s test count moves 255 → 283.</td>
+      </tr>
+      <tr class="s-added">
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>docs/index.md</code><span class="bar" title="+53 -0"><i class="add" style="width:14.36%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+53</span></td>
+        <td class="sum">A Jekyll-style landing page (YAML front matter, a {{ site.github.repository_url }} liquid tag) with Start here / Deploying / Reviewing / Troubleshooting tables linking the whole docs set, plus a note that all sample data is fictional. Worth flagging: the pages.yml that shipped after it publishes only copilot-router.html (copied to _site/index.html) and the rendered genesis prompt, and runs no Jekyll — so this file is not currently served by the Pages site and nothing in .github/, docs/ or README.md references it.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>README.md</code><span class="bar" title="+11 -11"><i class="add" style="width:4.63%"></i><i class="del" style="width:4.63%"></i></span></td>
+        <td class="num"><span class="c-add">+11</span> <span class="c-del">&minus;11</span></td>
+        <td class="sum">Repoints every GitHub URL from m365-copilot-sql-connector to m365-copilot-connectors — the build badge, both release-table links, the VS2022 caveat links and the release/net9 clone command — following the repository rename. The docs tree listing swaps copilot-decision-matrix.html for copilot-router.html described as a 19-question router, and the test counts move 255 → 283 with the ControlEvidenceTests tripwire covering forty-seven rather than forty control-evidence tests.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/CDP-DEPLOYMENT.md</code><span class="bar" title="+1 -1"><i class="add" style="width:1.39%"></i><i class="del" style="width:1.39%"></i></span></td>
+        <td class="num"><span class="c-add">+1</span> <span class="c-del">&minus;1</span></td>
+        <td class="sum">The exit-code 4 row now lists a Ranger service using security zones among the named causes, quoting the log signature `has N polic(y/ies) in security zone(s)` and pointing at control CDP-17. Without this an operator hitting the new zone refusal would see an ingestion failure with no documented cause.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>.github/workflows/build.yml</code><span class="bar" title="+1 -1"><i class="add" style="width:1.39%"></i><i class="del" style="width:1.39%"></i></span></td>
+        <td class="num"><span class="c-add">+1</span> <span class="c-del">&minus;1</span></td>
+        <td class="sum">The release-package manifest assertion swaps &#x27;docs/copilot-decision-matrix.html&#x27; for &#x27;docs/copilot-router.html&#x27;, keeping the comment that it is linked by COPILOT-ROUTING.md; without this the packaging check would fail on the renamed file. Note the five documents added in this range — CDP-PILOT-PARAMETERS.md, SQL-PILOT-PARAMETERS.md, PRODUCTION-ONBOARDING.md, GENESIS-PROMPT-COPILOT-ROUTER.md and index.md — were not added to this list, so the release zip is not asserted to contain them.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/copilot-route-decision-tree.png</code><span class="binary">binary</span></td>
+        <td class="num"><span class="c-bin">—</span></td>
+        <td class="sum">Regenerated light-theme raster of the decision tree, 2000×1660 → 3108×2132 (an exact 2× render of the new 1554×1066 SVG). It depicts the five-gate tree with its ten leaves — the three INDEX IT connector kinds, the three Power BI storage modes, and the four CALL IT packagings including the new federated connector. This is the image COPILOT-ROUTING.md embeds.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/copilot-route-decision-tree-dark.png</code><span class="binary">binary</span></td>
+        <td class="num"><span class="c-bin">—</span></td>
+        <td class="sum">Regenerated dark-theme raster of the same five-gate tree, 2000×1660 → 3108×2132, kept for decks and dark documents. Content matches the light render leaf for leaf.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/copilot-delivery-paths.png</code><span class="binary">binary</span></td>
+        <td class="num"><span class="c-bin">—</span></td>
+        <td class="sum">Regenerated standalone render of the router&#x27;s delivery-path table, 3220×2260 → 4434×4426. The table grew on both axes: seven new columns (the federated connector, the three Power BI storage modes, a Fabric data agent, a ready-made MCP server, and Custom split into agent-hosted and direct-push) and five new rows — &#x27;Plane — whose governance approves it&#x27;, &#x27;Licence it needs&#x27;, &#x27;Where the rows physically sit&#x27; (the residency row the storage-mode discussion turns on), &#x27;Answers across more than one source&#x27; and &#x27;Retrieval you control&#x27;. The near-doubling of height comes from those rows plus the extra wrapping the wider grid forces.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/copilot-surface-matrix.png</code><span class="binary">binary</span></td>
+        <td class="num"><span class="c-bin">—</span></td>
+        <td class="sum">Regenerated standalone render of the capability-by-surface matrix, 3220×2287 → 4094×3446. It grew on both axes: three new surface columns (Cowork, Power BI, Fabric data agent) alongside the existing Copilot/M365/SharePoint/Researcher/Frontier/Azure AI set, and three new capability rows — &#x27;Runs without a Fabric or Premium capacity&#x27;, &#x27;Answer appears in M365 Copilot chat&#x27; and &#x27;You choose the retrieval&#x27; — added beneath the existing regulated/licensed-data and network-isolation rows.</td>
+      </tr>
+      <tr class="s-modified">
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/HIERARCHY-DEPLOYMENT.md</code><span class="bar" title="+3 -3"><i class="add" style="width:2.42%"></i><i class="del" style="width:2.42%"></i></span></td>
+        <td class="num"><span class="c-add">+3</span> <span class="c-del">&minus;3</span></td>
+        <td class="sum">Repository rename only: the two release download links and the release/net9 git clone command move from m365-copilot-sql-connector to m365-copilot-connectors. No procedural change.</td>
+      </tr>
+      </tbody>
+    </table></div>
+  </section>
+<footer class="foot">
+  <p>Generated from <code>git diff v1.2.20 v1.2.23</code>. Every summary was written by reading the
+  actual diff hunks, then checked by a second pass whose brief was to find invented, overstated or
+  missing claims &mdash; 12 of the 41 entries were corrected as a result, and one of those corrections
+  turned out to be a defect in the shipped code rather than in the summary. That defect is what
+  v1.2.23 fixes, so this page now describes the release it caused.</p>
+  <p>Line counts are from <code>git diff --numstat</code>; bars are square-root scaled so small files
+  stay visible beside a 2,571-line one. The four PNGs are binary and report no line counts.</p>
+</footer>
+</div>
+
+</body>
+</html>

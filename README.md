@@ -137,6 +137,8 @@ docs/
   ADDING-A-PUSH-CONNECTOR.md           One class and one config file: the recipe and the reasoning
   COPILOT-ROUTING.md                   Connector, action, MCP or Foundry - the decision upstream of this repository
   copilot-router.html                 The Copilot Router: a 19 question router, the tree, and the matrices
+  release-diff.html                   What changed in the current release range, file by file - published at
+                                      josephsaad.github.io/m365-copilot-connectors/release-diff.html
   copilot-route-decision-tree.png / .svg / -dark.png  The routing drawing embedded by COPILOT-ROUTING.md
   copilot-surface-matrix.png           The capability-by-surface matrix as a standalone image
   copilot-delivery-paths.png           The delivery-path matrix as a standalone image
