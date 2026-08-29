@@ -1,0 +1,203 @@
+@page "/Runs/{runId:long}"
+@model ConnectorState.Dashboard.Pages.Runs.DetailModel
+@{
+    ViewData["Title"] = $"Run {Model.Run.RunId}";
+    RunHistoryRow run = Model.Run;
+}
+
+<p class="crumb">
+    <a href="/Runs">Runs</a> /
+    <a href="/Connections/@Uri.EscapeDataString(run.ConnectionId)">@run.DisplayName</a>
+</p>
+
+<h1>Run @run.RunId <partial name="_ConnectionPill" model="run.Status ?? string.Empty" /></h1>
+<p class="subtitle">
+    @run.DisplayName · @(run.Mode ?? Format.None) crawl · @run.ConnectorKey
+    @if (run.IsDryRun)
+    {
+        <span class="tag">dry run — nothing was written</span>
+    }
+</p>
+
+@if (!string.IsNullOrEmpty(run.ErrorKind))
+{
+    <div class="banner banner-bad">
+        <strong>@run.ErrorKind</strong>
+        @if (!string.IsNullOrEmpty(run.ErrorMessage))
+        {
+            <div>@run.ErrorMessage</div>
+        }
+        <div class="note note-flush">
+            Failure messages carry no row content by policy — find the offending row in the
+            source by the ordinal the connector logged.
+        </div>
+    </div>
+}
+
+<section class="section">
+    <div class="panel panel-pad">
+        <dl class="facts">
+            <div><dt>Started (UTC)</dt><dd>@Format.Timestamp(run.StartedUtc)</dd></div>
+            <div><dt>Completed (UTC)</dt><dd>@Format.Timestamp(run.CompletedUtc)</dd></div>
+            <div><dt>Duration</dt><dd>@Format.Duration(run.DurationSeconds)</dd></div>
+            <div><dt>Throughput</dt><dd>@Format.Decimal2(run.ItemsPerSecond) items/s</dd></div>
+            <div><dt>Read</dt><dd>@Format.Count(run.ItemsRead)</dd></div>
+            <div><dt>Written</dt><dd>@Format.Count(run.ItemsWritten)</dd></div>
+            <div><dt>Unchanged</dt><dd>@Format.Count(run.ItemsUnchanged)</dd></div>
+            <div><dt>Unchanged share</dt><dd>@Format.Percent(run.UnchangedPercent)</dd></div>
+            <div><dt>Deleted</dt><dd>@Format.Count(run.ItemsDeleted)</dd></div>
+            <div><dt>Skipped</dt><dd>@Format.Count(run.ItemsSkipped)</dd></div>
+            <div><dt>Failed</dt><dd>@Format.Count(run.ItemsFailed)</dd></div>
+            <div><dt>Duplicate ids</dt><dd>@Format.Count(run.ItemsDuplicate)</dd></div>
+            <div><dt>Batches</dt><dd>@Format.Count(run.BatchesSent)</dd></div>
+            <div><dt>Bytes written</dt><dd>@Format.Bytes(run.BytesWritten)</dd></div>
+            <div><dt>Throttle waits</dt><dd>@Format.Count(run.ThrottleWaits)</dd></div>
+            <div><dt>Host</dt><dd>@run.HostName</dd></div>
+            <div><dt>Tool version</dt><dd>@run.ToolVersion</dd></div>
+        </dl>
+    </div>
+</section>
+
+<section class="section">
+    <h2>By item type</h2>
+    <div class="panel">
+        @if (Model.ByItemType.Count == 0)
+        {
+            <p class="empty">
+                This run recorded no per-type breakdown. Runs written by a tool version older than
+                the one that added crawl.RunItemType have only the totals above.
+            </p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>Item type</th>
+                            <th class="num">Written</th>
+                            <th class="num">Unchanged</th>
+                            <th class="num">Unchanged share</th>
+                            <th class="num">Deleted</th>
+                            <th class="num">Skipped</th>
+                            <th class="num">Failed</th>
+                            <th class="num">Bytes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (RunItemTypeRow type in Model.ByItemType)
+                        {
+                            <tr>
+                                <td class="strong">@type.ItemType</td>
+                                <td class="num">@Format.Count(type.ItemsWritten)</td>
+                                <td class="num dim">@Format.Count(type.ItemsUnchanged)</td>
+                                <td class="num">@Format.Percent(type.UnchangedPercent)</td>
+                                <td class="num dim">@Format.Count(type.ItemsDeleted)</td>
+                                <td class="num dim">@Format.Count(type.ItemsSkipped)</td>
+                                <td class="num">
+                                    @if (type.ItemsFailed > 0)
+                                    {
+                                        <span class="pill pill-bad">@Format.Count(type.ItemsFailed)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="zero">0</span>
+                                    }
+                                </td>
+                                <td class="num dim">@Format.Bytes(type.BytesWritten)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+    <p class="note">
+        The set of item types belongs to the connector, not to the schema — a new connector
+        invents its own kinds without a migration.
+    </p>
+</section>
+
+<section class="section">
+    <h2>Where the time went</h2>
+    <div class="panel">
+        @if (Model.Timing.Count == 0)
+        {
+            <p class="empty">This run recorded no phase timing.</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>Phase</th>
+                            <th class="num">Samples</th>
+                            <th class="num">Total</th>
+                            <th class="num">Share</th>
+                            <th class="num">p50</th>
+                            <th class="num">p95</th>
+                            <th class="num">p99</th>
+                            <th class="num">max</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (RunPhaseTimingRow phase in Model.Timing)
+                        {
+                            <tr>
+                                <td class="strong">@phase.Phase</td>
+                                <td class="num dim">@Format.Count(phase.SampleCount)</td>
+                                <td class="num">@Format.Milliseconds(phase.TotalMs)</td>
+                                <td class="num">@Format.Percent(phase.SharePercent)</td>
+                                <td class="num">@Format.Milliseconds(phase.P50Ms)</td>
+                                <td class="num">@Format.Milliseconds(phase.P95Ms)</td>
+                                <td class="num">@Format.Milliseconds(phase.P99Ms)</td>
+                                <td class="num dim">@Format.Milliseconds(phase.MaxMs)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+    <p class="note">
+        Percentiles rather than means: one row that waited sixty seconds behind a Retry-After
+        moves a mean and tells you nothing about the other thousand. <strong>Share</strong> is of
+        the <code>RowTotal</code> phase, so the phases need not sum to 100% — overlapping work is
+        counted where it happened.
+    </p>
+</section>
+
+<section class="section">
+    <h2>Throttling</h2>
+    <div class="panel panel-pad">
+        @if (Model.Throttling is null)
+        {
+            <p class="empty">
+                This run was never throttled. Clean runs are omitted from the throttle summary on
+                purpose — padding it with zeros makes the runs that matter harder to find.
+            </p>
+        }
+        else
+        {
+            <dl class="facts">
+                <div><dt>Events</dt><dd>@Format.Count(Model.Throttling.ThrottleEvents)</dd></div>
+                <div><dt>429 refusals</dt><dd>@Format.Count(Model.Throttling.Refusals429)</dd></div>
+                <div><dt>5xx</dt><dd>@Format.Count(Model.Throttling.ServerErrors)</dd></div>
+                <div><dt>Time asked for</dt><dd>@Format.Duration(Model.Throttling.TotalRetryAfterSeconds)</dd></div>
+                <div><dt>Longest wait</dt><dd>@Format.Duration(Model.Throttling.MaxRetryAfterSeconds)</dd></div>
+                <div><dt>Distinct minutes</dt><dd>@Format.Count(Model.Throttling.DistinctMinutes)</dd></div>
+                <div><dt>First event (UTC)</dt><dd>@Format.Timestamp(Model.Throttling.FirstEventUtc)</dd></div>
+                <div><dt>Last event (UTC)</dt><dd>@Format.Timestamp(Model.Throttling.LastEventUtc)</dd></div>
+                <div><dt>Deepest retry</dt><dd>@Format.Count(Model.Throttling.DeepestRetry)</dd></div>
+            </dl>
+            <p class="note">
+                Read <strong>time asked for</strong> against <strong>distinct minutes</strong>.
+                Ten minutes lost across four minutes of wall clock is throttling hard and briefly
+                — lower the writer count. The same ten minutes spread evenly over an hour is the
+                sustainable rate, and the writer count is not the lever.
+            </p>
+            <p class="note"><a href="/Runs/@run.RunId/Throttling">All @Format.Count(Model.Throttling.ThrottleEvents) events</a></p>
+        }
+    </div>
+</section>

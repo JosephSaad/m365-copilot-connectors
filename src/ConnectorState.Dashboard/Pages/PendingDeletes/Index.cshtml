@@ -1,0 +1,98 @@
+@page
+@model ConnectorState.Dashboard.Pages.PendingDeletes.IndexModel
+@{
+    ViewData["Title"] = "Pending deletes";
+}
+
+<h1>Pending deletes</h1>
+<p class="subtitle">
+    Items a sweep decided are gone and Graph has not yet confirmed removed. On a healthy
+    connection this list is empty for all but a few seconds per run.
+</p>
+
+<form class="filters" method="get" action="/PendingDeletes">
+    <div class="field">
+        <label for="c">Connection</label>
+        <select id="c" name="c">
+            <option value="">All connections</option>
+            @foreach (ConnectionRef connection in Model.Connections)
+            {
+                <option value="@connection.ConnectionId" selected="@(connection.ConnectionId == Model.ConnectionId)">
+                    @connection.DisplayName
+                </option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="age">Pending for at least (minutes)</label>
+        <input type="number" id="age" name="age" min="0" step="15" value="@Model.MinAgeMinutes" />
+    </div>
+    <div class="field">
+        <label for="ps">Rows</label>
+        <input type="number" id="ps" name="ps" min="1" max="500" step="25" value="@Model.Result.PageSize" />
+    </div>
+    <button class="apply" type="submit">Apply</button>
+    <a class="reset" href="/PendingDeletes">Reset</a>
+</form>
+
+<div class="panel">
+    @if (Model.Result.IsEmpty)
+    {
+        <p class="empty">
+            Nothing is awaiting deletion. That is the expected state between runs.
+        </p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>Connection</th>
+                        <th>Item ID</th>
+                        <th>Type</th>
+                        <th class="num">Pending for</th>
+                        <th class="num">Last written (UTC)</th>
+                        <th class="num">Last seen by run</th>
+                        <th class="num">That run started (UTC)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (PendingDeleteRow pending in Model.Result.Rows)
+                    {
+                        <tr>
+                            <td>
+                                <a href="/Connections/@Uri.EscapeDataString(pending.ConnectionId)">@pending.DisplayName</a>
+                            </td>
+                            <td class="id">@pending.ItemId</td>
+                            <td class="dim">@pending.ItemType</td>
+                            <td class="num">
+                                @if (pending.AgeMinutes >= 60)
+                                {
+                                    <span class="pill pill-warn">@Format.Age(pending.AgeMinutes)</span>
+                                }
+                                else
+                                {
+                                    @Format.Age(pending.AgeMinutes)
+                                }
+                            </td>
+                            <td class="num nowrap dim">@Format.TimestampShort(pending.LastWrittenUtc)</td>
+                            <td class="num"><a href="/Runs/@pending.LastSeenRunId">@pending.LastSeenRunId</a></td>
+                            <td class="num nowrap dim">@Format.TimestampShort(pending.LastSeenRunStartedUtc)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<partial name="_Pager" model="Model.Pager" />
+
+<p class="note">
+    A row here that outlives one crawl interval is a DELETE that was refused and retried and
+    refused again — an item the source dropped that is still answering searches. Filter by age
+    to separate those from the deletes that are pending simply because a run is in flight.
+    <strong>Last seen by run</strong> is the run that last found the item alive in the source, so
+    that run's numbers are the place to start rather than the item alone.
+</p>

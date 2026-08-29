@@ -1,0 +1,46 @@
+@model ConnectorState.Dashboard.Presentation.Pager
+@*
+    The pager. Its numbers come from TotalRows, which every list procedure in
+    sql/24 returns on every row via COUNT(*) OVER() - one round trip, and a count
+    that cannot disagree with the page beside it.
+*@
+<div class="pager">
+    <div>
+        @if (Model.TotalRows == 0)
+        {
+            <text>No @Model.Noun match these filters.</text>
+        }
+        else
+        {
+            <text>
+                @Format.Count(Model.FirstRowNumber)–@Format.Count(Model.LastRowNumber)
+                of @Format.Count(Model.TotalRows) @Model.Noun
+            </text>
+        }
+    </div>
+    <div class="pager-links">
+        @if (Model.HasPrevious)
+        {
+            <a href="@Model.Url(1)" rel="first">First</a>
+            <a href="@Model.Url(Model.Page - 1)" rel="prev">Previous</a>
+        }
+        else
+        {
+            <span>First</span>
+            <span>Previous</span>
+        }
+
+        <span>Page @Format.Count(Model.Page) of @Format.Count(Model.PageCount)</span>
+
+        @if (Model.HasNext)
+        {
+            <a href="@Model.Url(Model.Page + 1)" rel="next">Next</a>
+            <a href="@Model.Url(Model.PageCount)" rel="last">Last</a>
+        }
+        else
+        {
+            <span>Next</span>
+            <span>Last</span>
+        }
+    </div>
+</div>

@@ -25,11 +25,13 @@ documentation that ships with it.
 
 | | |
 |---|---|
+| [**What a source must guarantee**](SOURCE-CONTRACT.md) | The four hard requirements a source has to meet before a direct push can detect deletions, skip unchanged items and resume — and what a source that meets only some of them still gets |
 | [**What we need from the CDP team**](CDP-PILOT-PARAMETERS.md) | The parameters to collect before a pilot — what is asked, why, and a column to answer in |
 | [**What we need from the SQL team**](SQL-PILOT-PARAMETERS.md) | The same, for a SQL Server source — covering both the agent-hosted and direct-push paths |
 | [**Production onboarding**](PRODUCTION-ONBOARDING.md) | What has to be true before either connector is a supported service rather than a pilot that happens to be running |
 | [CDP connector](CDP-DEPLOYMENT.md) | HDFS documents, Hive tables and the Atlas catalogue, from a Kerberised cluster |
 | [Hierarchy connector](HIERARCHY-DEPLOYMENT.md) | The worked three-level example, flattened for a flat index |
+| [Crawl state database](CRAWL-STATE-DEPLOYMENT.md) | Standing up `ConnectorState`: the six scripts in order, the two service accounts, retention, and the delete guard an operator has to know before the first refusal |
 | [App registration](APP-REGISTRATION.md) | Entra setup, certificate auth, and the permissions each path actually needs |
 | [Runbook](RUNBOOK.md) | Scheduling, certificate rotation, the ACL staleness bound, and what each exit code means |
 
@@ -38,6 +40,7 @@ documentation that ships with it.
 | | |
 |---|---|
 | [Security control mapping](SECURITY.md) | Every control, where it is implemented, and the test that proves it |
+| [Crawl state reference](CRAWL-STATE-REFERENCE.md) | Every table, view and procedure in the state database, with columns, parameters and error numbers |
 | [Adding a connector](ADDING-A-PUSH-CONNECTOR.md) | The source seam, and what a new source has to supply |
 
 ## Troubleshooting

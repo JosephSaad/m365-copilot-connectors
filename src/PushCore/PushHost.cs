@@ -30,6 +30,7 @@ using Connector.Security.Configuration;
 using Connector.Security.Credentials;
 using Connector.Security.Logging;
 using Connector.Security.Secrets;
+using PushCore.State;
 
 /// <summary>Startup for every direct push executable.</summary>
 public static class PushHost
@@ -39,7 +40,41 @@ public static class PushHost
     /// <summary>Runs whichever connector the arguments select.</summary>
     /// <param name="args">Command line: --connector, --dry-run, --help.</param>
     /// <returns>The process exit code.</returns>
-    public static async Task<int> RunAsync(string[] args)
+    /// <summary>
+    /// Builds the crawl state store for a run, or returns null for none.
+    /// </summary>
+    /// <param name="options">Validated configuration.</param>
+    /// <param name="log">Where to report progress.</param>
+    /// <returns>The store, or null to run without durable crawl memory.</returns>
+    /// <remarks>
+    /// A delegate rather than a direct construction, because the store that
+    /// implements ICrawlStateStore over SQL Server lives in PushCore.State,
+    /// which references SqlClient - and this project must not. That is the same
+    /// rule that keeps PushCore.Sql separate: a connector reading something that
+    /// is not a database references PushCore and stops there, and the day a
+    /// SqlClient advisory lands, the projects that have to be re-released are
+    /// the ones that actually open SQL connections.
+    ///
+    /// The executable supplies it. SqlGraphPush and SqlHierarchyPush pass
+    /// SqlCrawlStateStore's factory; an executable that passes nothing gets the
+    /// null store and the behaviour every release before this one had.
+    /// </remarks>
+    public delegate ICrawlStateStore? CrawlStateStoreFactory(PushOptions options, ILogger log);
+
+    public static Task<int> RunAsync(string[] args)
+    {
+        return RunAsync(args, null);
+    }
+
+    /// <summary>Runs whichever connector the arguments select, with crawl state.</summary>
+    /// <param name="args">Command line: --connector, --dry-run, --help.</param>
+    /// <param name="stateStore">
+    /// Builds the durable crawl state store, or null for none. See
+    /// <see cref="CrawlStateStoreFactory"/> for why this is supplied rather than
+    /// constructed here.
+    /// </param>
+    /// <returns>The process exit code.</returns>
+    public static async Task<int> RunAsync(string[] args, CrawlStateStoreFactory? stateStore)
     {
         IReadOnlyList<IPushConnector> connectors;
 
@@ -58,7 +93,7 @@ public static class PushHost
             return 2;
         }
 
-        return await RunAsync(connectors, args);
+        return await RunAsync(connectors, args, stateStore);
     }
 
     private static string Flatten(Exception ex)
@@ -79,7 +114,18 @@ public static class PushHost
     /// <param name="connectors">The connectors this executable hosts.</param>
     /// <param name="args">Command line: --connector, --dry-run, --help.</param>
     /// <returns>The process exit code.</returns>
-    public static async Task<int> RunAsync(IReadOnlyList<IPushConnector> connectors, string[] args)
+    public static Task<int> RunAsync(IReadOnlyList<IPushConnector> connectors, string[] args)
+    {
+        return RunAsync(connectors, args, null);
+    }
+
+    /// <summary>Runs one of the supplied connectors, with crawl state.</summary>
+    /// <param name="connectors">The connectors to choose from.</param>
+    /// <param name="args">Command line: --connector, --dry-run, --help.</param>
+    /// <param name="stateStore">Builds the durable crawl state store, or null for none.</param>
+    /// <returns>The process exit code.</returns>
+    public static async Task<int> RunAsync(
+        IReadOnlyList<IPushConnector> connectors, string[] args, CrawlStateStoreFactory? stateStore)
     {
         bool dryRun = HasFlag(args, "--dry-run");
         string? key = ValueOf(args, "--connector");
@@ -226,10 +272,25 @@ public static class PushHost
             }
 
             // The same credential authenticates to Graph. Scope is unchanged.
-            var graph = new GraphServiceClient(GraphPipeline.Create(), credential, new[] { GraphScope });
+            // Settings:GraphProxy forces every Graph call through one egress
+            // point, which is the only part of "one controlled egress" that
+            // code can provide; the rest is a firewall decision.
+            var graph = new GraphServiceClient(
+                GraphPipeline.Create(options.Setting("GraphProxy")), credential, new[] { GraphScope });
+
+            // Disposed with the run, so the throttle buffer is flushed and the
+            // connection returned even when the run ends badly.
+            await using ICrawlStateStore? store = stateStore?.Invoke(options, Log.Logger);
+
+            if (store is null || !store.IsEnabled)
+            {
+                Log.Information(
+                    "No crawl state store configured. Every item will be written on every run and nothing " +
+                    "will be deleted - see docs/CRAWL-STATE-DEPLOYMENT.md.");
+            }
 
             var context = new PushSourceContext(options, credential, secrets, Log.Logger);
-            var engine = new PushEngine(connector, options, graph, Log.Logger, dryRun);
+            var engine = new PushEngine(connector, options, graph, Log.Logger, dryRun, store);
 
             // Ctrl+C cancels cleanly: the token reaches every Graph call and
             // every poll delay, so a two-hour schema wait does not have to be
@@ -246,12 +307,17 @@ public static class PushHost
             Log.Information(
                 "{Verb} complete. {Total} row(s) processed ({Breakdown}) for connection {ConnectionId}; " +
                 "{Distinct} distinct item(s). " +
+                "unchanged={Unchanged} deleted={Deleted} failed={Failed} batches={Batches} " +
                 "truncated={Truncated} skipped={Skipped} duplicates={Duplicates} throttleWaits={ThrottleWaits}",
                 dryRun ? "Dry run" : "Ingestion",
                 summary.Total,
                 summary.Describe(),
                 options.Graph.ConnectionId,
                 summary.Total - summary.Duplicates,
+                summary.Unchanged,
+                summary.Deleted,
+                summary.Failed,
+                summary.Batches,
                 summary.Truncated,
                 summary.Skipped,
                 summary.Duplicates,

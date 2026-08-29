@@ -1,0 +1,53 @@
+@{
+    string path = this.Context.Request.Path.Value ?? "/";
+
+    bool IsCurrent(string prefix) =>
+        prefix == "/"
+            ? string.Equals(path, "/", StringComparison.OrdinalIgnoreCase)
+            : path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] — Connector crawl state</title>
+    <link rel="stylesheet" href="~/dashboard.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="masthead">
+        <div class="masthead-inner">
+            <a class="wordmark" href="/">Connector crawl state</a>
+            <nav>
+                <a href="/" class="@(IsCurrent("/") ? "current" : null)">Overview</a>
+                <a href="/Runs" class="@(IsCurrent("/Runs") ? "current" : null)">Runs</a>
+                <a href="/Items" class="@(IsCurrent("/Items") ? "current" : null)">Inventory</a>
+                <a href="/PendingDeletes" class="@(IsCurrent("/PendingDeletes") ? "current" : null)">Pending deletes</a>
+            </nav>
+            <div class="who">@(this.User.Identity?.Name ?? "not signed in")</div>
+        </div>
+    </header>
+
+    <main class="page">
+        @RenderBody()
+
+        <footer class="colophon">
+            @* Stated on every page rather than once in a help topic, because the
+               expectation it corrects - that a search index dashboard can show
+               you the indexed document - is the one an operator arrives with. *@
+            <p>
+                Read-only. This application holds <strong>EXECUTE</strong> on seven reporting
+                procedures and <strong>SELECT</strong> on six views, and no permission on any
+                table. It authenticates to SQL Server as the application pool identity using
+                Windows integrated authentication; there is no stored credential.
+            </p>
+            <p>
+                The crawl-state store holds <strong>no item content</strong>. An item is an
+                identifier, a type, a content hash, an ACL hash and a byte count. Titles, field
+                values and document bodies are not recorded here and cannot be shown.
+            </p>
+            <p>All times are UTC.</p>
+        </footer>
+    </main>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    The operator's window onto crawl state.
+
+    A push connector gets no row on the Microsoft 365 admin centre's connector
+    page - that surface belongs to the Graph connector agent, and nothing in this
+    repository can change it. sql/20 through sql/25 keep the information that
+    page would have shown. This project is where an operator looks at it.
+
+    Razor Pages, and specifically not Web Forms. The user asked about .aspx;
+    classic Web Forms is .NET Framework 4.8 only and cannot target the
+    net10.0/net9.0 pair the rest of this solution builds for, so it would have
+    meant a second runtime on the server and a second thing to patch. Razor Pages
+    is the direct successor to the model .aspx people actually want - a markup
+    file with a code-behind class, rendered on the server - and it hosts in IIS
+    through the ASP.NET Core Module with Windows authentication, which is the
+    deployment this estate has.
+
+    No npm, no client build step, no CDN. The network this runs on blocks
+    outbound HTTP, so a page that fetches a chart library renders as a broken
+    box on the only machine it will ever run on. Everything is server rendered:
+    even the trend chart is SVG emitted from the data in Presentation/.
+
+    It references NO other project in this solution, and that is deliberate.
+    The dashboard reads a database. It does not push to Graph, it holds no
+    credential beyond the app pool's own Windows identity, and dragging PushCore
+    in would put the Graph SDK and Azure.Identity into a web tier that has no
+    use for either - a larger attack surface and a larger patch obligation for
+    nothing. The one thing it shares with the connector is the SQL schema, and
+    that is shared as SQL rather than as code.
+
+    Microsoft.Data.SqlClient is pinned to the version PushCore.Sql and
+    Connector.Security pin. Two SqlClient versions in one estate is two advisory
+    trails to follow; build/Get-OfflinePackages.ps1 restores this graph offline
+    and a floating version breaks that.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ConnectorState.Dashboard</RootNamespace>
+    <AssemblyName>ConnectorState.Dashboard</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    There is no bundling step and no separate views assembly to keep in sync:
+    the .cshtml files compile into this assembly at build, so a deployment is a
+    file copy plus an app pool recycle.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+  </ItemGroup>
+
+  <!--
+    The same build-time gate every other project here carries. It matters more
+    in this one than anywhere else: a web tier is where somebody eventually
+    pastes a connection string with a password into appsettings.json, and this
+    fails the build when they do. CrawlStateOptions builds the connection string
+    from a server and a database name with Integrated Security, so there is
+    nothing for that person to paste.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>
