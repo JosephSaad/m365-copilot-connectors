@@ -149,8 +149,10 @@ public static class ItemHasher
     /// <param name="value">The value as the connector supplied it.</param>
     /// <returns>An invariant string.</returns>
     /// <remarks>
-    /// Every branch here is a value type the engine actually writes, taken from
-    /// PushItem.AddIfPresent's overloads. The fallback is deliberately
+    /// The branches cover PushItem.AddIfPresent's overloads - string, double,
+    /// bool, long and IReadOnlyList&lt;string&gt; - plus int, DateTime and
+    /// DateTimeOffset, which reach Properties only when a connector assigns the
+    /// dictionary directly rather than going through AddIfPresent. The fallback is deliberately
     /// ToString-with-invariant rather than JSON: a type that reaches this
     /// without a branch is a type nobody has thought about, and a stable-looking
     /// hash over it would hide that rather than surface it.
@@ -168,7 +170,17 @@ public static class ItemHasher
             double number => number.ToString("R", CultureInfo.InvariantCulture),
             long number => number.ToString(CultureInfo.InvariantCulture),
             int number => number.ToString(CultureInfo.InvariantCulture),
-            DateTime when1 => when1.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
+            // Unspecified is treated as UTC rather than converted. ToUniversalTime
+            // on an Unspecified DateTime shifts it by the HOST's local offset,
+            // which is exactly the cross-host instability this file exists to
+            // prevent: the same row hashed in London and in New York would
+            // differ, so two hosts would rewrite each other's items for ever.
+            // Unspecified is also what SqlDataReader.GetDateTime returns, so this
+            // is the normal case rather than an edge one, and SqlRead.Utc already
+            // stamps the same assumption on the way in.
+            DateTime when1 => (when1.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(when1, DateTimeKind.Utc)
+                : when1.ToUniversalTime()).ToString("o", CultureInfo.InvariantCulture),
             DateTimeOffset when2 => when2.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
             IReadOnlyList<string> list => string.Join("", list),
             IEnumerable<string> list => string.Join("", list),

@@ -381,6 +381,7 @@ BEGIN
             i.LastWrittenUtc   = @Now,
             i.UnchangedStreak  = 0,
             i.PendingSinceUtc  = NULL,
+            i.DeletedUtc       = NULL,
             -- An item that was written is live again whatever it was before.
             -- This is what makes a resurrected item - deleted from the source,
             -- then restored - come back cleanly rather than staying tombstoned.
@@ -596,7 +597,8 @@ BEGIN
     SET     i.State            = 3,
             i.LastWrittenRunId = @RunId,
             i.LastWrittenUtc   = SYSUTCDATETIME(),
-            i.PendingSinceUtc  = NULL
+            i.PendingSinceUtc  = NULL,
+            i.DeletedUtc       = SYSUTCDATETIME()
     FROM    [crawl].[Item] AS i
     INNER JOIN @Items      AS q ON q.ItemId = i.ItemId
     WHERE   i.ConnectionId = @ConnectionId
@@ -968,10 +970,14 @@ BEGIN
 
     DECLARE @RunsPurged INT = @@ROWCOUNT;
 
+    -- Aged on DeletedUtc, not LastWrittenUtc. The second is when the item was
+    -- last WRITTEN, so an item unchanged for a year was already past any
+    -- reasonable window the moment it became a tombstone - purged before anyone
+    -- could see it had been deleted at all.
     DELETE  FROM [crawl].[Item]
     WHERE   ConnectionId = @ConnectionId
       AND   State = 3
-      AND   LastWrittenUtc < @TombstoneCutoff;
+      AND   DeletedUtc < @TombstoneCutoff;
 
     DECLARE @TombstonesPurged INT = @@ROWCOUNT;
 

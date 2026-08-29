@@ -157,10 +157,8 @@ SELECT
     ls.ItemsUnchanged                                               AS LastSuccessItemsUnchanged,
     ls.ItemsDeleted                                                 AS LastSuccessItemsDeleted,
 
-    (SELECT COUNT(*) FROM [crawl].[Item] AS i
-     WHERE i.ConnectionId = c.ConnectionId AND i.State = 1)         AS LiveItemCount,
-    (SELECT COUNT(*) FROM [crawl].[Item] AS i
-     WHERE i.ConnectionId = c.ConnectionId AND i.State = 2)         AS PendingDeleteCount,
+    ISNULL(counts.LiveItemCount, 0)                                 AS LiveItemCount,
+    ISNULL(counts.PendingDeleteCount, 0)                            AS PendingDeleteCount,
 
     CASE
         WHEN c.IsEnabled = 0                       THEN N'disabled'
@@ -170,8 +168,7 @@ SELECT
         WHEN c.ExpectedIntervalMinutes IS NOT NULL
              AND DATEDIFF(MINUTE, ls.CompletedUtc, SYSUTCDATETIME())
                  > c.ExpectedIntervalMinutes * 2   THEN N'late'
-        WHEN (SELECT COUNT(*) FROM [crawl].[Item] AS i
-              WHERE i.ConnectionId = c.ConnectionId AND i.State = 2) > 0 THEN N'deletes pending'
+        WHEN ISNULL(counts.PendingDeleteCount, 0) > 0 THEN N'deletes pending'
         ELSE N'healthy'
     END                                                             AS Health,
 
@@ -180,7 +177,19 @@ SELECT
 FROM        [crawl].[Connection]  AS c
 LEFT JOIN   LastRun               AS lr ON lr.ConnectionId = c.ConnectionId AND lr.rn = 1
 LEFT JOIN   LastSuccess           AS ls ON ls.ConnectionId = c.ConnectionId AND ls.rn = 1
-LEFT JOIN   FailureStreak         AS fs ON fs.ConnectionId = c.ConnectionId;
+LEFT JOIN   FailureStreak         AS fs ON fs.ConnectionId = c.ConnectionId
+-- One aggregate over crawl.Item per connection instead of three correlated
+-- subqueries, two of which counted State = 2 twice - once for the column and
+-- once for the Health CASE arm. crawl.Item is the largest table here, so this
+-- is the difference between one pass and three on the health page.
+LEFT JOIN
+(
+    SELECT  ConnectionId,
+            SUM(CASE WHEN State = 1 THEN 1 ELSE 0 END) AS LiveItemCount,
+            SUM(CASE WHEN State = 2 THEN 1 ELSE 0 END) AS PendingDeleteCount
+    FROM    [crawl].[Item]
+    GROUP BY ConnectionId
+) AS counts ON counts.ConnectionId = c.ConnectionId;
 GO
 
 /* ---------------------------------------------------------------------------

@@ -29,10 +29,30 @@ guarantee for it to work, that is
 saves an afternoon here. If what you want is the column list, that is
 [`CRAWL-STATE-REFERENCE.md`](CRAWL-STATE-REFERENCE.md).
 
-**The engine side is not in this document.** The configuration keys a push tool
-uses to reach this database are not settled yet, so everything below is the
+**Pointing a connector at it.** The database is inert until a push tool is told
+where it is. One key does that, under `Settings` in the connector's
+`appsettings.json`:
+
+```json
+"Settings": {
+  "StateConnectionString": "Server=SQLPROD01;Database=ConnectorState;Integrated Security=true;Encrypt=true"
+}
+```
+
+Absent or blank, the connector runs exactly as it did before this database
+existed: it writes every item on every run and never deletes. That is a
+supported configuration, not a broken one — but nothing in this document has any
+effect until the key is set.
+
+It must use Integrated Security. `CrawlStateWiring.FromSettings` refuses a
+connection string containing a password rather than connecting with one: the
+service identity is the database principal `sql/25` grants `crawl_writer` to,
+and a password here would be a secret in a file copied to every deployment host.
+
+The other keys a connector reads are `Batch`, `Writers`, `Incremental`,
+`MaxDeletePercent`, `FullEveryHours` and `GraphProxy`. Everything below is the
 database side: what to run, as whom, what it should print, and what to do when
-the delete guard fires. Nothing here depends on an `appsettings.json` key.
+the delete guard fires.
 
 ---
 

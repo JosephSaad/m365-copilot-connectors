@@ -251,6 +251,7 @@ all this table.
 | `LastWrittenUtc` | `DATETIME2(3)` | Set by `uspRecordWritten` and `uspConfirmDeletes`. Answers when the item was last *written*, which is not when it became pending |
 | `State` | `TINYINT` | Default 1. `CK_Item_State`: 1, 2 or 3 |
 | `PendingSinceUtc` | `DATETIME2(3)`, null | When the sweep moved this item to state 2. Stamped by `uspGetPendingDeletes`, cleared by `uspConfirmDeletes` and by `uspRecordWritten` on resurrection. `CK_Item_Pending` keeps it and `State` consistent: not null if and only if the state is 2. It is what makes `vwPendingDeletes.AgeMinutes` mean time spent pending |
+| `DeletedUtc` | `DATETIME2(3)`, null | When the item was tombstoned. Stamped by `uspConfirmDeletes`, cleared by `uspRecordWritten` on resurrection, and guarded by `CK_Item_Deleted` on the same not-null-if-and-only-if rule. Retention ages tombstones on this rather than on `LastWrittenUtc`: an item unchanged for a year was already past any window the moment it became a tombstone, so it would have been purged before anyone could see it had been deleted |
 | `UnchangedStreak` | `INT` | Default 0. Incremented by `uspRecordUnchanged`, reset by `uspRecordWritten`. Used by nothing here; it is the number that makes the case for incremental reads |
 
 `LastSeenRunId` and `LastWrittenRunId` are not interchangeable. An unchanged item
@@ -575,7 +576,7 @@ permanently invisible.
 | `@Items` | `crawl.ItemStateList READONLY` | — |
 
 **Returns** nothing. Sets `LastSeenRunId` and `LastWrittenRunId` together, resets
-`UnchangedStreak` to zero, clears `PendingSinceUtc`, and sets `State` to 1
+`UnchangedStreak` to zero, clears `PendingSinceUtc` and `DeletedUtc`, and sets `State` to 1
 whatever it was — which is how a resurrected item, and an item wrongly swept into
 pending delete, comes back cleanly.
 

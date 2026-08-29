@@ -18,6 +18,12 @@
 --   means the database still materialised the whole set, which on crawl.Item is
 --   the difference between a seek and a scan of the corpus.
 --
+-- @Page is clamped at BOTH ends. Clamping only the lower bound leaves
+-- (@Page - 1) * @PageSize free to overflow INT on a page number a query string
+-- can carry, which arrives as an arithmetic overflow rather than an empty page.
+-- MaxPage below is deliberately generous: it exists to stop the multiplication
+-- wrapping, not to second-guess a caller.
+--
 -- Every list procedure returns TotalRows on each row via COUNT(*) OVER(), so a
 -- pager can render "page 3 of 214" from a single round trip. That is one window
 -- function against an already-filtered set, not a second COUNT query, and it
@@ -137,7 +143,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SET @Page     = CASE WHEN @Page     < 1 THEN 1 ELSE @Page END;
+    SET @Page     = CASE WHEN @Page < 1 THEN 1
+                         WHEN @Page > 1000000 THEN 1000000 ELSE @Page END;
     SET @PageSize = CASE WHEN @PageSize < 1 THEN 50
                          WHEN @PageSize > 500 THEN 500 ELSE @PageSize END;
 
@@ -271,7 +278,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SET @Page     = CASE WHEN @Page     < 1 THEN 1 ELSE @Page END;
+    SET @Page     = CASE WHEN @Page < 1 THEN 1
+                         WHEN @Page > 1000000 THEN 1000000 ELSE @Page END;
     SET @PageSize = CASE WHEN @PageSize < 1 THEN 50
                          WHEN @PageSize > 500 THEN 500 ELSE @PageSize END;
 
@@ -319,7 +327,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SET @Page     = CASE WHEN @Page     < 1 THEN 1 ELSE @Page END;
+    SET @Page     = CASE WHEN @Page < 1 THEN 1
+                         WHEN @Page > 1000000 THEN 1000000 ELSE @Page END;
     SET @PageSize = CASE WHEN @PageSize < 1 THEN 50
                          WHEN @PageSize > 500 THEN 500 ELSE @PageSize END;
 
@@ -351,7 +360,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SET @Page     = CASE WHEN @Page     < 1 THEN 1 ELSE @Page END;
+    SET @Page     = CASE WHEN @Page < 1 THEN 1
+                         WHEN @Page > 1000000 THEN 1000000 ELSE @Page END;
     SET @PageSize = CASE WHEN @PageSize < 1 THEN 100
                          WHEN @PageSize > 1000 THEN 1000 ELSE @PageSize END;
 
