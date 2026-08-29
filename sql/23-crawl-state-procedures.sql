@@ -1,9 +1,11 @@
 -- ===========================================================================
 -- 23-crawl-state-procedures.sql
 --
--- The connector's entire write surface. Sixteen procedures, and no table
--- permission behind them - sql/25 grants EXECUTE here and DENY on everything
--- in sql/21, so what a compromised or misconfigured connector can do to this
+-- The connector's entire write surface. Nineteen procedures are defined here;
+-- sql/25 grants seventeen of them to crawl_writer and deliberately withholds
+-- uspResetCheckpoint and uspPurgeHistory. Behind all of them, no table
+-- permission at all - sql/25 grants EXECUTE here and DENY on everything in
+-- sql/21, so what a compromised or misconfigured connector can do to this
 -- database is bounded by what these procedures are willing to do.
 --
 -- The dashboard executes none of these. Its read path is sql/24, granted to a

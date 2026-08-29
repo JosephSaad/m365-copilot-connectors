@@ -1,6 +1,6 @@
 ---
 title: Crawl state schema reference
-description: Every object in the ConnectorState database — six table types, eight tables, six views and twenty-five procedures — with columns, parameters, result sets and error numbers.
+description: Every object in the ConnectorState database — six table types, eight tables, six views and twenty-six procedures — with columns, parameters, result sets and error numbers.
 ---
 
 # Crawl state schema reference
@@ -28,7 +28,7 @@ guard and retention, see
 | Table types | 6 | `sql/20-crawl-state-database.sql` |
 | Tables | 8 | `sql/21-crawl-state-tables.sql` |
 | Views | 6 | `sql/22-crawl-state-views.sql` |
-| Write procedures | 18 | `sql/23-crawl-state-procedures.sql` |
+| Write procedures | 19 | `sql/23-crawl-state-procedures.sql` |
 | Reporting procedures | 7 | `sql/24-crawl-state-reporting.sql` |
 | Roles | 2 | `sql/25-crawl-state-least-privilege.sql` |
 
@@ -87,10 +87,7 @@ Table-valued parameters. Passing one requires `EXECUTE` on the type as well as
 on the procedure; without it the call fails with a permission error that reads as
 though the procedure were missing.
 
-`crawl_writer` holds `EXECUTE` on four of the six. `PrincipalKeyList` and
-`ThrottleEventList` are defined in `sql/20` but no procedure in `sql/23` declares
-a parameter of either type yet, and `sql/25` grants neither — they are ahead of
-the procedures that will take them.
+`crawl_writer` holds `EXECUTE` on all six.
 
 ### `crawl.ItemStateList`
 
@@ -115,11 +112,9 @@ A list of item IDs.
 |---|---|
 | `ItemId` | `NVARCHAR(128)`, clustered primary key |
 
-Also used by `uspResolvePrincipals`, where `ItemId` carries a *source principal
-key* rather than an item ID. Note the width: `PrincipalMap.SourceKey` is
-`NVARCHAR(256)`, so a principal key longer than 128 characters can be cached by
-`uspCachePrincipal` but cannot be passed to the batched lookup. `PrincipalKeyList`
-below exists to close that, and `uspResolvePrincipals` does not take it yet.
+Item IDs only. Source principal keys go through `PrincipalKeyList` below, which
+is a different type for a reason worth knowing: an item ID is capped at 128
+characters by Graph and a principal key is not.
 
 ### `crawl.PrincipalKeyList`
 
@@ -133,7 +128,7 @@ or matches a different principal's row and stamps an item with the wrong group.
 |---|---|
 | `SourceKey` | `NVARCHAR(256)`, clustered primary key |
 
-**No procedure declares a parameter of this type yet.**
+Taken by `uspResolvePrincipals`.
 
 ### `crawl.ThrottleEventList`
 
@@ -150,8 +145,8 @@ run that produced hundreds of them.
 | `AttemptNumber` | `INT` |
 
 No primary key: two identical refusals in the same millisecond are legitimate
-data, not a duplicate. **No procedure declares a parameter of this type yet** —
-`uspRecordThrottle` still takes one event at a time.
+data, not a duplicate. Taken by `uspRecordThrottles`. `OccurredUtc` is carried
+rather than defaulted — see that procedure.
 
 ### `crawl.ItemTypeCountList`
 
@@ -181,9 +176,6 @@ One run's timing attribution, for `uspSaveRunTiming`.
 | `P95Microseconds` | `BIGINT` |
 | `P99Microseconds` | `BIGINT` |
 | `MaxMicroseconds` | `BIGINT` |
-
-`uspSaveRunTiming` does not carry `Unit` through to the table — see that
-procedure below.
 
 ---
 
@@ -243,7 +235,7 @@ all this table.
 
 | Column | Type | Notes |
 |---|---|---|
-| `ConnectionId` | `NVARCHAR(64)` | Clustered primary key with `ItemId`. **No foreign key to `crawl.Connection`** |
+| `ConnectionId` | `NVARCHAR(64)` | Clustered primary key with `ItemId`, `FK_Item_Connection` |
 | `ItemId` | `NVARCHAR(128)` | The Graph external item ID |
 | `ItemType` | `NVARCHAR(64)` | Updated by `uspRecordWritten`; not touched by `uspRecordUnchanged` |
 | `ContentHash` | `BINARY(32)` | Compared by the engine, not by the database |
@@ -252,8 +244,9 @@ all this table.
 | `FirstSeenRunId` | `BIGINT` | Set on insert, never updated |
 | `LastSeenRunId` | `BIGINT` | **What the delete sweep diffs on.** Set by both `uspRecordWritten` and `uspRecordUnchanged` |
 | `LastWrittenRunId` | `BIGINT` | Set only when the item was actually written, and by `uspConfirmDeletes` |
-| `LastWrittenUtc` | `DATETIME2(3)` | Set by `uspRecordWritten` and `uspConfirmDeletes`. **Not** set when an item moves to pending delete |
+| `LastWrittenUtc` | `DATETIME2(3)` | Set by `uspRecordWritten` and `uspConfirmDeletes`. Answers when the item was last *written*, which is not when it became pending |
 | `State` | `TINYINT` | Default 1. `CK_Item_State`: 1, 2 or 3 |
+| `PendingSinceUtc` | `DATETIME2(3)`, null | When the sweep moved this item to state 2. Stamped by `uspGetPendingDeletes`, cleared by `uspConfirmDeletes` and by `uspRecordWritten` on resurrection. `CK_Item_Pending` keeps it and `State` consistent: not null if and only if the state is 2. It is what makes `vwPendingDeletes.AgeMinutes` mean time spent pending |
 | `UnchangedStreak` | `INT` | Default 0. Incremented by `uspRecordUnchanged`, reset by `uspRecordWritten`. Used by nothing here; it is the number that makes the case for incremental reads |
 
 `LastSeenRunId` and `LastWrittenRunId` are not interchangeable. An unchanged item
@@ -314,7 +307,7 @@ comparison rather than a recollection.
 |---|---|---|
 | `RunId` | `BIGINT` | Clustered primary key with `Phase`, `FK_RunPhaseTiming_Run` |
 | `Phase` | `NVARCHAR(32)` | Matching `PushTiming`'s own property names rather than its display labels, because they land in a primary key and must not be re-worded |
-| `Unit` | `NVARCHAR(16)` | Default `N'microseconds'`. Intended to be `bytes` for the `ContentBytes` phase, so a report can render a unit it was not written to know about. `uspSaveRunTiming` does not insert it, so in practice every row takes the default |
+| `Unit` | `NVARCHAR(16)` | Default `N'microseconds'`, `bytes` for the `ContentBytes` phase. Stored rather than inferred from the phase name, so a report can render a unit it was not written to know about. Carried through by `uspSaveRunTiming` |
 | `SampleCount` | `BIGINT` | |
 | `TotalMicroseconds` | `BIGINT` | `RowTotal` is the denominator `uspGetRun` uses for the share percentage |
 | `P50Microseconds` | `BIGINT` | Percentiles rather than means: one row that waited sixty seconds behind a `Retry-After` moves a mean and says nothing about the other thousand |
@@ -339,8 +332,8 @@ schema.
 | `ItemsFailed` | `INT` | Default 0 |
 | `BytesWritten` | `BIGINT` | Default 0 |
 
-`uspPurgeHistory` does not delete from this table. See
-[`CRAWL-STATE-DEPLOYMENT.md` section 6](CRAWL-STATE-DEPLOYMENT.md#6-retention).
+`uspPurgeHistory` deletes from this table before `crawl.Run`, because
+`FK_RunItemType_Run` has no cascade.
 
 ### Indexes
 
@@ -405,9 +398,10 @@ few seconds per run on a healthy connection.
 | Column | Notes |
 |---|---|
 | `ConnectionId`, `DisplayName`, `ItemId`, `ItemType` | |
-| `LastSeenRunId` | The run that last saw the item alive. **This is the column to age a backlog by** |
+| `LastSeenRunId` | The run that last saw the item alive |
 | `LastWrittenUtc` | When the item was last *written* — not when it became pending |
-| `AgeMinutes` | Derived from `LastWrittenUtc`, so on a corpus of long-unchanged items it is large the moment an item is marked. Not a measure of time spent pending |
+| `PendingSinceUtc` | When the sweep marked it |
+| `AgeMinutes` | Minutes since `PendingSinceUtc`. **Time spent pending**, which is what an "older than one crawl interval" alert has to measure — aged on `LastWrittenUtc` instead, every freshly pending row on a long-unchanged corpus would read as weeks old and the alert would fire on every sweep |
 | `LastSeenRunStartedUtc` | So the operator can look at that run's numbers |
 
 ### `crawl.vwItemInventory`
