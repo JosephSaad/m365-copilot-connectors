@@ -66,9 +66,20 @@
       packages that the offline restore set then has to carry at versions
       nothing else uses.
 
-      Same version as PushCore and Connector.Security. Move all three together.
+      Azure.Core is pinned for the same reason one level down. Every other
+      project resolves 1.54.0 because Azure.Security.KeyVault.Secrets 4.11.0
+      requires it; this project has no vault and would otherwise settle on
+      Azure.Identity's floor of 1.53.0. One package at two versions across a
+      solution is what the offline restore set has to carry twice, and what CI's
+      package guard exists to catch.
+
+      Same versions as PushCore and Connector.Security. Move all of them
+      together, and re-run the guard: pwsh build/Test-OfflinePackageList.ps1
+      -Configuration Base -Update, on Windows - a different RID resolves a
+      different graph.
     -->
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Azure.Core" Version="1.54.0" />
   </ItemGroup>
 
   <!--
