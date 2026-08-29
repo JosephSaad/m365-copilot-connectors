@@ -22,14 +22,19 @@
 // Percentiles, not means: one row that waited 60 seconds behind a Retry-After
 // moves a mean and tells you nothing about the other thousand.
 //
-// ONE BLIND SPOT, AND IT IS LOAD-BEARING. "Write in flight" is time inside
-// PutAsync, and the Graph SDK's default pipeline puts a Kiota RetryHandler in
-// there - MaxRetry 3, Delay 3s - which retries 429/503/504 on its own and never
-// tells the engine. Its sleeps are charged here to in-flight, not to backoff,
-// and they never increment ThrottleWaits. So this table CANNOT, by itself,
-// distinguish a slow service from a throttled one. Verdict() says so rather than
-// guessing; the way to settle it is to build the client with MaxRetry = 0 and
-// let WriteWithRetryAsync be the only component that retries.
+// WHY "WRITE IN FLIGHT" CAN BE BELIEVED, AND WHAT WOULD BREAK IT. It is time
+// inside PutAsync, so it is only worth reading if nothing retries in there. The
+// SDK's default pipeline DID: Kiota's RetryHandler, MaxRetry 3 and Delay 3s,
+// retrying 429/503/504 on its own, charging its sleeps to in-flight and never
+// incrementing ThrottleWaits - which made a throttled run indistinguishable
+// from a slow one in this table. GraphPipeline removes that handler, and
+// PushConcurrencyTests pins its absence, so from v1.2.22 the split between
+// in-flight and backoff means what it says.
+//
+// That guarantee is exactly one line deep. Put any retrying handler back into
+// the pipeline and this table silently stops being able to tell those two runs
+// apart - silently, because nothing here can detect it. If that test is ever
+// deleted, so is the basis for Verdict()'s reading.
 // ---------------------------------------------------------------------------
 
 namespace PushCore;
@@ -376,20 +381,19 @@ public sealed class PushTiming
         }
         else if (inFlightShare >= 0.5)
         {
-            // Deliberately not stated as a conclusion. "In flight" means "inside
-            // PutAsync", and the Graph SDK's own Kiota RetryHandler sits in there:
-            // it retries 429/503/504 by itself, three times, three seconds apart
-            // by default, and none of that reaches the engine's catch or
-            // ThrottleWaits. A throttle-bound run is therefore INDISTINGUISHABLE
-            // from a latency-bound one in this table, and claiming otherwise here
-            // would be the most expensive sentence in the file.
+            // Sayable as a conclusion, but only because GraphPipeline took the
+            // SDK's retry handler out of the pipeline. Before that, its sleeps
+            // landed in this segment and a throttled run was indistinguishable
+            // from a slow one, so the honest reading was "cannot tell". The
+            // engine is now the only component that retries, and every wait it
+            // takes is in the backoff row above rather than hidden in here.
             reading =
-                "MOSTLY IN FLIGHT - and that is not the same as latency-bound. Time inside PutAsync " +
-                "includes any retry the Graph SDK performed internally: the Kiota RetryHandler " +
-                "retries 429/503/504 itself, 3 times at 3s by default, invisibly to ThrottleWaits " +
-                "and to the backoff row above. Tell them apart before acting: a 'write in flight' " +
-                "p50 sitting near a multiple of 3s plus the base call is the signature of hidden " +
-                "retries, and re-running with RetryHandlerOption.MaxRetry = 0 settles it outright.";
+                "LATENCY-BOUND. The time is genuinely in flight to Graph, which is the case " +
+                "concurrency and $batch were designed for - raise Settings:Writers and watch " +
+                "throttleWaits as you go. This reading depends on nothing retrying inside the " +
+                "call: GraphPipeline removes the SDK's own retry handler, so a wait would appear " +
+                "in the backoff row rather than here. Re-add a retrying handler and this line " +
+                "becomes wrong without any way to notice.";
         }
         else
         {

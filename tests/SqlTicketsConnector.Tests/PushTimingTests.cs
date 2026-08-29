@@ -113,17 +113,18 @@ namespace SqlTicketsConnector.Tests
             string report = timing.Report();
 
             Assert.Contains("THROTTLE-BOUND", report);
-            Assert.DoesNotContain("MOSTLY IN FLIGHT", report);
+            Assert.DoesNotContain("LATENCY-BOUND", report);
         }
 
         [Fact]
-        public void A_run_that_is_mostly_in_flight_refuses_to_call_itself_latency_bound()
+        public void A_run_that_is_mostly_in_flight_reads_as_latency_bound_and_says_what_that_rests_on()
         {
-            // The most expensive mistake this file can make. Time inside PutAsync
-            // includes retries the Graph SDK performed on its own - Kiota's
-            // RetryHandler defaults to 3 attempts at 3s and never tells the engine -
-            // so a throttled run and a slow one produce an identical table. The
-            // verdict has to name that, not resolve it.
+            // The verdict may call this latency-bound only because GraphPipeline
+            // removed the SDK's retry handler; before that, retries inside
+            // PutAsync landed in this same segment and a throttled run looked
+            // identical. The reading must therefore carry its own precondition,
+            // so that re-adding a handler is visible as a contradiction rather
+            // than as nothing at all.
             var timing = new PushTiming();
 
             timing.WriteInFlight.Add(3_000_000);
@@ -132,8 +133,8 @@ namespace SqlTicketsConnector.Tests
 
             string report = timing.Report();
 
-            Assert.Contains("MOSTLY IN FLIGHT", report);
-            Assert.Contains("MaxRetry", report);
+            Assert.Contains("LATENCY-BOUND", report);
+            Assert.Contains("GraphPipeline", report);
             Assert.DoesNotContain("THROTTLE-BOUND", report);
             Assert.Equal(0, timing.RowsThatBackedOff);
         }
