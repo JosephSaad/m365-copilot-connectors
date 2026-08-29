@@ -162,6 +162,7 @@ sql/
   23-crawl-state-procedures.sql        The connector's write path, and the delete guard that bounds it
   24-crawl-state-reporting.sql         Seven paged read procedures, clamped page sizes, no write anywhere
   25-crawl-state-least-privilege.sql   crawl_writer and crawl_reader, with no table permission for either
+  26-timesheet-incremental.sql         Hierarchy-aware EffectiveLastModified for the source — Tier 1, needs SQL 2022
 src/
   SqlTicketsConnector/
     Contracts/*.proto                  Microsoft contracts, unmodified
@@ -300,7 +301,7 @@ Pushing a `v*` tag additionally creates a **draft** release with the zip and its
 publish/            the connector service, with the .NET runtime bundled
 SqlGraphPush/       the direct push tool, also self-contained
 source/             a buildable copy of this repository, no bin/ or obj/
-sql/                least-privilege grant, soft-delete migration, sample table
+sql/                source tables and grants, the crawl state database, the incremental source view
 docs/               SECURITY.md, RUNBOOK.md, ASSUMPTIONS.md
 Install-Connector.ps1, Manifest.json, ConnectionInfo.json,
 CustomConnectorPortMap.json, README.md

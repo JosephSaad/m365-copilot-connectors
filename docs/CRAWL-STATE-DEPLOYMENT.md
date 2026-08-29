@@ -19,9 +19,9 @@ backed up, purged, and monitored.
 | **What it is** | One SQL Server database, `ConnectorState`, holding one schema, `crawl`. |
 | **Where it runs** | Any instance the push host can reach. It does **not** have to be the instance holding the source data, and there is a good argument for it not being. |
 | **What it holds** | Item IDs, item types, two hashes per item, run history, throttle history, checkpoints, cached identity mappings. **No item content and no property value** — see [section 3](#3-the-two-service-accounts). |
-| **Who writes to it** | The connector, through sixteen procedures. Never through a table. |
+| **Who writes to it** | The connector, through seventeen procedures. Never through a table. |
 | **Who reads it** | The dashboard, through six views and seven procedures. Never through a table. |
-| **Scripts** | `sql/20` through `sql/25`, run in that order, once. |
+| **Scripts** | `sql/20` through `sql/25`, run in that order, once. `sql/26` is a separate matter — it changes the *source* database, not this one. See [section 10](#10-sql26-making-the-timesheet-source-readable-incrementally). |
 
 If what you want is *why* this exists and what the source system has to
 guarantee for it to work, that is
@@ -84,7 +84,7 @@ rather than being deferred.**
 | 1 | `sql/20-crawl-state-database.sql` | The database, the `crawl` schema, six table types | `dbcreator` or `sysadmin` | `master`, then `ConnectorState` |
 | 2 | `sql/21-crawl-state-tables.sql` | Eight tables and their indexes | `db_owner` on `ConnectorState` | `ConnectorState` |
 | 3 | `sql/22-crawl-state-views.sql` | Six views | `db_owner` | `ConnectorState` |
-| 4 | `sql/23-crawl-state-procedures.sql` | Eighteen procedures — the write path | `db_owner` | `ConnectorState` |
+| 4 | `sql/23-crawl-state-procedures.sql` | Nineteen procedures — the write path | `db_owner` | `ConnectorState` |
 | 5 | `sql/24-crawl-state-reporting.sql` | Seven procedures — the dashboard's read path | `db_owner` | `ConnectorState` |
 | 6 | `sql/25-crawl-state-least-privilege.sql` | Two logins, two users, two roles, the grants and the denials | `securityadmin` **and** `db_owner` — see below | `master`, then `ConnectorState` |
 
@@ -97,6 +97,10 @@ it will fail on the first `CREATE LOGIN`. If the logins already exist because th
 accounts are used elsewhere on the instance — and `CONTOSO\svc_gca_reader`
 usually does exist already, because it is the identity that reads `Ops` — the
 `IF NOT EXISTS` guards skip that half and `db_owner` is enough.
+
+**`sql/26` is not part of this sequence.** It changes the source database, needs
+SQL Server 2022, and can be run before, after or never. [Section
+10](#10-sql26-making-the-timesheet-source-readable-incrementally) covers it.
 
 **Re-running.** `sql/21` is guarded object by object and will not alter a table
 that already exists; a schema change ships as its own numbered migration rather
@@ -128,10 +132,10 @@ than by auditing the queries a program happens to send.
 |---|---|---|
 | Member | `svc_gca_reader` — the connector | `svc_connector_dashboard` — the dashboard |
 | Where it runs | The push host | The web tier |
-| May execute | The sixteen write procedures in `sql/23`, by name | The seven reporting procedures in `sql/24`, by name |
+| May execute | The seventeen write procedures in `sql/23`, by name | The seven reporting procedures in `sql/24`, by name |
 | May select | Nothing | The six views in `sql/22`, by name |
 | Table permissions | **None.** Denied `INSERT`, `UPDATE`, `DELETE`, `ALTER`, `REFERENCES` and `SELECT` on the schema | **None.** Denied `INSERT`, `UPDATE`, `DELETE`, `ALTER`, `REFERENCES` on the schema |
-| Also granted | `EXECUTE` on four of the six table types, which a table-valued parameter requires | — |
+| Also granted | `EXECUTE` on all six table types, which a table-valued parameter requires | — |
 
 Five properties are worth stating plainly, because each one is a question a
 reviewer asks:
@@ -255,37 +259,26 @@ its verification query and still prints something.
 | `sql/20` | 2 | One row: `ConnectorState`, `SIMPLE`, `is_read_committed_snapshot_on = 1`. Then six rows: `ItemIdList`, `ItemStateList`, `ItemTypeCountList`, `PhaseTimingList`, `PrincipalKeyList`, `ThrottleEventList` |
 | `sql/21` | 1 | Eight rows — `Checkpoint`, `Connection`, `Item`, `PrincipalMap`, `Run`, `RunItemType`, `RunPhaseTiming`, `ThrottleEvent` — every `row_count` zero on a first run |
 | `sql/22` | 7 | Six rows naming the views, then six empty result sets. The empty sets are the real test: they prove each view *executes*, not merely that it compiled |
-| `sql/23` | 1 | **Eighteen rows.** The query is not filtered by name, so it returns every procedure in the `crawl` schema |
+| `sql/23` | 1 | **Nineteen rows.** The query is not filtered by name, so it returns every procedure in the `crawl` schema — which is why the same query re-run after `sql/24` returns twenty-six |
 | `sql/24` | 1 | **Seven rows**, filtered by name to this file's own procedures |
 | `sql/25` | 2 | The permission inventory, then the finding query, which must return **no rows** |
 
-**The count in `sql/23` is the check that matters most.** Eighteen is the number
-of procedures that file defines. Sixteen or seventeen means a `CREATE OR ALTER`
-batch failed and the error is further up the output where a long script scrolls
-it out of sight. Find the missing name in the list, scroll back to its batch, and
-fix it before running `sql/25` — a `GRANT EXECUTE` on a procedure that does not
-exist fails, and the failure names the procedure.
+**The count in `sql/23` is the check that matters most.** Nineteen is the number
+of procedures that file defines — seventeen granted to `crawl_writer`, plus
+`uspResetCheckpoint` and `uspPurgeHistory`, which deliberately are not. Anything
+short of nineteen means a `CREATE OR ALTER` batch failed and the error is further
+up the output where a long script scrolls it out of sight. Find the missing name
+in the list, scroll back to its batch, and fix it before running `sql/25` — a
+`GRANT EXECUTE` on a procedure that does not exist fails, and the failure names
+the procedure.
 
-Note that the comment above `sql/23`'s verification query says "the sixteen
-write-path procedures" and the one in `sql/24` says "the six reporting
-procedures". Both under-count: `sql/23` defines eighteen, of which sixteen are
-granted to `crawl_writer` and two are operator-only, and `sql/24` defines seven.
-The queries are right and the comments are stale.
-
-**Reading `sql/25`'s inventory.** Expect, for `crawl_writer`, twenty `GRANT`
-rows — sixteen procedures and four table types — and six `DENY` rows against the
-schema. For `crawl_reader`, thirteen `GRANT` rows — seven procedures and six
-views — and five `DENY` rows. The four table-type grants display awkwardly: the
-query's `LEFT JOIN` to `sys.objects` does not match a type, so those rows report
-`object_type` as `SCHEMA` and an object name derived from the type's ID. They are
-correct grants displayed badly, not findings.
-
-`sql/20` defines six table types and `sql/25` grants four. `PrincipalKeyList` and
-`ThrottleEventList` are ahead of the procedures that will take them — no
-parameter in `sql/23` is declared as either — so the missing grants are not a
-deployment error today. They become one the moment a procedure starts taking one,
-and the symptom will be a permission error at the call site that reads as though
-the procedure were missing.
+**Reading `sql/25`'s inventory.** Expect, for `crawl_writer`, twenty-three
+`GRANT` rows — seventeen procedures and six table types — and six `DENY` rows
+against the schema. For `crawl_reader`, thirteen `GRANT` rows — seven procedures
+and six views — and five `DENY` rows. The type grants render correctly: the query
+joins `sys.types` as well as `sys.objects` and reads the class from
+`p.class_desc`, so a table-type grant shows as `TABLE_TYPE` rather than as a
+schema grant with a nonsense name.
 
 **The finding query is the one to keep.** It returns any direct table permission
 held by either role, and the expected result is zero rows for the life of the
@@ -321,9 +314,10 @@ two other procedures that issue a `DELETE` — `uspSaveRunTiming` and
 
 ```sql
 EXEC crawl.uspPurgeHistory
-        @ConnectionId      = N'consultingwork',
-        @KeepRunDays       = 90,
-        @KeepTombstoneDays = 180;
+        @ConnectionId             = N'consultingwork',
+        @KeepRunDays              = 90,
+        @KeepTombstoneDays        = 180,
+        @KeepExpiredPrincipalDays = 30;
 ```
 
 It returns one row: `RunsPurged`, `TombstonesPurged`, `PrincipalsPurged`.
@@ -332,9 +326,9 @@ It returns one row: `RunsPurged`, `TombstonesPurged`, `PrincipalsPurged`.
 
 | | Kept for | Notes |
 |---|---|---|
-| `crawl.Run` rows, and their `ThrottleEvent` and `RunPhaseTiming` children | `@KeepRunDays`, default 90 | Closed runs only, and only those nothing still points at — see below |
+| `crawl.Run` rows, and their `ThrottleEvent`, `RunPhaseTiming` and `RunItemType` children | `@KeepRunDays`, default 90 | Closed runs only, and only those nothing still points at — see below. Every child is deleted before the parent; `FK_RunItemType_Run` has no cascade, so missing one would throw 547 and roll the whole purge back |
 | Tombstoned items — `crawl.Item` rows in state 3 | `@KeepTombstoneDays`, default 180 | On their own, longer clock. An item deleted and re-created inside the window is recognised as a resurrection; outside it, it is treated as new. Both are correct, only the first is free |
-| Expired `crawl.PrincipalMap` entries | Thirty days past `ExpiresUtc`, **not a parameter** | The thirty days is hard-coded in the procedure. There is no setting for it |
+| Expired `crawl.PrincipalMap` entries | `@KeepExpiredPrincipalDays` past `ExpiresUtc`, default 30 | Kept past expiry rather than at it, so a cache entry that expired yesterday is still there to be looked at when somebody asks why a group stopped resolving |
 
 **What it will not purge, and why**
 
@@ -352,15 +346,11 @@ It returns one row: `RunsPurged`, `TombstonesPurged`, `PrincipalsPurged`.
 Everything runs inside one transaction with `XACT_ABORT ON`, so a purge either
 completes or changes nothing.
 
-**Before the first purge, check one thing.** The procedure deletes the
-`ThrottleEvent` and `RunPhaseTiming` rows belonging to a purgeable run, but it
-does not delete that run's `crawl.RunItemType` rows — and `RunItemType` carries
-`FK_RunItemType_Run` back to `crawl.Run` with no cascade. A purge that selects a
-run which recorded a per-item-type breakdown will therefore fail on the foreign
-key and, because of `XACT_ABORT`, roll the whole purge back. Nothing is lost when
-that happens, but nothing is purged either, and the job reports the reference
-error rather than a row count. Run the purge by hand once against one connection
-before scheduling it, and read what it returns.
+**Run it by hand once against one connection before scheduling it**, and read
+the three counts it returns. A purge that returns zeroes on a database with
+months of history is telling you something — most often that every run is still
+referenced by a live inventory row, which is what happens when the corpus has not
+changed since the retention window opened.
 
 ### A weekly SQL Agent job
 
@@ -406,9 +396,10 @@ BEGIN
     RAISERROR (N''Purging %s'', 0, 1, @ConnectionId) WITH NOWAIT;
 
     EXEC crawl.uspPurgeHistory
-            @ConnectionId      = @ConnectionId,
-            @KeepRunDays       = 90,
-            @KeepTombstoneDays = 180;
+            @ConnectionId             = @ConnectionId,
+            @KeepRunDays              = 90,
+            @KeepTombstoneDays        = 180,
+            @KeepExpiredPrincipalDays = 30;
 
     FETCH NEXT FROM Connections INTO @ConnectionId;
 END
@@ -442,10 +433,11 @@ Three notes on the schedule:
   writing. Read-committed snapshot keeps readers off writers, not writers off
   each other.
 - **`@on_fail_action = 2` is deliberate.** A purge that fails should show as a
-  failed job, because the two realistic causes — the foreign key above, and a
-  connection whose inventory has grown past the transaction the instance will
-  hold — are both things somebody should look at rather than a retry should
-  absorb.
+  failed job. The realistic cause is a connection whose history has grown past
+  the transaction the instance will comfortably hold, which is something somebody
+  should look at rather than something a retry should absorb — and because the
+  whole procedure is one transaction, a failure means nothing was purged, so the
+  backlog is still there next week and still growing.
 - **`RAISERROR ... WITH NOWAIT` names the connection in the job history.** With
   one purge per connection in one step, the alternative is a failure that says
   only that the step failed.
@@ -667,24 +659,29 @@ A row that sits in `crawl.vwPendingDeletes` across several runs is a `DELETE`
 Graph refused and kept refusing. It is the failure the connector agent used to
 absorb silently — an item the source dropped, still answering searches.
 
-Watch it with the run number rather than with the clock:
+Alert on `AgeMinutes`, and set the threshold at one crawl interval:
 
 ```sql
-SELECT   p.ConnectionId, p.ItemType, COUNT(*) AS Stuck, MIN(p.LastSeenRunId) AS OldestSeenRun
+SELECT   p.ConnectionId, p.ItemType, COUNT(*) AS Stuck,
+         MAX(p.AgeMinutes) AS OldestMinutesPending
 FROM     crawl.vwPendingDeletes AS p
+WHERE    p.AgeMinutes > 60          -- one crawl interval for this connection
 GROUP BY p.ConnectionId, p.ItemType
 ORDER BY Stuck DESC;
 ```
 
-**Do not build the alert on `AgeMinutes`.** The view computes it from
-`LastWrittenUtc`, and nothing stamps that column when an item moves to pending
-delete — `uspGetPendingDeletes` sets the state and only the state. On a healthy
-corpus, where most items were last written weeks ago, every freshly pending item
-is already "weeks old" the moment it is marked, so a rule of the form "anything
-older than one crawl interval" fires on the first sweep and every sweep after it.
-`LastSeenRunId`, compared against the newest completed full run for the
-connection, is the number that actually distinguishes a backlog from a sweep in
-progress.
+`AgeMinutes` measures time spent **pending**, not time since the item was last
+written. `crawl.Item.PendingSinceUtc` is stamped by `uspGetPendingDeletes` when
+it moves an item to state 2, cleared by `uspConfirmDeletes` when Graph confirms
+the removal, and cleared again by `uspRecordWritten` if the item comes back;
+`CK_Item_Pending` keeps the column and the state travelling together, so the age
+cannot quietly become a lie. That distinction is what makes the alert usable:
+aged on `LastWrittenUtc` instead — which is when the item was last *written* —
+every freshly pending row on a corpus that mostly does not change would read as
+weeks old, and the rule would fire on every sweep until somebody switched it off.
+
+`crawl.uspListPendingDeletes` takes `@MinAgeMinutes` against the same column, so
+the dashboard's stuck-delete page and the monitoring rule agree by construction.
 
 ---
 
@@ -745,6 +742,124 @@ reality is an upsert or a re-read, so a store that is behind converges on the
 next full crawl and a store that is empty rebuilds itself. The only irreversible
 operation in the whole design is a delete, and that is the one thing behind a
 guard.
+
+---
+
+## 10. `sql/26`: making the timesheet source readable incrementally
+
+**This one changes the source database, not the state database.** It is in the
+same numbered set and it is not part of the same deployment: `sql/20` through
+`sql/25` create `ConnectorState`, and `sql/26` alters `Ops`. Run it before the
+state database, after it, or never — nothing in the six depends on it, and it
+depends on nothing in them.
+
+| | |
+|---|---|
+| **What it does** | Adds `EffectiveLastModified` to `dbo.Customers`, `dbo.Engagements` and `dbo.TimeEntries` — "when did anything that affects this row's indexed content last change" |
+| **Where it runs** | `Ops`, after `sql/10` and `sql/12` |
+| **Run as** | `db_owner` on `Ops`. It alters tables, creates indexes and creates triggers |
+| **Version floor** | **SQL Server 2022**, for `GREATEST()` in the backfill. `sql/20` through `sql/25` need nothing above 2016, so if the source instance is older than the state instance this is the file that fails |
+| **What it creates** | Three columns, three composite indexes, three `AFTER INSERT, UPDATE` triggers, a backfill, and `dbo.vwExternalItemsIncremental` |
+
+### The problem it solves
+
+`SqlHierarchyPush` flattens a hierarchy: a time entry carries its engagement's
+name and its customer's name so that searching for the customer finds the time
+entry. That denormalisation is the whole reason the connector exists, and it
+means a time entry's correct indexed text depends on three rows.
+
+Rename a customer and every one of that customer's time entries now holds a name
+that no longer exists — but only `dbo.Customers.LastModified` moved. An
+incremental crawl reading "rows changed since the checkpoint" re-indexes one
+customer and leaves a thousand descendants stale, indefinitely, with nothing
+reporting it. The connector cannot detect this: from its side the source simply
+did not return those rows. This is the hierarchy warning in
+[`SOURCE-CONTRACT.md`](SOURCE-CONTRACT.md#tier-1--a-last-modified-timestamp-strongly-preferred),
+and it is the pilot's blocker.
+
+### When to run it, and when not to
+
+**Without it the connector still works.** It declares differencing, reads
+everything every run, and lets the content hashes in `ConnectorState` decide what
+is actually *written* — Tier 2 in `SOURCE-CONTRACT.md`. Reading a hundred
+thousand rows out of SQL Server is seconds; writing a hundred thousand items to
+Graph is hours, and Tier 2 already saves the hours.
+
+So the decision rule is about the source read alone:
+
+| | |
+|---|---|
+| The full source read is comfortably inside the crawl window | Stay on Tier 2. Running `sql/26` buys you nothing you can measure |
+| The source read is approaching the crawl window | Run it. This is what moves the connector to Tier 1, where most runs read almost nothing |
+| The estate will not take triggers on a production table | Read the two alternatives in section 6 of the script before deciding — one of them is not a real option at scale |
+
+### The three ways to maintain the column
+
+The script implements the first. Section 6 of the script documents the other two,
+and the trade-off is worth understanding before an estate's change-control board
+picks one for you.
+
+| | How it works | What it costs |
+|---|---|---|
+| **Triggers** (what the script does) | Three `AFTER INSERT, UPDATE` triggers. A customer changing stamps its engagements and their time entries in one set-based statement each | Write amplification on ancestor edits: renaming a customer with a thousand time entries updates a thousand rows. That is correct — a thousand index items genuinely went stale at that moment — and the alternative is not a cheaper update, it is a thousand wrong search results |
+| **A computed view** | `GREATEST(te.LastModified, e.LastModified, c.LastModified)` evaluated on read | Correct and **not seekable**. Filtering on a maximum computed across a join cannot use an index, so every incremental read scans the whole hierarchy. At the pilot's 1,118 rows that is free; at a hundred thousand it is slower than the full crawl it was meant to replace, and Tier 2 is the honest position instead |
+| **Application-maintained** | Every write path sets the column itself | The same column and the same index with no triggers, and a defensible place to put the guarantee — provided *every* write path is covered. Bulk loads and DBA edits are the ones that get missed, and they get missed silently |
+
+The triggers deliberately do **not** touch `LastModified`. That column means
+"when did this row change" and other things in the estate may depend on it; the
+script adds a second question rather than redefining the first.
+
+### Verification
+
+The script ends with three queries.
+
+| Query | A healthy result |
+|---|---|
+| Descendants older than an ancestor | **Zero rows.** Any row returned is a time entry whose effective timestamp is behind its engagement's or its customer's — the stale-name defect this script exists to prevent, meaning the backfill did not complete or a trigger is disabled |
+| The three triggers | Three rows, `is_disabled = 0` on each |
+| The view's item count by type | One row per item type, with `oldest` and `newest` bracketing the corpus |
+
+It checks the time-entry level against both ancestors. An engagement stale
+relative to its own customer is not covered by that query; add the equivalent
+two-table check if you want the level between them proved as well.
+
+### Two things to know before you run it
+
+**The backfill re-stamps the corpus, and it is not idempotent.** The triggers are
+created in section 3 and the backfill runs in section 4, so each backfill
+statement fires the trigger for the table it just updated — which sets
+`EffectiveLastModified` to `SYSUTCDATETIME()` and cascades that down the tree.
+The net effect is that every row ends up carrying the time the script ran rather
+than its historical `LastModified`. On a first deployment that is harmless: the
+connector's first run is a full crawl whatever the timestamps say, and the
+checkpoint it leaves behind is the maximum of them. **Re-running the file later
+is not harmless** — it re-stamps every row to "now", and the next incremental run
+therefore reads the entire source. Nothing is written that should not be, because
+the hashes still decide, but the run costs what a full read costs. The column and
+index guards make the rest of the file safe to re-run; section 4 is the part that
+is not.
+
+**`EffectiveLastModified` is nullable.** The `ALTER TABLE ... ADD` declares no
+`NOT NULL`, unlike its `LastModified` sibling, and a `DEFAULT` on a nullable
+added column does not populate existing rows — they are null until the backfill
+sets them. That matters beyond the deployment: a row inserted later with an
+explicit null in that column is skipped by the incremental predicate
+(`EffectiveLastModified > @marker` is unknown for null, so the row never comes
+back) *and* skipped by the trigger's own recursion guard
+(`WHERE EffectiveLastModified < @Now` is unknown too, so the trigger will not
+repair it). Such a row is invisible to every incremental crawl for ever, and only
+a full crawl finds it. Check for nulls after deployment, and again after any bulk
+load:
+
+```sql
+USE [Ops];
+
+SELECT 'Customers' AS t, COUNT(*) AS nulls FROM dbo.Customers   WHERE EffectiveLastModified IS NULL
+UNION ALL SELECT 'Engagements', COUNT(*)   FROM dbo.Engagements WHERE EffectiveLastModified IS NULL
+UNION ALL SELECT 'TimeEntries', COUNT(*)   FROM dbo.TimeEntries WHERE EffectiveLastModified IS NULL;
+```
+
+Expect zero on all three rows.
 
 ---
 

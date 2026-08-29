@@ -10,7 +10,7 @@
 -- somewhere, and sql/25 is where its role is granted SELECT on them.
 --
 -- They are the ONLY part of this database anything other than the connector
--- touches. sql/24 grants the dashboard role SELECT on these views and nothing
+-- touches. sql/25 grants the dashboard role SELECT on these views and nothing
 -- else - no table access, not even read - so the web tier physically cannot
 -- reach a column these views chose to omit, and "what can the dashboard see"
 -- is answered by reading this file rather than by trusting its queries.

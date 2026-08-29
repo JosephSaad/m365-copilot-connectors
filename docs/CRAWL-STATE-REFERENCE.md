@@ -452,7 +452,7 @@ One row per connection per day. The dashboard's trend series. Dry runs excluded.
 
 ## Write procedures
 
-`sql/23`. Sixteen of the eighteen are granted to `crawl_writer`; the two marked
+`sql/23`. Seventeen of the nineteen are granted to `crawl_writer`; the two marked
 **operator only** are granted to neither role and are reachable by `db_owner`.
 
 ### `crawl.uspRegisterConnection`
@@ -571,9 +571,9 @@ permanently invisible.
 | `@Items` | `crawl.ItemStateList READONLY` | — |
 
 **Returns** nothing. Sets `LastSeenRunId` and `LastWrittenRunId` together, resets
-`UnchangedStreak` to zero, and sets `State` to 1 whatever it was — which is how a
-resurrected item, and an item wrongly swept into pending delete, comes back
-cleanly.
+`UnchangedStreak` to zero, clears `PendingSinceUtc`, and sets `State` to 1
+whatever it was — which is how a resurrected item, and an item wrongly swept into
+pending delete, comes back cleanly.
 
 ### `crawl.uspRecordUnchanged`
 
@@ -607,7 +607,9 @@ backlog. The most dangerous procedure in the schema; the operational guide is
 | `@OverrideGuard` | `BIT` | `0` |
 
 **Returns** `ItemId` and `ItemType` for every row in state 2 for the connection —
-including anything a previous run left behind — ordered by `ItemId`.
+including anything a previous run left behind — ordered by `ItemId`. Rows it
+moves are stamped with `PendingSinceUtc`; this is the only place that column is
+set.
 
 Refusal order: 50004 unknown run, 50005 wrong connection, 50006 not a full run,
 then an empty result set for a dry run, then the percentage guard (50007). The
@@ -615,6 +617,12 @@ guard compares **strictly greater**, so exactly `@MaxDeletePercent` proceeds, an
 a connection with no live items computes zero rather than dividing by it. The
 `UPDATE` is reached only after every check passes, so a refusal leaves the
 inventory untouched.
+
+Nothing in the procedure can verify that the run enumerated to the end. The run
+is still open when the sweep runs, so its status says only "running"; that
+guarantee comes entirely from the engine calling this on the success path and
+nowhere else, and the percentage guard is what stands between that convention and
+a corpus.
 
 ### `crawl.uspConfirmDeletes`
 
@@ -628,7 +636,9 @@ item Graph says is not there is an item that is not there.
 | `@Items` | `crawl.ItemIdList READONLY` | — |
 
 **Returns** one row: `Confirmed`, the number of rows moved. Only rows in state 2
-are affected. Sets `LastWrittenRunId` and `LastWrittenUtc`.
+are affected. Sets `LastWrittenRunId` and `LastWrittenUtc`, and clears
+`PendingSinceUtc` — which `CK_Item_Pending` requires, since the row is no longer
+in state 2.
 
 ### `crawl.uspGetCheckpoint`
 
@@ -681,7 +691,7 @@ Cache lookup for a batch of source principals.
 |---|---|---|
 | `@ConnectionId` | `NVARCHAR(64)` | — |
 | `@SourceType` | `NVARCHAR(32)` | — |
-| `@Principals` | `crawl.ItemIdList READONLY` | `ItemId` carries the source key, capped at 128 characters. `crawl.PrincipalKeyList` exists for this and is not used here yet |
+| `@Principals` | `crawl.PrincipalKeyList READONLY` | Not `ItemIdList`: an item ID is capped at 128 characters and an AD distinguished name routinely runs past it, so the narrower type would truncate a long principal into a match against a different row and stamp an item with the wrong group |
 
 **Returns** one row per **unexpired** hit: `SourceKey`, `EntraObjectId`,
 `EntraType`, `ResolvedUtc`, `ExpiresUtc`. Anything absent is a miss the caller
@@ -703,11 +713,33 @@ Upserts one cache entry.
 | `@EntraType` | `NVARCHAR(16)` | `NULL` |
 | `@TtlMinutes` | `INT` | `720` |
 
-**Returns** nothing. There is one TTL parameter, not two: the shorter TTL for a
-negative entry is a convention the caller applies by passing a smaller number,
-and the table records only the resulting `ExpiresUtc`.
+**Returns** nothing. There is one TTL parameter, not two. The caller is expected
+to pass a shorter one for a negative entry than for a positive one, and the
+database cannot enforce that split — it has no way to know which answers were
+expensive to obtain. The asymmetry is real (a stale positive entry stamps an ACL
+with a group that no longer means what it did; a stale negative one costs a
+lookup that would have failed anyway) but it lives in the resolver.
+
+### `crawl.uspRecordThrottles`
+
+The run's buffered refusals, flushed in one call when it closes.
+
+| Parameter | Type | Default |
+|---|---|---|
+| `@RunId` | `BIGINT` | — |
+| `@Events` | `crawl.ThrottleEventList READONLY` | — |
+
+**Returns** nothing. `OccurredUtc` comes from the parameter rather than a column
+default, and that is load-bearing: the events are buffered for the whole run, so
+defaulting at flush time would stamp every event with the same instant and
+destroy the one thing the raw events are kept for — whether the throttling was
+clustered in one bad minute or spread evenly across the hour.
 
 ### `crawl.uspRecordThrottle`
+
+The single-event form, for a caller that has one to record and no buffer to
+flush — the schema-registration poll, which throttles before any run-level
+buffering exists.
 
 | Parameter | Type | Default |
 |---|---|---|
@@ -716,10 +748,9 @@ and the table records only the resulting `ExpiresUtc`.
 | `@RetryAfterSeconds` | `INT` | `NULL` |
 | `@Endpoint` | `NVARCHAR(32)` | `N'item'` |
 | `@AttemptNumber` | `INT` | `1` |
+| `@OccurredUtc` | `DATETIME2(3)` | `NULL` — falls back to `SYSUTCDATETIME()` |
 
-**Returns** nothing. One row per refusal, one call per row; nothing is aggregated
-on write. `crawl.ThrottleEventList` exists for a batched flush and no procedure
-takes it yet.
+**Returns** nothing. One row per call; nothing is aggregated on write.
 
 ### `crawl.uspSaveRunTiming`
 
@@ -733,11 +764,9 @@ one transaction, so calling it twice replaces rather than duplicates. A partial
 timing table is more misleading than none, which is why it is one call at the end
 of the run rather than one per phase.
 
-The insert names `Phase`, `SampleCount` and the five microsecond columns. It does
-**not** name `Unit`, so `crawl.RunPhaseTiming.Unit` takes its default of
-`microseconds` on every row — including the `ContentBytes` row, which is the one
-case the column was added for. Read the phase name, not the unit, until the
-procedure carries it through.
+The insert names `Unit` alongside the five percentile columns, so the
+`ContentBytes` row arrives as `bytes` and a report can render the unit rather
+than infer it from the phase name.
 
 ### `crawl.uspRecordRunItemTypes`
 
@@ -760,20 +789,21 @@ Retention. Run from a scheduled job, one connection per call.
 | `@ConnectionId` | `NVARCHAR(64)` | — |
 | `@KeepRunDays` | `INT` | `90` |
 | `@KeepTombstoneDays` | `INT` | `180` |
+| `@KeepExpiredPrincipalDays` | `INT` | `30` — how long an expired cache entry is kept past its expiry |
 
 **Returns** one row: `RunsPurged`, `TombstonesPurged`, `PrincipalsPurged`.
 
 Purges closed runs older than `@KeepRunDays` that no **live** inventory row
 references through `FirstSeenRunId`, `LastSeenRunId` or `LastWrittenRunId` and
-that the checkpoint does not point at, together with their `ThrottleEvent` and
-`RunPhaseTiming` rows; then tombstoned items last written before
-`@KeepTombstoneDays`; then `PrincipalMap` rows more than **thirty days** past
-expiry, which is hard-coded rather than a parameter. All in one transaction with
-`XACT_ABORT ON`.
+that the checkpoint does not point at, together with their `ThrottleEvent`,
+`RunPhaseTiming` and `RunItemType` rows; then tombstoned items last written
+before `@KeepTombstoneDays`; then `PrincipalMap` rows more than
+`@KeepExpiredPrincipalDays` past expiry. All in one transaction with
+`XACT_ABORT ON`, so a purge either completes or changes nothing.
 
-It does not delete `crawl.RunItemType` rows, which carry a foreign key to
-`crawl.Run` with no cascade. See
-[`CRAWL-STATE-DEPLOYMENT.md` section 6](CRAWL-STATE-DEPLOYMENT.md#6-retention).
+Every child is deleted before `crawl.Run`. `FK_RunItemType_Run` has no cascade,
+so omitting that one throws 547 and rolls the whole purge back — retention that
+silently never runs.
 
 ---
 
@@ -878,9 +908,9 @@ seek, and item IDs carry a stable type prefix.
 | `@PageSize` | `INT` | `50`, clamped to 500 |
 
 **Returns** `TotalRows` plus every column of `crawl.vwPendingDeletes`, oldest
-first. `@MinAgeMinutes` filters on that view's `AgeMinutes`, which measures time
-since the last write rather than time spent pending — see the view above before
-building an alert on it.
+first. `@MinAgeMinutes` filters on that view's `AgeMinutes`, which is minutes
+since `PendingSinceUtc` — so "anything pending longer than one crawl interval" is
+the query, and it does not fire on a sweep in progress.
 
 ### `crawl.uspListThrottleEvents`
 
@@ -920,9 +950,8 @@ has thousands of them.
 |---|---|---|
 | The eight tables | — (denied `INSERT`, `UPDATE`, `DELETE`, `ALTER`, `REFERENCES`, `SELECT` on the schema) | — (denied `INSERT`, `UPDATE`, `DELETE`, `ALTER`, `REFERENCES` on the schema) |
 | The six views | — | `SELECT`, granted by name |
-| `ItemIdList`, `ItemStateList`, `ItemTypeCountList`, `PhaseTimingList` | `EXECUTE` | — |
-| `PrincipalKeyList`, `ThrottleEventList` | — (granted to nobody; nothing takes them yet) | — |
-| Sixteen procedures in `sql/23` | `EXECUTE`, granted by name | — |
+| The six table types | `EXECUTE`, granted by name | — |
+| Seventeen procedures in `sql/23` | `EXECUTE`, granted by name | — |
 | `uspResetCheckpoint`, `uspPurgeHistory` | — | — |
 | The seven procedures in `sql/24` | — | `EXECUTE`, granted by name |
 

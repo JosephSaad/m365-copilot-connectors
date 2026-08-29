@@ -49,15 +49,31 @@ GO
    hierarchy, which costs more than the full crawl it replaced. Section 6 has
    that fallback for an estate that cannot take the triggers in section 3.
 
-   Defaulted to LastModified so the backfill in section 4 is the only thing that
-   has to run, and so a row inserted between this script and that one is not
-   left at a sentinel date that an incremental read would skip.
+   NOT NULL, and that is a correctness requirement rather than tidiness. A null
+   here is invisible twice over: the incremental predicate is
+   "EffectiveLastModified > @marker", which is UNKNOWN for a null and therefore
+   never true, AND the triggers' recursion guard is
+   "WHERE EffectiveLastModified < @Now", which is UNKNOWN too - so the trigger
+   will not repair the row either. A row that acquired a null would be skipped
+   by every incremental crawl for ever and found only by a full one. NOT NULL
+   with a default removes the whole class, and populates existing rows on the
+   ALTER rather than leaving them for the backfill.
+
+   DATETIME2(3), matching crawl.Checkpoint.MarkerTime exactly, which the sibling
+   LastModified column (precision 7) does not. Converting 7 to 3 rounds to
+   NEAREST, so a marker taken from a (7) value can land AHEAD of the row it came
+   from, and every row in between is then skipped permanently. The engine floors
+   to whole milliseconds before saving to defend against this; matching the
+   precision at the source means the comparison is exact rather than merely
+   defended, which matters here because the triggers stamp an entire cascade
+   with one value and same-timestamp groups are exactly what this source
+   produces.
 --------------------------------------------------------------------------- */
 
 IF NOT EXISTS (SELECT 1 FROM sys.columns
                WHERE object_id = OBJECT_ID(N'dbo.Customers') AND name = N'EffectiveLastModified')
 BEGIN
-    ALTER TABLE dbo.Customers ADD EffectiveLastModified DATETIME2
+    ALTER TABLE dbo.Customers ADD EffectiveLastModified DATETIME2(3) NOT NULL
         CONSTRAINT DF_Customers_ELM DEFAULT SYSUTCDATETIME();
 END
 GO
@@ -65,7 +81,7 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.columns
                WHERE object_id = OBJECT_ID(N'dbo.Engagements') AND name = N'EffectiveLastModified')
 BEGIN
-    ALTER TABLE dbo.Engagements ADD EffectiveLastModified DATETIME2
+    ALTER TABLE dbo.Engagements ADD EffectiveLastModified DATETIME2(3) NOT NULL
         CONSTRAINT DF_Engagements_ELM DEFAULT SYSUTCDATETIME();
 END
 GO
@@ -73,7 +89,7 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.columns
                WHERE object_id = OBJECT_ID(N'dbo.TimeEntries') AND name = N'EffectiveLastModified')
 BEGIN
-    ALTER TABLE dbo.TimeEntries ADD EffectiveLastModified DATETIME2
+    ALTER TABLE dbo.TimeEntries ADD EffectiveLastModified DATETIME2(3) NOT NULL
         CONSTRAINT DF_TimeEntries_ELM DEFAULT SYSUTCDATETIME();
 END
 GO
@@ -234,6 +250,19 @@ GO
    LastModified, which is the value the triggers would have produced had they
    always existed.
 
+   THE TRIGGERS ARE DISABLED AROUND THIS SECTION, and without that none of it
+   works. Section 3 created them; an UPDATE here would fire them, they would
+   immediately overwrite the historical value with SYSUTCDATETIME() and cascade
+   that to every descendant, and the whole corpus would end up stamped with the
+   moment the script ran. The ancestors-before-descendants ordering below would
+   be pointless, and - worse - re-running this file would re-stamp everything
+   and make the NEXT incremental crawl read the entire source. Disabled, the
+   backfill writes the values the comments describe.
+
+   The WHERE clauses make it idempotent as well, so a re-run corrects only rows
+   that are actually wrong. Both guards are needed: the disable stops the
+   cascade, the predicate stops the rewrite.
+
    GREATEST() is used throughout. It arrived in SQL Server 2022 and this estate
    is on 2022, so the older MAX-over-VALUES workaround would be noise. Nothing
    else in sql/20 through sql/26 needs a version above 2016, so 2022 is a
@@ -244,27 +273,53 @@ GO
    already-corrected values from the level above.
 --------------------------------------------------------------------------- */
 
-UPDATE dbo.Customers SET EffectiveLastModified = LastModified;
+DISABLE TRIGGER dbo.trgCustomers_Effective   ON dbo.Customers;
+DISABLE TRIGGER dbo.trgEngagements_Effective ON dbo.Engagements;
+DISABLE TRIGGER dbo.trgTimeEntries_Effective ON dbo.TimeEntries;
+GO
+
+UPDATE  dbo.Customers
+SET     EffectiveLastModified = LastModified
+WHERE   EffectiveLastModified <> LastModified;
 GO
 
 UPDATE  e
 SET     e.EffectiveLastModified = GREATEST(e.LastModified, c.EffectiveLastModified)
 FROM    dbo.Engagements AS e
-INNER JOIN dbo.Customers AS c ON c.CustomerId = e.CustomerId;
+INNER JOIN dbo.Customers AS c ON c.CustomerId = e.CustomerId
+WHERE   e.EffectiveLastModified <> GREATEST(e.LastModified, c.EffectiveLastModified);
 GO
 
 UPDATE  te
 SET     te.EffectiveLastModified = GREATEST(te.LastModified, e.EffectiveLastModified)
 FROM    dbo.TimeEntries   AS te
-INNER JOIN dbo.Engagements AS e ON e.EngagementId = te.EngagementId;
+INNER JOIN dbo.Engagements AS e ON e.EngagementId = te.EngagementId
+WHERE   te.EffectiveLastModified <> GREATEST(te.LastModified, e.EffectiveLastModified);
+GO
+
+ENABLE TRIGGER dbo.trgCustomers_Effective   ON dbo.Customers;
+ENABLE TRIGGER dbo.trgEngagements_Effective ON dbo.Engagements;
+ENABLE TRIGGER dbo.trgTimeEntries_Effective ON dbo.TimeEntries;
 GO
 
 /* ---------------------------------------------------------------------------
    5. The view the connector reads.
 
-   Same shape as dbo.vwExternalItems in sql/12, with EffectiveLastModified added
-   and ordered so the incremental predicate is a seek. The connector selects
-   from this one when Settings:Incremental is on.
+   Same shape as dbo.vwExternalItems in sql/12, with EffectiveLastModified
+   added. The connector selects from this one when Settings:Incremental is on.
+
+   ONE PERFORMANCE CAVEAT, STATED SO IT IS NOT DISCOVERED. Each branch joins a
+   sql/12 view back to its base table on a CONSTRUCTED key -
+   N'cust-' + CAST(CustomerId AS NVARCHAR(32)) = v.ItemId - because those views
+   project the composed ItemId and not the numeric key it was built from. That
+   comparison is not sargable, so the join itself costs a scan per branch. The
+   incremental predicate can still seek IX_*_Effective, which is where the
+   saving actually is, so this is a constant per run rather than a cost that
+   grows with the size of the delta.
+
+   The clean fix is upstream: have the sql/12 views project their numeric key
+   alongside ItemId and join on that. That is a change to files the agent-hosted
+   path also reads, so it is deliberately not made here.
 
    The three IsDeleted filters are unchanged from sql/12 and are unrelated to
    deletion detection: the push path detects deletions by diffing its own
@@ -358,17 +413,42 @@ GO
    The first query should return zero rows. Any row it returns is a descendant
    whose effective timestamp is older than an ancestor's - which is exactly the
    stale-name defect this script exists to prevent, and means the backfill did
-   not complete or a trigger is disabled.
+   not complete or a trigger is still disabled.
+
+   It checks all three parent-child edges, not only the two that involve a time
+   entry. An engagement that has fallen behind its customer is a real staleness
+   - the engagement item carries the customer's name too - and checking only the
+   leaf level would pass a source that is already serving one wrong name.
 --------------------------------------------------------------------------- */
 
-SELECT  TOP (20) te.TimeEntryId, te.EffectiveLastModified AS entry_effective,
-        e.EffectiveLastModified AS engagement_effective,
-        c.EffectiveLastModified AS customer_effective
-FROM    dbo.TimeEntries    AS te
-INNER JOIN dbo.Engagements AS e ON e.EngagementId = te.EngagementId
-INNER JOIN dbo.Customers   AS c ON c.CustomerId   = e.CustomerId
+SELECT  N'engagement behind its customer' AS finding,
+        CAST(e.EngagementId AS NVARCHAR(32)) AS id,
+        e.EffectiveLastModified AS child_effective,
+        c.EffectiveLastModified AS parent_effective
+FROM    dbo.Engagements  AS e
+INNER JOIN dbo.Customers AS c ON c.CustomerId = e.CustomerId
+WHERE   e.EffectiveLastModified < c.EffectiveLastModified
+
+UNION ALL
+
+SELECT  N'time entry behind its engagement',
+        CAST(te.TimeEntryId AS NVARCHAR(32)),
+        te.EffectiveLastModified,
+        e.EffectiveLastModified
+FROM    dbo.TimeEntries     AS te
+INNER JOIN dbo.Engagements  AS e ON e.EngagementId = te.EngagementId
 WHERE   te.EffectiveLastModified < e.EffectiveLastModified
-   OR   te.EffectiveLastModified < c.EffectiveLastModified;
+
+UNION ALL
+
+SELECT  N'time entry behind its customer',
+        CAST(te.TimeEntryId AS NVARCHAR(32)),
+        te.EffectiveLastModified,
+        c.EffectiveLastModified
+FROM    dbo.TimeEntries     AS te
+INNER JOIN dbo.Engagements  AS e ON e.EngagementId = te.EngagementId
+INNER JOIN dbo.Customers    AS c ON c.CustomerId   = e.CustomerId
+WHERE   te.EffectiveLastModified < c.EffectiveLastModified;
 
 -- The three triggers exist and are enabled.
 SELECT  name AS trigger_name, is_disabled
