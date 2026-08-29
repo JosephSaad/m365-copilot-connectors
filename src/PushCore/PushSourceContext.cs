@@ -19,6 +19,7 @@ namespace PushCore;
 
 using Azure.Core;
 using Connector.Security.Secrets;
+using PushCore.State;
 using Serilog;
 
 /// <summary>Everything a source needs from the host, already resolved.</summary>
@@ -52,4 +53,23 @@ public sealed class PushSourceContext
 
     /// <summary>Gets the logger.</summary>
     public ILogger Log { get; }
+
+    /// <summary>
+    /// Gets where an incremental read should resume, or null when the whole
+    /// source must be read.
+    ///
+    /// Set by the engine from the crawl state store before the source is
+    /// opened, so a connector building a query can add its "strictly after the
+    /// marker" predicate without knowing the store exists. Null means a full
+    /// read and is the only value a connector without a state store will ever
+    /// see - which is why ignoring this property entirely still produces correct
+    /// behaviour, just not an incremental one.
+    ///
+    /// A connector that USES this must declare
+    /// <see cref="IPushSource.ChangeDetection"/> as
+    /// <see cref="SourceChangeDetection.ChangeMarker"/> and must yield rows in
+    /// ascending (marker, id) order. Reading from a marker while yielding out of
+    /// order loses rows on the run after an interruption.
+    /// </summary>
+    public CrawlMarker? ResumeFrom { get; internal set; }
 }

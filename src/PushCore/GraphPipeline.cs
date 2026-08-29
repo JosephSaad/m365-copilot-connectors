@@ -33,6 +33,7 @@
 namespace PushCore;
 
 using Microsoft.Graph;
+using System.Net;
 
 /// <summary>Builds the HTTP pipeline the Graph client runs on.</summary>
 public static class GraphPipeline
@@ -56,7 +57,62 @@ public static class GraphPipeline
     /// <returns>An <see cref="HttpClient"/> over <see cref="CreateHandlers"/>.</returns>
     public static HttpClient Create()
     {
-        return GraphClientFactory.Create(CreateHandlers());
+        return Create(null);
+    }
+
+    /// <summary>Creates the client the engine writes through, optionally via a forward proxy.</summary>
+    /// <param name="proxyUrl">
+    /// The proxy every Graph request is to be sent through, for example
+    /// http://egress.internal:8080. Null or blank builds the direct client that
+    /// <see cref="Create()"/> has always built.
+    /// </param>
+    /// <returns>An <see cref="HttpClient"/> over <see cref="CreateHandlers"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// THIS IS THE ONE CODE AFFORDANCE FOR "ALL GRAPH TRAFFIC LEAVES BY ONE
+    /// CONTROLLED EGRESS POINT". On a locked-down network the connector host is
+    /// typically not allowed to open arbitrary outbound 443, and the answer is a
+    /// forward proxy that is: a single address to allow at the firewall, a single
+    /// place the traffic can be logged, and a single place the graph.microsoft.com
+    /// allow-list is enforced. Setting the proxy here rather than relying on the
+    /// machine's WinHTTP or environment proxy makes that routing a stated property
+    /// of this process, visible in configuration, rather than an inherited one
+    /// that a service account's profile can silently change.
+    /// </para>
+    /// <para>
+    /// The REST of that property is a deployment decision and is not, and cannot
+    /// be, enforced from here. Which proxy, whether the firewall actually denies
+    /// everything else outbound, what the proxy allows through, whether TLS is
+    /// inspected and whose root certificate the host must then trust, and how the
+    /// proxy itself is authenticated - none of that is code. This method only
+    /// guarantees that when a proxy IS configured, no Graph request in this
+    /// process goes around it.
+    /// </para>
+    /// <para>
+    /// The proxy is attached to the final <see cref="HttpClientHandler"/>, the
+    /// one handler at the end of the chain that actually opens the socket, so it
+    /// applies to every request the client makes: writes, the schema poll, the
+    /// $batch endpoint and the token calls the credential makes through this same
+    /// client. No credential is set on it. An authenticating proxy is deployment's
+    /// problem for a reason - a proxy password read from configuration here would
+    /// be a secret in appsettings.json, which is the one thing this repository's
+    /// build gate exists to prevent.
+    /// </para>
+    /// </remarks>
+    public static HttpClient Create(string? proxyUrl)
+    {
+        if (string.IsNullOrWhiteSpace(proxyUrl))
+        {
+            return GraphClientFactory.Create(CreateHandlers());
+        }
+
+        var handler = new HttpClientHandler
+        {
+            Proxy = new WebProxy(proxyUrl, BypassOnLocal: false),
+            UseProxy = true,
+        };
+
+        return GraphClientFactory.Create(CreateHandlers(), finalHandler: handler);
     }
 
     /// <summary>Reports whether a handler is a retry handler of any provenance.</summary>

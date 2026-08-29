@@ -1,0 +1,130 @@
+@page
+@model ConnectorState.Dashboard.Pages.Items.IndexModel
+@{
+    ViewData["Title"] = "Inventory";
+}
+
+<h1>Inventory</h1>
+<p class="subtitle">
+    What the connector believes the index holds. <em>Believes</em> is the honest word: this
+    records what was written, and drift is possible — a tenant-side purge, a manual deletion, a
+    run that died between the Graph write and the state update.
+</p>
+
+<form class="filters" method="get" action="/Items">
+    <div class="field">
+        <label for="c">Connection</label>
+        <select id="c" name="c" required>
+            <option value="">Choose a connection…</option>
+            @foreach (ConnectionRef connection in Model.Connections)
+            {
+                <option value="@connection.ConnectionId" selected="@(connection.ConnectionId == Model.ConnectionId)">
+                    @connection.DisplayName
+                </option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="q">Item ID starts with</label>
+        <input type="text" id="q" name="q" value="@Model.Search" placeholder="prefix, not contains" />
+    </div>
+    <div class="field">
+        <label for="type">Item type</label>
+        <input type="text" id="type" name="type" value="@Model.ItemType" placeholder="exact match" />
+    </div>
+    <div class="field">
+        <label for="state">State</label>
+        <select id="state" name="state">
+            <option value="">Any state</option>
+            @foreach (string state in StateCodes.ItemStates)
+            {
+                <option value="@state" selected="@(state == Model.State)">@state</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="streak">Unchanged streak ≥</label>
+        <input type="number" id="streak" name="streak" min="0" value="@Model.MinUnchangedStreak" />
+    </div>
+    <div class="field">
+        <label for="ps">Rows</label>
+        <input type="number" id="ps" name="ps" min="1" max="500" step="25" value="@Model.Result.PageSize" />
+    </div>
+    <button class="apply" type="submit">Apply</button>
+    <a class="reset" href="/Items">Reset</a>
+</form>
+
+@if (!Model.HasConnection)
+{
+    <div class="banner banner-info">
+        Choose a connection. The inventory is clustered by connection, so a query without one
+        would scan every corpus in the estate to produce a page of fifty rows — this page does
+        not offer it.
+    </div>
+}
+else
+{
+    <div class="panel">
+        @if (Model.Result.IsEmpty)
+        {
+            <p class="empty">No items match these filters.</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>Item ID</th>
+                            <th>Type</th>
+                            <th>State</th>
+                            <th class="num">Content size</th>
+                            <th class="num">Streak</th>
+                            <th class="num">Last written (UTC)</th>
+                            <th class="num">Age</th>
+                            <th class="num">Written by</th>
+                            <th class="num">Last seen</th>
+                            <th>Content hash</th>
+                            <th>ACL hash</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (ItemRow item in Model.Result.Rows)
+                        {
+                            <tr>
+                                <td class="id">@item.ItemId</td>
+                                <td class="dim">@item.ItemType</td>
+                                <td><partial name="_ConnectionPill" model="item.State ?? string.Empty" /></td>
+                                <td class="num dim">@Format.Bytes(item.ContentBytes)</td>
+                                <td class="num">@Format.Count(item.UnchangedStreak)</td>
+                                <td class="num nowrap">@Format.TimestampShort(item.LastWrittenUtc)</td>
+                                <td class="num dim">@Format.Count(item.DaysSinceLastWrite)d</td>
+                                <td class="num"><a href="/Runs/@item.LastWrittenRunId">@item.LastWrittenRunId</a></td>
+                                <td class="num dim"><a href="/Runs/@item.LastSeenRunId">@item.LastSeenRunId</a></td>
+                                <td class="mono dim" title="@item.ContentHashHex">@Format.HashPrefix(item.ContentHashHex)</td>
+                                <td class="mono dim" title="@item.AclHashHex">@Format.HashPrefix(item.AclHashHex)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <partial name="_Pager" model="Model.Pager" />
+}
+
+<p class="note">
+    <strong>There is no item content here, and there is none in the database.</strong> An item is
+    an identifier, a type, a content hash, an ACL hash and a byte count. No title, no field value
+    and no document body is recorded, so none can be shown — to see an item, look it up in the
+    source system by its identifier.
+</p>
+<p class="note">
+    The two hashes are separate on purpose. Content changes when a person edits something; the ACL
+    changes when a group membership moves, which can touch ten thousand items at once. Keeping them
+    apart is what lets the engine say which of the two moved. <strong>Written by</strong> moves
+    rarely and <strong>last seen</strong> moves every run — an unchanged item is seen every time
+    and written almost never, and confusing the two either deletes the corpus or never deletes
+    anything.
+</p>

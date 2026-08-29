@@ -49,6 +49,23 @@ public sealed class PushItem
     /// </summary>
     public IReadOnlyList<PushAclEntry>? Acl { get; set; }
 
+    /// <summary>
+    /// Gets or sets when this record last changed at the source, in UTC, or null
+    /// when the source has no such value.
+    ///
+    /// This is the first half of the composite checkpoint; the item ID is the
+    /// second. The engine advances the checkpoint to (LastModifiedUtc, Id) only
+    /// after the write for this item is confirmed, so a run that dies cannot
+    /// leave a marker past an item the index does not have.
+    ///
+    /// Leave it null unless the source genuinely exposes a monotonic
+    /// modification time that moves on EVERY change, including bulk updates and
+    /// direct edits - see docs/SOURCE-CONTRACT.md. A timestamp that is merely
+    /// usually right produces a checkpoint that silently skips the edits it
+    /// missed, which is worse than having no checkpoint at all.
+    /// </summary>
+    public DateTime? LastModifiedUtc { get; set; }
+
     /// <summary>Adds a property when the value is present, and skips it when not.</summary>
     /// <param name="name">Schema property name.</param>
     /// <param name="value">Value, ignored when null or empty.</param>

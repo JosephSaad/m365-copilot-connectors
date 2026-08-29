@@ -1,0 +1,162 @@
+@page
+@model ConnectorState.Dashboard.Pages.Runs.IndexModel
+@{
+    ViewData["Title"] = "Runs";
+}
+
+<h1>Runs</h1>
+<p class="subtitle">
+    Every crawl run, most recent first. Dry runs are hidden by default: they write nothing by
+    design and would flatter every average they touched.
+</p>
+
+<form class="filters" method="get" action="/Runs">
+    <div class="field">
+        <label for="c">Connection</label>
+        <select id="c" name="c">
+            <option value="">All connections</option>
+            @foreach (ConnectionRef connection in Model.Connections)
+            {
+                <option value="@connection.ConnectionId" selected="@(connection.ConnectionId == Model.ConnectionId)">
+                    @connection.DisplayName
+                </option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            <option value="">Any status</option>
+            @foreach (string status in StateCodes.RunStatuses)
+            {
+                <option value="@status" selected="@(status == Model.Status)">@status</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="mode">Mode</label>
+        <select id="mode" name="mode">
+            <option value="">Any mode</option>
+            @foreach (string mode in StateCodes.RunModes)
+            {
+                <option value="@mode" selected="@(mode == Model.Mode)">@mode</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="from">Started from (UTC)</label>
+        <input type="date" id="from" name="from" value="@(Model.From?.ToString("yyyy-MM-dd"))" />
+    </div>
+    <div class="field">
+        <label for="to">to (UTC, inclusive)</label>
+        <input type="date" id="to" name="to" value="@(Model.To?.ToString("yyyy-MM-dd"))" />
+    </div>
+    <div class="field">
+        <label for="ps">Rows</label>
+        <input type="number" id="ps" name="ps" min="1" max="500" step="25" value="@Model.Result.PageSize" />
+    </div>
+    <div class="field check">
+        <input type="checkbox" id="dry" name="dry" value="true" checked="@Model.IncludeDryRuns" />
+        <label for="dry">Include dry runs</label>
+    </div>
+    <button class="apply" type="submit">Apply</button>
+    <a class="reset" href="/Runs">Reset</a>
+</form>
+
+<div class="panel">
+    @if (Model.Result.IsEmpty)
+    {
+        <p class="empty">No runs match these filters.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th class="num">Run</th>
+                        <th>Connection</th>
+                        <th>Status</th>
+                        <th>Mode</th>
+                        <th class="num">Started (UTC)</th>
+                        <th class="num">Duration</th>
+                        <th class="num">Read</th>
+                        <th class="num">Written</th>
+                        <th class="num">Unchanged</th>
+                        <th class="num">Deleted</th>
+                        <th class="num">Failed</th>
+                        <th class="num">Throttled</th>
+                        <th class="num">Bytes</th>
+                        <th>Host</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (RunListRow run in Model.Result.Rows)
+                    {
+                        <tr>
+                            <td class="num"><a href="/Runs/@run.RunId">@run.RunId</a></td>
+                            <td>
+                                <a href="/Connections/@Uri.EscapeDataString(run.ConnectionId)">@run.DisplayName</a>
+                                @if (run.IsDryRun)
+                                {
+                                    <span class="tag">dry run</span>
+                                }
+                            </td>
+                            <td><partial name="_ConnectionPill" model="run.Status ?? string.Empty" /></td>
+                            <td class="dim">@(run.Mode ?? Format.None)</td>
+                            <td class="num nowrap">@Format.TimestampShort(run.StartedUtc)</td>
+                            <td class="num">@Format.Duration(run.DurationSeconds)</td>
+                            <td class="num dim">@Format.Count(run.ItemsRead)</td>
+                            <td class="num">@Format.Count(run.ItemsWritten)</td>
+                            <td class="num dim">@Format.Count(run.ItemsUnchanged)</td>
+                            <td class="num dim">@Format.Count(run.ItemsDeleted)</td>
+                            <td class="num">
+                                @if (run.ItemsFailed > 0)
+                                {
+                                    <span class="pill pill-bad">@Format.Count(run.ItemsFailed)</span>
+                                }
+                                else
+                                {
+                                    <span class="zero">0</span>
+                                }
+                            </td>
+                            <td class="num">
+                                @if (run.ThrottleWaits > 0)
+                                {
+                                    <a href="/Runs/@run.RunId/Throttling">@Format.Count(run.ThrottleWaits)</a>
+                                }
+                                else
+                                {
+                                    <span class="zero">0</span>
+                                }
+                            </td>
+                            <td class="num dim">@Format.Bytes(run.BytesWritten)</td>
+                            <td class="dim nowrap">
+                                @run.HostName
+                                <span class="tag">@run.ToolVersion</span>
+                            </td>
+                        </tr>
+                        @if (!string.IsNullOrEmpty(run.ErrorKind))
+                        {
+                            <tr>
+                                <td colspan="14" class="dim">
+                                    <span class="pill pill-bad">@run.ErrorKind</span>
+                                    Open the run for detail.
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<partial name="_Pager" model="Model.Pager" />
+
+<p class="note">
+    <strong>Read</strong> is what the source returned; <strong>written</strong> is what was sent
+    to Graph. The gap between them is the change detection working: an unchanged item is read
+    every run and written rarely. <strong>Throttled</strong> counts the 429 and 5xx responses the
+    run waited on — follow the number for the raw events.
+</p>

@@ -1,0 +1,184 @@
+@page "/Connections/{connectionId}"
+@model ConnectorState.Dashboard.Pages.Connections.DetailModel
+@{
+    ViewData["Title"] = Model.Health.DisplayName;
+    ConnectionHealthRow health = Model.Health;
+    string encodedId = Uri.EscapeDataString(health.ConnectionId);
+}
+
+<p class="crumb"><a href="/">Overview</a> / Connections</p>
+
+<h1>@health.DisplayName <partial name="_ConnectionPill" model="health.Health" /></h1>
+<p class="subtitle">
+    <span class="tag">@health.ConnectorKey</span>
+    <span class="tag">@health.ConnectionId</span>
+    @if (!health.IsEnabled)
+    {
+        <span class="pill pill-idle">disabled</span>
+    }
+</p>
+
+@if (!string.IsNullOrEmpty(health.ErrorKind))
+{
+    <div class="banner banner-bad">
+        <strong>@health.ErrorKind</strong>
+        @if (!string.IsNullOrEmpty(health.ErrorMessage))
+        {
+            <div>@health.ErrorMessage</div>
+        }
+    </div>
+}
+
+<section class="section">
+    <div class="panel panel-pad">
+        <dl class="facts">
+            <div>
+                <dt>Last run</dt>
+                <dd>
+                    @if (health.LastRunId.HasValue)
+                    {
+                        <a href="/Runs/@health.LastRunId.Value">@Format.TimestampShort(health.LastRunStartedUtc)</a>
+                        <span class="tag">@health.LastRunStatus</span>
+                    }
+                    else
+                    {
+                        <text>@Format.None</text>
+                    }
+                </dd>
+            </div>
+            <div><dt>Last success (UTC)</dt><dd>@Format.Timestamp(health.LastSuccessUtc)</dd></div>
+            <div><dt>Since last success</dt><dd>@Format.Age(health.MinutesSinceLastSuccess)</dd></div>
+            <div><dt>Expected interval</dt><dd>@Format.Age(health.ExpectedIntervalMinutes)</dd></div>
+            <div><dt>Consecutive failures</dt><dd>@Format.Count(health.ConsecutiveFailures)</dd></div>
+            <div><dt>Live items</dt><dd>@Format.Count(health.LiveItemCount)</dd></div>
+            <div><dt>Pending deletes</dt><dd>@Format.Count(health.PendingDeleteCount)</dd></div>
+            <div><dt>Last success wrote</dt><dd>@Format.Count(health.LastSuccessItemsWritten)</dd></div>
+            <div><dt>…and matched</dt><dd>@Format.Count(health.LastSuccessItemsUnchanged)</dd></div>
+            <div><dt>…and deleted</dt><dd>@Format.Count(health.LastSuccessItemsDeleted)</dd></div>
+        </dl>
+    </div>
+    <p class="note">
+        <a href="/Runs?c=@encodedId">Run history</a> ·
+        <a href="/Items?c=@encodedId">Inventory</a> ·
+        <a href="/PendingDeletes?c=@encodedId">Pending deletes</a>
+    </p>
+</section>
+
+<section class="section">
+    <h2>Thirty days</h2>
+    <div class="panel panel-pad">
+        @TrendChart.DailyActivity(
+            Model.Trend,
+            ConnectorState.Dashboard.Pages.Connections.DetailModel.TrendDays,
+            $"Items written and found unchanged per day over the last thirty days for {health.DisplayName}, with a marker under days that had a failed run.")
+        <div class="legend">
+            <span><i class="swatch swatch-written"></i> written</span>
+            <span><i class="swatch swatch-unchanged"></i> unchanged</span>
+            <span><i class="swatch swatch-failed"></i> day had a failed run</span>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <h2>What the index holds</h2>
+    <div class="panel">
+        @if (Model.ItemTypes.Count == 0)
+        {
+            <p class="empty">This connection has no inventory yet. A connector records items as it writes them.</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>Item type</th>
+                            <th class="num">Live</th>
+                            <th class="num">Pending delete</th>
+                            <th class="num">Tombstoned</th>
+                            <th class="num">Total rows</th>
+                            <th class="num">Content size</th>
+                            <th class="num">Mean unchanged streak</th>
+                            <th class="num">Longest streak</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (ItemTypeMixRow type in Model.ItemTypes)
+                        {
+                            <tr>
+                                <td class="strong">
+                                    <a href="/Items?c=@encodedId&amp;type=@Uri.EscapeDataString(type.ItemType)">@type.ItemType</a>
+                                </td>
+                                <td class="num">@Format.Count(type.Live)</td>
+                                <td class="num">
+                                    @if (type.PendingDelete > 0)
+                                    {
+                                        <span class="pill pill-warn">@Format.Count(type.PendingDelete)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="zero">0</span>
+                                    }
+                                </td>
+                                <td class="num dim">@Format.Count(type.Tombstoned)</td>
+                                <td class="num dim">@Format.Count(type.Items)</td>
+                                <td class="num dim">@Format.Bytes(type.ContentBytes)</td>
+                                <td class="num">@Format.Decimal1(type.AvgUnchangedStreak)</td>
+                                <td class="num dim">@Format.Count(type.MaxUnchangedStreak)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td>All types</td>
+                            <td class="num">@Format.Count(Model.TotalLiveItems)</td>
+                            <td class="num"></td>
+                            <td class="num"></td>
+                            <td class="num"></td>
+                            <td class="num">@Format.Bytes(Model.TotalContentBytes)</td>
+                            <td class="num"></td>
+                            <td class="num"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        }
+    </div>
+    <p class="note">
+        <strong>Content size</strong> is the number of bytes that were hashed, not stored content:
+        the crawl-state store holds an identifier, a type, two hashes and a byte count per item and
+        never the item itself. A high <strong>mean unchanged streak</strong> is the change
+        detection paying for itself — those items are read every run and written almost never.
+    </p>
+</section>
+
+<section class="section">
+    <h2>Checkpoint</h2>
+    <div class="panel panel-pad">
+        @if (Model.Checkpoint is null)
+        {
+            <p class="empty">
+                No checkpoint. This connection re-reads its whole query every run — the model is
+                "the query decides what exists" — so there is no watermark to advance.
+            </p>
+        }
+        else
+        {
+            <dl class="facts">
+                <div><dt>Marker time (UTC)</dt><dd>@Format.Timestamp(Model.Checkpoint.MarkerTime)</dd></div>
+                <div><dt>Marker key</dt><dd>@(Model.Checkpoint.MarkerKey ?? Format.None)</dd></div>
+                <div>
+                    <dt>Set by run</dt>
+                    <dd><a href="/Runs/@Model.Checkpoint.RunId">@Model.Checkpoint.RunId</a></dd>
+                </div>
+                <div><dt>Runs recorded</dt><dd>@Format.Count(Model.Checkpoint.RunCount)</dd></div>
+                <div><dt>Updated (UTC)</dt><dd>@Format.Timestamp(Model.Checkpoint.UpdatedUtc)</dd></div>
+            </dl>
+            <p class="note">
+                This is where the next incremental run would start. A checkpoint that has stopped
+                advancing while runs keep succeeding is a quiet failure worth investigating —
+                the runs are doing nothing and reporting success.
+            </p>
+        }
+    </div>
+</section>

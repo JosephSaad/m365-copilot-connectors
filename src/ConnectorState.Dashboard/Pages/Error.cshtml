@@ -1,0 +1,22 @@
+@page
+@model ErrorModel
+@{
+    ViewData["Title"] = "Error";
+}
+
+<h1>Something went wrong</h1>
+<p class="subtitle">The page could not be rendered.</p>
+
+<div class="banner banner-bad">
+    <p>
+        The detail is in the application log on the web server. Quote this request
+        identifier when reporting it: <code>@Model.RequestId</code>
+    </p>
+</div>
+
+<p class="note">
+    The most common cause is a schema mismatch: sql/22 and sql/24 must both be
+    deployed, and the application pool identity must be a member of the
+    <strong>crawl_reader</strong> role created by sql/25. Nothing in this
+    application writes to the database, so a failure here has changed nothing.
+</p>

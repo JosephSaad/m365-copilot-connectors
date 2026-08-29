@@ -1,0 +1,238 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Overview";
+    DashboardTiles tiles = Model.Summary.Tiles;
+
+    string windowLabel = Model.EffectiveWindowHours % 24 == 0 && Model.EffectiveWindowHours >= 24
+        ? $"last {Model.EffectiveWindowHours / 24} day{(Model.EffectiveWindowHours == 24 ? string.Empty : "s")}"
+        : $"last {Model.EffectiveWindowHours} hours";
+}
+
+<h1>Overview</h1>
+<p class="subtitle">
+    Crawl state for every registered connection. Figures below cover the @windowLabel and exclude
+    dry runs, which write nothing by design and would flatter every average they touched.
+    <a href="/?hours=24">24h</a> ·
+    <a href="/?hours=168">7d</a> ·
+    <a href="/?hours=720">30d</a>
+</p>
+
+@if (tiles.ConnectionsNeedingAttention > 0)
+{
+    <div class="banner banner-bad">
+        <strong>@Format.Count(tiles.ConnectionsNeedingAttention)</strong>
+        connection@(tiles.ConnectionsNeedingAttention == 1 ? " is" : "s are") failing or late.
+        A connection is <em>late</em> when its last success is older than twice its expected
+        interval, and <em>failing</em> after any run that has not since been followed by a success.
+    </div>
+}
+
+<section class="section">
+    <div class="tiles">
+        <div class="tile">
+            <div class="tile-label">Live items</div>
+            <div class="tile-figure">@Format.Count(tiles.LiveItems)</div>
+            <div class="tile-sub">@Format.Count(tiles.Tombstones) tombstoned</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">Written</div>
+            <div class="tile-figure">@Format.Count(tiles.ItemsWrittenInWindow)</div>
+            <div class="tile-sub">@windowLabel</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">Unchanged</div>
+            <div class="tile-figure">@Format.Count(tiles.ItemsUnchangedInWindow)</div>
+            <div class="tile-sub">already current, not re-sent</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">Unchanged share</div>
+            <div class="tile-figure">@Format.Percent(tiles.UnchangedPercentInWindow)</div>
+            <div class="tile-sub">a steady state should be high</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">Deleted</div>
+            <div class="tile-figure">@Format.Count(tiles.ItemsDeletedInWindow)</div>
+            <div class="tile-sub">
+                <a href="/PendingDeletes">@Format.Count(tiles.PendingDeletes) pending</a>
+            </div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">Failed runs</div>
+            <div class="tile-figure @(tiles.FailedRunsInWindow > 0 ? "is-bad" : null)">
+                @Format.Count(tiles.FailedRunsInWindow)
+            </div>
+            <div class="tile-sub">of @Format.Count(tiles.RunsInWindow) runs</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">Throttle waits</div>
+            <div class="tile-figure @(tiles.ThrottleWaitsInWindow > 0 ? "is-warn" : null)">
+                @Format.Count(tiles.ThrottleWaitsInWindow)
+            </div>
+            <div class="tile-sub">429 and 5xx backoffs</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">Needs attention</div>
+            <div class="tile-figure @(tiles.ConnectionsNeedingAttention > 0 ? "is-bad" : null)">
+                @Format.Count(tiles.ConnectionsNeedingAttention)
+            </div>
+            <div class="tile-sub">
+                @Format.Count(tiles.ConnectionsHealthy) healthy,
+                @Format.Count(tiles.RunsInProgress) running
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <h2>Connections</h2>
+    <div class="panel">
+        @if (Model.Summary.Connections.Count == 0)
+        {
+            <p class="empty">No connection has registered itself yet. A connector registers on its first run.</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>Connection</th>
+                            <th>Health</th>
+                            <th>Last run</th>
+                            <th class="num">Since success</th>
+                            <th class="num">Failures</th>
+                            <th class="num">Live items</th>
+                            <th class="num">Pending deletes</th>
+                            <th class="num">Last success wrote</th>
+                            <th class="num">Interval</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (ConnectionHealthRow connection in Model.Summary.Connections)
+                        {
+                            <tr>
+                                <td class="strong">
+                                    <a href="/Connections/@Uri.EscapeDataString(connection.ConnectionId)">@connection.DisplayName</a>
+                                    <div><span class="tag">@connection.ConnectorKey</span></div>
+                                </td>
+                                <td><partial name="_ConnectionPill" model="connection.Health" /></td>
+                                <td class="nowrap dim">
+                                    @if (connection.LastRunId.HasValue)
+                                    {
+                                        <a href="/Runs/@connection.LastRunId.Value">@Format.TimestampShort(connection.LastRunStartedUtc)</a>
+                                        <span class="tag">@connection.LastRunStatus</span>
+                                    }
+                                    else
+                                    {
+                                        <text>@Format.None</text>
+                                    }
+                                </td>
+                                <td class="num">@Format.Age(connection.MinutesSinceLastSuccess)</td>
+                                <td class="num">
+                                    @if (connection.ConsecutiveFailures > 0)
+                                    {
+                                        <span class="pill pill-bad">@Format.Count(connection.ConsecutiveFailures)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="zero">0</span>
+                                    }
+                                </td>
+                                <td class="num">@Format.Count(connection.LiveItemCount)</td>
+                                <td class="num">
+                                    @if (connection.PendingDeleteCount > 0)
+                                    {
+                                        <a href="/PendingDeletes?c=@Uri.EscapeDataString(connection.ConnectionId)">@Format.Count(connection.PendingDeleteCount)</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="zero">0</span>
+                                    }
+                                </td>
+                                <td class="num dim">
+                                    @Format.Count(connection.LastSuccessItemsWritten)
+                                    <span class="zero">/</span>
+                                    @Format.Count(connection.LastSuccessItemsUnchanged)
+                                </td>
+                                <td class="num dim">
+                                    @(connection.ExpectedIntervalMinutes.HasValue
+                                        ? Format.Age(connection.ExpectedIntervalMinutes)
+                                        : Format.None)
+                                </td>
+                            </tr>
+                            @if (!string.IsNullOrEmpty(connection.ErrorKind))
+                            {
+                                <tr>
+                                    <td colspan="9" class="dim">
+                                        <span class="pill pill-bad">@connection.ErrorKind</span>
+                                        @connection.ErrorMessage
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+    <p class="note">
+        <strong>Since success</strong> is measured against the last run that SUCCEEDED, not the
+        last run that happened. A connection failing every fifteen minutes is perfectly punctual
+        and completely broken, and a freshness measure that counted failures as activity would
+        report it as healthy. <strong>Last success wrote</strong> shows written / unchanged.
+    </p>
+</section>
+
+<div class="split">
+    <section class="section">
+        <h2>Thirty days</h2>
+        <div class="panel panel-pad">
+            @TrendChart.DailyActivity(
+                Model.Summary.Trend,
+                30,
+                "Items written and found unchanged per day over the last thirty days, across all connections, with a marker under days that had a failed run.")
+            <div class="legend">
+                <span><i class="swatch swatch-written"></i> written</span>
+                <span><i class="swatch swatch-unchanged"></i> unchanged</span>
+                <span><i class="swatch swatch-failed"></i> day had a failed run</span>
+            </div>
+        </div>
+        <p class="note">
+            A healthy steady state is mostly unchanged. A run at 0% unchanged is either the first
+            one or a sign the hashes are not matching, which is a defect rather than a workload
+            change.
+        </p>
+    </section>
+
+    <section class="section">
+        <h2>Recent runs</h2>
+        <div class="panel strip">
+            @if (Model.Summary.RecentRuns.Count == 0)
+            {
+                <p class="empty">No runs recorded.</p>
+            }
+            else
+            {
+                @foreach (RunHistoryRow run in Model.Summary.RecentRuns)
+                {
+                    <div class="strip-row">
+                        <span class="strip-time">@Format.TimestampShort(run.StartedUtc)</span>
+                        <partial name="_ConnectionPill" model="run.Status ?? string.Empty" />
+                        <a class="strip-name" href="/Runs/@run.RunId">@run.DisplayName</a>
+                        @if (run.IsDryRun)
+                        {
+                            <span class="tag">dry run</span>
+                        }
+                        <span class="strip-nums">
+                            @Format.Count(run.ItemsWritten) w /
+                            @Format.Count(run.ItemsUnchanged) u ·
+                            @Format.Duration(run.DurationSeconds)
+                        </span>
+                    </div>
+                }
+            }
+        </div>
+        <p class="note"><a href="/Runs">All runs</a></p>
+    </section>
+</div>

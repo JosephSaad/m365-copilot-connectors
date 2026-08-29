@@ -151,6 +151,28 @@ namespace SqlTicketsConnector.Tests.TestSupport
                     ItemView = itemView,
                     MaxItems = 0,
                 },
+
+                // Batching OFF by default in the fixtures, and deliberately so.
+                //
+                // Every test written before $batch existed asserts the
+                // single-item contract: this write threw, therefore the
+                // watermark stopped here; this item was written exactly once;
+                // these ids arrived in this order. That contract is still real -
+                // Settings:Batch = false is a supported configuration and the
+                // path a chunk of one always takes - so those tests keep testing
+                // it rather than being rewritten to assert something weaker.
+                //
+                // The batch path has its own contract, which is genuinely
+                // different: one refused item does not abandon the other
+                // nineteen, so failure is reported per item instead of thrown.
+                // PushBatchingTests turns Batch on and pins that separately.
+                //
+                // A fixture that silently changed which of the two every test
+                // exercised would be the worst of both.
+                Settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Batch"] = "false",
+                },
             };
         }
 

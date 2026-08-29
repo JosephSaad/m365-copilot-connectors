@@ -1,0 +1,15 @@
+@model string
+@*
+    A status pill. The word is whatever crawl.vwConnectionHealth or vwRunHistory
+    computed - this file never decides what "healthy" means, it only colours it.
+    See the header of sql/22: the combining rule lives in the view so that every
+    consumer agrees on it.
+*@
+@if (string.IsNullOrEmpty(Model))
+{
+    <span class="pill pill-idle">unknown</span>
+}
+else
+{
+    <span class="pill pill-@StateCodes.Tone(Model)">@Model</span>
+}

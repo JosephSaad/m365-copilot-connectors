@@ -133,6 +133,9 @@ docs/
   TROUBLESHOOTING-CDP.md               The same stage-by-stage treatment for the cluster path
   HIERARCHY-TEST-CASE.md               The three level test case: why a flat index needs flattening, and how
   HIERARCHY-DEPLOYMENT.md              Step-by-step deployment of the three level connector, net10 and net9
+  CRAWL-STATE-DEPLOYMENT.md            Standing up ConnectorState: the six scripts, the two roles, the delete guard
+  CRAWL-STATE-REFERENCE.md             Every table, view and procedure in the state database, with parameters
+  SOURCE-CONTRACT.md                   What a source must guarantee before a push can detect deletes or resume
   ASSUMPTIONS.md                       Decisions, deviations, open questions
   ADDING-A-PUSH-CONNECTOR.md           One class and one config file: the recipe and the reasoning
   COPILOT-ROUTING.md                   Connector, action, MCP or Foundry - the decision upstream of this repository
@@ -153,6 +156,12 @@ sql/
   11-timesheet-sample-data.sql         12 customers, 62 engagements, 1052 time entries
   12-timesheet-views.sql               The flattening layer — the whole test case is here
   13-timesheet-least-privilege.sql     SELECT on the views only, base tables denied
+  20-crawl-state-database.sql          The ConnectorState database, the crawl schema, and six table types
+  21-crawl-state-tables.sql            Eight tables: the inventory, run history, checkpoints, identity cache
+  22-crawl-state-views.sql             Six views — the whole read surface a dashboard or monitor sees
+  23-crawl-state-procedures.sql        The connector's write path, and the delete guard that bounds it
+  24-crawl-state-reporting.sql         Seven paged read procedures, clamped page sizes, no write anywhere
+  25-crawl-state-least-privilege.sql   crawl_writer and crawl_reader, with no table permission for either
 src/
   SqlTicketsConnector/
     Contracts/*.proto                  Microsoft contracts, unmodified

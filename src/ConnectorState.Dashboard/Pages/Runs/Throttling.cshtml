@@ -1,0 +1,117 @@
+@page "/Runs/{runId:long}/Throttling"
+@model ConnectorState.Dashboard.Pages.Runs.ThrottlingModel
+@{
+    ViewData["Title"] = $"Run {Model.Run.RunId} throttling";
+    RunHistoryRow run = Model.Run;
+}
+
+<p class="crumb">
+    <a href="/Runs">Runs</a> /
+    <a href="/Runs/@run.RunId">Run @run.RunId</a> /
+    Throttling
+</p>
+
+<h1>Throttle events</h1>
+<p class="subtitle">
+    Every 429 and 5xx this run waited on, in the order they arrived.
+    @run.DisplayName · started @Format.Timestamp(run.StartedUtc) UTC ·
+    @Format.Duration(run.DurationSeconds) · @(run.Mode ?? Format.None) crawl
+</p>
+
+@if (Model.Summary is not null)
+{
+    <section class="section">
+        <div class="panel panel-pad">
+            <dl class="facts">
+                <div><dt>Events</dt><dd>@Format.Count(Model.Summary.ThrottleEvents)</dd></div>
+                <div><dt>429 refusals</dt><dd>@Format.Count(Model.Summary.Refusals429)</dd></div>
+                <div><dt>5xx</dt><dd>@Format.Count(Model.Summary.ServerErrors)</dd></div>
+                <div><dt>Time asked for</dt><dd>@Format.Duration(Model.Summary.TotalRetryAfterSeconds)</dd></div>
+                <div><dt>Longest wait</dt><dd>@Format.Duration(Model.Summary.MaxRetryAfterSeconds)</dd></div>
+                <div><dt>Distinct minutes</dt><dd>@Format.Count(Model.Summary.DistinctMinutes)</dd></div>
+                <div><dt>Deepest retry</dt><dd>@Format.Count(Model.Summary.DeepestRetry)</dd></div>
+            </dl>
+        </div>
+        <p class="note">
+            Spread matters more than the total. @Format.Count(Model.Summary.ThrottleEvents) events
+            across @Format.Count(Model.Summary.DistinctMinutes) distinct minutes of a
+            @Format.Duration(run.DurationSeconds) run: clustered into a few minutes means the
+            writer count is too wide for the first burst; spread evenly means the sustained rate
+            is above what the tenant allows and the writer count is not the lever.
+        </p>
+    </section>
+}
+else
+{
+    <div class="banner banner-info">
+        This run recorded no throttling. Runs that were never throttled do not appear in the
+        throttle summary at all — that is deliberate, not a missing row.
+    </div>
+}
+
+<div class="panel">
+    @if (Model.Result.IsEmpty)
+    {
+        <p class="empty">No throttle events recorded for this run.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th class="num">Occurred (UTC)</th>
+                        <th class="num">Into run</th>
+                        <th class="num">Status</th>
+                        <th class="num">Retry-After</th>
+                        <th>Endpoint</th>
+                        <th class="num">Attempt</th>
+                        <th class="num">Event</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (ThrottleEventRow throttle in Model.Result.Rows)
+                    {
+                        <tr>
+                            <td class="num nowrap">@Format.Timestamp(throttle.OccurredUtc)</td>
+                            <td class="num">@Format.Duration(throttle.SecondsIntoRun)</td>
+                            <td class="num">
+                                @if (throttle.StatusCode == 429)
+                                {
+                                    <span class="pill pill-warn">429</span>
+                                }
+                                else
+                                {
+                                    <span class="pill pill-bad">@throttle.StatusCode</span>
+                                }
+                            </td>
+                            <td class="num">
+                                @if (throttle.RetryAfterSeconds.HasValue)
+                                {
+                                    @Format.Duration(throttle.RetryAfterSeconds.Value)
+                                }
+                                else
+                                {
+                                    <span class="zero" title="The service sent no Retry-After; the engine used its own backoff.">not sent</span>
+                                }
+                            </td>
+                            <td class="mono">@throttle.Endpoint</td>
+                            <td class="num @(throttle.AttemptNumber > 1 ? null : "zero")">@throttle.AttemptNumber</td>
+                            <td class="num dim">@throttle.ThrottleEventId</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<partial name="_Pager" model="Model.Pager" />
+
+<p class="note">
+    <strong>Into run</strong> is the offset from this run's own start, which is what makes the
+    shape of the throttling visible and two runs comparable. A <strong>Retry-After</strong> of
+    <em>not sent</em> means the service refused without saying for how long, and the engine fell
+    back to an exponential backoff of its own — a run full of these is being paced by a guess.
+    <strong>Endpoint</strong> is a short token, not a URL: no item identifier is recorded here.
+</p>

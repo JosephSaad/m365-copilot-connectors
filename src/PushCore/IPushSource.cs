@@ -30,6 +30,8 @@
 
 namespace PushCore;
 
+using PushCore.State;
+
 /// <summary>An opened source, read once per run.</summary>
 public interface IPushSource : IAsyncDisposable
 {
@@ -61,6 +63,33 @@ public interface IPushSource : IAsyncDisposable
     /// can outrun its own writes - do not.
     /// </summary>
     bool RequiresOrderedCommit => true;
+
+    /// <summary>
+    /// Gets how this source finds what changed, which decides whether the engine
+    /// may read it incrementally.
+    ///
+    /// Defaults to <see cref="SourceChangeDetection.Differencing"/>: read
+    /// everything, every run, and let the content and ACL hashes in the state
+    /// store decide what is actually WRITTEN. That is the correct default
+    /// because it is the one that is always safe - the saving is on the
+    /// expensive side of the pipeline, since reading a hundred thousand rows out
+    /// of SQL Server is seconds and writing a hundred thousand items to Graph is
+    /// hours.
+    ///
+    /// Return <see cref="SourceChangeDetection.ChangeMarker"/> only when the
+    /// source exposes a modification time that is monotonic, is UTC, and moves
+    /// on EVERY change - including bulk updates, triggers and direct edits. Such
+    /// a source must also read from
+    /// <see cref="PushSourceContext.ResumeFrom"/>, yield in ascending
+    /// (marker, id) order, and set <see cref="PushItem.LastModifiedUtc"/> on
+    /// every item. Declaring the marker tier without doing all four is how a
+    /// connector silently stops indexing the changes its timestamp missed.
+    ///
+    /// A ChangeMarker source almost certainly also needs
+    /// <see cref="RequiresOrderedCommit"/> left at true, because it now has a
+    /// position for out-of-order completion to move past.
+    /// </summary>
+    SourceChangeDetection ChangeDetection => SourceChangeDetection.Differencing;
 
     /// <summary>
     /// The items to consider, in ascending checkpoint order.

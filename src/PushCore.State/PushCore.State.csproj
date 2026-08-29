@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The ConnectorState half of the push engine.
+
+    PushCore declares what a direct push has to remember - ICrawlStateStore and
+    the records in PushCore/State - without naming a database. This project is
+    the one implementation of that memory: sixteen stored procedures in the
+    ConnectorState database, reached through the crawl_writer role sql/25
+    creates and through nothing else.
+
+    It is a separate project rather than a folder for the reason PushCore.Sql is
+    one: the split is what the compiler enforces. PushCore must not reference
+    SqlClient, because a connector reading something that is not a database
+    references PushCore and stops there - and the day a SqlClient advisory lands,
+    the projects that have to be re-released are the ones that actually open SQL
+    connections.
+
+    Nothing here is referenced by the engine yet. Wiring it in is a separate
+    change, so that a build of this project proves it compiles against the
+    interface without changing the behaviour of any existing deployment.
+
+    Everything a host needs from here is SqlCrawlStateStore.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PushCore.State</RootNamespace>
+    <AssemblyName>PushCore.State</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The only package this project adds over PushCore's set, at the version
+      PushCore.Sql and Connector.Security pin. It stays that way: two versions of
+      SqlClient in one output directory is a load conflict, not a merge.
+    -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PushCore\PushCore.csproj" />
+    <ProjectReference Include="..\Connector.Security\Connector.Security.csproj" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>
