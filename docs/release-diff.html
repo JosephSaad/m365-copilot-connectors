@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>v1.2.23 to v1.3.0 &middot; m365-copilot-connectors</title>
-<meta name="description" content="Every file that changed between v1.2.23 and v1.3.0 of the M365 Copilot connectors for SQL Server and Cloudera CDP, with what each change does and why.">
+<title>v1.2.23 to v1.3.1 &middot; m365-copilot-connectors</title>
+<meta name="description" content="Every file that changed between v1.2.23 and v1.3.1 of the M365 Copilot connectors for SQL Server and Cloudera CDP, with what each change does and why.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128256;</text></svg>">
 <style>
@@ -131,8 +131,8 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
 <div class="wrap">
 <header class="mast">
   <p class="eyebrow">m365-copilot-connectors &middot; release diff</p>
-  <h1><span class="mono">v1.2.23</span> &rarr; <span class="mono">v1.3.0</span></h1>
-  <p class="stand">A direct push had no memory of what it had sent. Eight commits give it one:
+  <h1><span class="mono">v1.2.23</span> &rarr; <span class="mono">v1.3.1</span></h1>
+  <p class="stand">A direct push had no memory of what it had sent. Ten commits give it one:
   a separate database that records every item written, so the connector can finally detect a
   deletion, skip an item that has not changed, and resume where it stopped. <strong>Seventy-four
   of the seventy-five files are new</strong> &mdash; this release is very nearly a second codebase
@@ -140,10 +140,10 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
 
   <div class="totals">
     <div class="t"><b>75</b><span>Files touched</span></div>
-    <div class="t"><b class="a">+16,901</b><span>Lines added</span></div>
+    <div class="t"><b class="a">+17,286</b><span>Lines added</span></div>
     <div class="t"><b class="d">&minus;106</b><span>Lines removed</span></div>
     <div class="t"><b>74</b><span>Added &middot; 0 deleted</span></div>
-    <div class="t"><b class="k">+26</b><span>Tests, 283&nbsp;&rarr;&nbsp;309</span></div>
+    <div class="t"><b class="k">+28</b><span>Tests, 283&nbsp;&rarr;&nbsp;311</span></div>
   </div>
 
   <div class="split">
@@ -167,6 +167,21 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
       longer abandons the other nineteen. <code>Settings:Batch&nbsp;=&nbsp;false</code> restores
       the previous path.</p>
     </div>
+  </div>
+
+  <div class="note">
+    <span class="tag">What v1.3.1 changed, and why there was a v1.3.1</span>
+    <p>v1.3.0 shipped, and a verification pass over its own diff then found five defects in it.
+    Two would have been felt: <code>ItemHasher</code> shifted an <code>Unspecified</code> DateTime
+    by the <em>host&rsquo;s</em> local offset &mdash; and <code>Unspecified</code> is exactly what
+    <code>SqlDataReader.GetDateTime</code> returns &mdash; so two connectors in different timezones
+    would each have rewritten every one of the other&rsquo;s items, on every run; and
+    <code>sql/20</code> guarded only <code>CREATE DATABASE</code>, so re-running it reverted a
+    <code>FULL</code> recovery model and killed live sessions on a database already serving a
+    crawl.</p>
+    <p>The other three: an <code>INT</code> overflow in the paging arithmetic, tombstone retention
+    aged on the wrong column, and three table scans where one aggregate does. All five are in
+    v1.3.1 and this page describes the fixed code.</p>
   </div>
 
   <div class="note warn">
@@ -196,7 +211,7 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
     <p><strong>None of this has run against a real SQL Server or a real tenant.</strong> All seven
     scripts are unexecuted, the dashboard has never rendered a row, and <code>Settings:Batch</code>
     defaults on &mdash; so the first production run uses a write path that has never spoken to
-    Graph. 309 tests pass and every project builds; that is a different claim. Each SQL file
+    Graph. 311 tests pass and every project builds; that is a different claim. Each SQL file
     carries a verification block at its foot for a scratch instance.</p>
     <p><strong><code>sql/26</code> is the one to treat differently.</strong> The other six create a
     separate database and are reversible by dropping it. <code>sql/26</code> adds columns and
@@ -208,21 +223,21 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
   <section>
     <h2>The state database</h2>
     <p class="blurb">Seven scripts. Six create a separate database; the seventh alters the customer&rsquo;s own tables.</p>
-    <p class="tally"><span>7 files</span><span class="c-add">+3,298</span></p>
+    <p class="tally"><span>7 files</span><span class="c-add">+3,360</span></p>
     <div class="scroll"><table>
       <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
       <tbody>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>sql/23-crawl-state-procedures.sql</code><span class="bar" title="+1033 -0"><i class="add" style="width:79.39%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+1,033</span></td>
-        <td class="sum">New file. Nineteen procedures form the write surface; sql/25 grants seventeen, and the engine holds no table permission. uspBeginRun reaps status-1 runs older than @AbandonAfterHours (12) as status 4 &#x27;abandoned&#x27; and records @ActualMode, escalating to full when the last full success is older than @FullEveryHours (168) or - the case the header calls easiest to forget - when no checkpoint exists. uspGetPendingDeletes throws 50004/50005 on an unknown or foreign RunId, 50006 on a non-full run, returns an empty set for a dry run, and throws 50007 above @MaxDeletePercent (10.00) - but only when @OverrideGuard = 0. The header admits nothing here can check that the run enumerated to the end.</td>
+        <td class="pathcell"><code>sql/23-crawl-state-procedures.sql</code><span class="bar" title="+1039 -0"><i class="add" style="width:79.62%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+1,039</span></td>
+        <td class="sum">Nineteen procedures form the write surface; sql/25 grants seventeen, and the engine holds no table permission. uspBeginRun reaps status-1 runs older than @AbandonAfterHours (12) and records @ActualMode, escalating to full when the last full success is older than @FullEveryHours (168) or - the case the header calls easiest to forget - when no checkpoint exists. uspGetPendingDeletes throws 50004/50005 on an unknown or foreign RunId, 50006 on a non-full run, returns empty for a dry run, and throws 50007 above @MaxDeletePercent (10.00) unless @OverrideGuard is set. The header admits nothing here can check the run enumerated to the end. v1.3.1 stamps and clears DeletedUtc.</td>
       </tr>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>sql/21-crawl-state-tables.sql</code><span class="bar" title="+483 -0"><i class="add" style="width:54.29%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+483</span></td>
-        <td class="sum">Creates the eight crawl tables — Connection, Run, Item, Checkpoint, PrincipalMap, ThrottleEvent, RunPhaseTiming, RunItemType — idempotently, never ALTERing an existing one. Run.Mode (1 = full, 2 = incremental) is the highest-stakes column: only a full run may conclude an absent item was deleted, so Mode is stored, not inferred. Item splits ContentHash from AclHash and LastSeenRunId from LastWrittenRunId; CK_Item_Pending binds State = 2 to PendingSinceUtc. PrincipalMap caches negative resolutions as a null EntraObjectId with ExpiresUtc. Filtered IX_Item_Sweep (State = 1) and IX_Run_Open (Status = 1) serve the hot paths. Defect: no DeletedUtc — uspPurgeHistory ages State-3 tombstones on LastWrittenUtc against a 180-day default, so a long-unchanged item&#x27;s tombstone is purgeable immediately.</td>
+        <td class="pathcell"><code>sql/21-crawl-state-tables.sql</code><span class="bar" title="+497 -0"><i class="add" style="width:55.07%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+497</span></td>
+        <td class="sum">Creates the eight crawl tables idempotently, never ALTERing an existing one. Run.Mode (1 = full, 2 = incremental) is the highest-stakes column: only a full run may conclude an absent item was deleted, so Mode is stored rather than inferred. Item splits ContentHash from AclHash and LastSeenRunId from LastWrittenRunId. v1.3.1 adds DeletedUtc with CK_Item_Deleted: retention previously aged tombstones on LastWrittenUtc, so an item unchanged for a year was already past a 180-day window the moment it became a tombstone and would have been purged before anyone could see it had been deleted. PrincipalMap caches negative resolutions as a null EntraObjectId with ExpiresUtc.</td>
       </tr>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
@@ -232,15 +247,21 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
       </tr>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>sql/24-crawl-state-reporting.sql</code><span class="bar" title="+430 -0"><i class="add" style="width:51.22%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+430</span></td>
-        <td class="sum">New file. Seven read procedures, none of which writes - the header makes &quot;can the web tier corrupt crawl state&quot; answerable by the absence of an UPDATE in the file. Only four are lists; they page (default 50, clamped at 500; 100/1,000 for uspListThrottleEvents) and return TotalRows via COUNT(*) OVER(). The omission is uspDashboardSummary: the entire front page in one round trip - tiles, per-connection health, a 30-day trend and the last ten runs as four unpaged result sets - with uspGetRun and uspGetConnectionDetail doing the same for one run and one connection. uspListItems anchors @Search as LIKE @Search + &#x27;%&#x27;. Defect confirmed: @Page is clamped below at 1 but not above, so (@Page - 1) * @PageSize overflows INT.</td>
+        <td class="pathcell"><code>sql/24-crawl-state-reporting.sql</code><span class="bar" title="+440 -0"><i class="add" style="width:51.81%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+440</span></td>
+        <td class="sum">Seven read procedures, none of which writes - the header makes &quot;can the web tier corrupt crawl state&quot; answerable by the absence of an UPDATE in the file. Only four are lists; they page (default 50, clamped 500; 100/1,000 for throttle events) and return TotalRows via COUNT(*) OVER(). uspDashboardSummary is the entire front page in one round trip - tiles, per-connection health, a 30-day trend and the last ten runs as four unpaged result sets - with uspGetRun and uspGetConnectionDetail doing the same for one run and one connection. v1.3.1 clamps @Page at both ends: clamped only below, (@Page - 1) * @PageSize overflowed INT on a page number a query string can carry.</td>
       </tr>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>sql/22-crawl-state-views.sql</code><span class="bar" title="+363 -0"><i class="add" style="width:47.06%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+363</span></td>
-        <td class="sum">Creates six views with CREATE OR ALTER: vwRunHistory (ItemsPerSecond and UnchangedPercent, NULLIF-guarded), vwConnectionHealth, vwPendingDeletes (aged on PendingSinceUtc), plus three the summary omits — vwItemInventory, which renders hashes as CHAR(64) hex; vwThrottleSummary, which splits 429s from 5xx and reports DistinctMinutes; and vwDailyActivity, the per-day trend that excludes dry runs. Health&#x27;s CASE arms are priority-ordered, and &#x27;late&#x27; means twice ExpectedIntervalMinutes past the last SUCCESS, not the last run. These are not the dashboard&#x27;s only read surface: sql/25 also grants crawl_reader EXECUTE on seven paged procedures in sql/24. Defect confirmed: three correlated crawl.Item counts per connection, State = 2 counted twice.</td>
+        <td class="pathcell"><code>sql/22-crawl-state-views.sql</code><span class="bar" title="+372 -0"><i class="add" style="width:47.64%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+372</span></td>
+        <td class="sum">Six views, CREATE OR ALTER: vwRunHistory (ItemsPerSecond and UnchangedPercent, NULLIF-guarded), vwConnectionHealth, vwPendingDeletes aged on PendingSinceUtc, vwItemInventory rendering hashes as CHAR(64) hex, vwThrottleSummary splitting 429s from 5xx, and vwDailyActivity for the trend. Health&#x27;s CASE arms are priority-ordered and &#x27;late&#x27; means twice ExpectedIntervalMinutes past the last SUCCESS, not the last run. v1.3.1 replaces three correlated counts over crawl.Item per connection - which counted State = 2 twice, once for the column and once for the Health arm - with one aggregate. crawl.Item is the largest table here.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>sql/20-crawl-state-database.sql</code><span class="bar" title="+266 -0"><i class="add" style="width:40.29%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+266</span></td>
+        <td class="sum">Creates the ConnectorState database, the [crawl] schema and six table types. Separate from Ops so the connector stays SELECT-only there while writing its own bookkeeping; RECOVERY SIMPLE because losing state costs one recrawl, not correctness. Hashes are BINARY(32) so a collation mismatch cannot mark every item changed; PrincipalKeyList is NVARCHAR(256) because an AD distinguished name overruns ItemIdList&#x27;s 128. v1.3.1 guards all three ALTER DATABASE statements: unguarded they re-ran on every execution, so a second run silently reverted a FULL recovery model the header itself invites and RCSI&#x27;s WITH ROLLBACK IMMEDIATE killed every session on a database already serving a crawl. The D: file paths are now labelled placeholders that fail loudly rather than defaulting to whatever volume the instance picks.</td>
       </tr>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
@@ -248,19 +269,13 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
         <td class="num"><span class="c-add">+263</span></td>
         <td class="sum">New file. Two Windows logins created in master (securityadmin required), two roles. crawl_writer (svc_gca_reader) gets EXECUTE on seventeen of sql/23&#x27;s procedures plus the six table types; crawl_reader (svc_connector_dashboard) gets EXECUTE on sql/24&#x27;s seven and SELECT on six views. uspResetCheckpoint and uspPurgeHistory are withheld. The denials are asymmetric: both roles are DENYed INSERT, UPDATE, DELETE, ALTER, REFERENCES on SCHEMA::crawl, but only crawl_writer is additionally DENYed SELECT - its procedures still read through ownership chaining. CONTROL is excluded because it implies the granted EXECUTE. The closing note&#x27;s scope reasoning is genuinely wrong, though nothing breaks today: the reader is never denied SELECT.</td>
       </tr>
-      <tr>
-        <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>sql/20-crawl-state-database.sql</code><span class="bar" title="+243 -0"><i class="add" style="width:38.50%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+243</span></td>
-        <td class="sum">Creates the ConnectorState database, the [crawl] schema and six table types (ItemStateList, ItemIdList, PrincipalKeyList, ThrottleEventList, ItemTypeCountList, PhaseTimingList). Separate from Ops so the connector stays SELECT-only there while writing its own bookkeeping; RECOVERY SIMPLE because losing state costs one recrawl, not correctness. Hashes are BINARY(32), so a collation mismatch cannot mark every item changed; PrincipalKeyList is NVARCHAR(256) because an AD distinguished name overruns ItemIdList&#x27;s 128. The header&#x27;s &quot;sixteen procedures&quot; is stale: sql/23 defines 19, sql/25 grants the writer 17. Defect: only CREATE DATABASE is guarded — all three ALTER DATABASE calls re-run, so RECOVERY SIMPLE reverts a FULL override and RCSI&#x27;s WITH ROLLBACK IMMEDIATE kills live sessions. Paths are hardcoded to D:\.</td>
-      </tr>
       </tbody>
     </table></div>
   </section>
   <section>
     <h2>The engine</h2>
     <p class="blurb">Chunked change detection, the delete sweep, and $batch. The only heavily modified code in the release.</p>
-    <p class="tally"><span>12 files</span><span class="c-add">+2,787</span><span class="c-del">&minus;96</span></p>
+    <p class="tally"><span>12 files</span><span class="c-add">+2,799</span><span class="c-del">&minus;96</span></p>
     <div class="scroll"><table>
       <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
       <tbody>
@@ -290,9 +305,9 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
       </tr>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>src/PushCore/State/ItemHasher.cs</code><span class="bar" title="+199 -0"><i class="add" style="width:34.84%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+199</span></td>
-        <td class="sum">Computes the two SHA-256 hashes (HashBytes = 32, matching the BINARY(32) columns in sql/21). Determinism is the contract: ordinal-sorted property keys, InvariantCulture rendering, four-byte little-endian length prefix per field, with itemId and itemType folded in. HashContent hashes post-truncation content; HashAcl sorts resolved Graph grants &quot;Type|Value|AccessType&quot; and maps null/empty to &quot;(no grants)&quot;. Two determinism holes remain: Render&#x27;s collection branches use string.Join(&quot;&quot;, list), so [&quot;ab&quot;,&quot;c&quot;] and [&quot;a&quot;,&quot;bc&quot;] collide despite the prefix; and the DateTime branches call ToUniversalTime(), which shifts an Unspecified-kind value by the host&#x27;s local offset.</td>
+        <td class="pathcell"><code>src/PushCore/State/ItemHasher.cs</code><span class="bar" title="+211 -0"><i class="add" style="width:35.88%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+211</span></td>
+        <td class="sum">Computes the two hashes that decide whether an item is written, and its correctness is asymmetric: a hash that changes when the item did not costs a wasted write, while one that stays the same when the item did leaves the index permanently wrong with nothing reporting it. Properties are hashed in ordinal sorted order, values rendered with InvariantCulture, and every field length-prefixed so (&quot;ab&quot;,&quot;c&quot;) cannot collide with (&quot;a&quot;,&quot;bc&quot;). v1.3.1 fixes the determinism hole the header claimed to have closed: Render called ToUniversalTime, which for a DateTime of Kind.Unspecified - exactly what SqlDataReader.GetDateTime returns - shifted by the HOST&#x27;s offset, so two connectors in different timezones each saw every one of the other&#x27;s items as changed.</td>
       </tr>
       <tr>
         <td class="st"><span class="chip ch-modified">MOD</span></td>
@@ -583,8 +598,8 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
   </section>
   <section>
     <h2>Tests</h2>
-    <p class="blurb">Twenty-six new tests, and the stub that had to learn $batch before any of them could run.</p>
-    <p class="tally"><span>4 files</span><span class="c-add">+1,086</span><span class="c-del">&minus;2</span></p>
+    <p class="blurb">Twenty-eight new tests, and the stub that had to learn $batch before any of them could run.</p>
+    <p class="tally"><span>4 files</span><span class="c-add">+1,125</span><span class="c-del">&minus;2</span></p>
     <div class="scroll"><table>
       <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
       <tbody>
@@ -596,9 +611,9 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
       </tr>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/ItemHasherTests.cs</code><span class="bar" title="+364 -0"><i class="add" style="width:47.13%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+364</span></td>
-        <td class="sum">Seventeen facts pinning ItemHasher, with the asymmetry in the header: a hash that changes needlessly costs a write; one that fails to change leaves the index wrong for ever. Determinism is the theme — property insertion order (ordinal sort, because dictionary order has changed between .NET versions), culture (de-DE and tr-TR), and four-byte length-prefixed fields so (&quot;ab&quot;,&quot;c&quot;) cannot hash as (&quot;a&quot;,&quot;bc&quot;). HashAcl renders each grant as Type|Value|AccessType (Acl.Type, not &quot;AclType&quot;) and sorts ordinally; null or empty hashes the literal &quot;(no grants)&quot;. One test deliberately runs the other way: a string collection&#x27;s order is content and must NOT be sorted. CrawlItemState.Matches is an AND.</td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/ItemHasherTests.cs</code><span class="bar" title="+403 -0"><i class="add" style="width:49.59%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+403</span></td>
+        <td class="sum">Nineteen facts pinning the hash&#x27;s two failure modes, which are not symmetric: the tests asserting two hashes differ guard an item that silently stops updating, while the determinism tests guard a corpus rewritten for nothing. They cover dictionary order, culture, field framing, ACL order and grant type, and that CrawlItemState.Matches is an AND over both hashes. v1.3.1 adds the timezone pair: an Unspecified DateTime must hash as the same value stamped UTC, and a value that carries an offset must still be converted. The first would have passed on a UTC CI runner and failed on any developer machine, which is where it went unnoticed.</td>
       </tr>
       <tr>
         <td class="st"><span class="chip ch-modified">MOD</span></td>
@@ -618,27 +633,27 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
   <section>
     <h2>Documentation</h2>
     <p class="blurb">Three new documents, one of which is what gets sent to the team that owns the source.</p>
-    <p class="tally"><span>8 files</span><span class="c-add">+2,698</span><span class="c-del">&minus;5</span></p>
+    <p class="tally"><span>8 files</span><span class="c-add">+2,970</span><span class="c-del">&minus;5</span></p>
     <div class="scroll"><table>
       <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
       <tbody>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>docs/CRAWL-STATE-REFERENCE.md</code><span class="bar" title="+970 -0"><i class="add" style="width:76.93%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+970</span></td>
-        <td class="sum">Schema reference: six table types, eight tables, six views, nineteen write and seven reporting procedures (twenty-six in the front matter), two roles, with columns, parameters, result sets and errors 50001 to 50007. Conventions up front — everything in [crawl]; UTC DATETIME2(3) with the millisecond load-bearing in the checkpoint; BINARY(32) hashes exposed as CHAR(64) hex; microseconds stored, milliseconds reported. Enumerations are the contract. The omitted half is Permissions: neither role holds a permission on any table, crawl_writer gets EXECUTE by name on seventeen of the nineteen procedures and all six types, uspResetCheckpoint and uspPurgeHistory go to neither, and writes reach tables purely by ownership chaining.</td>
+        <td class="pathcell"><code>docs/CRAWL-STATE-REFERENCE.md</code><span class="bar" title="+971 -0"><i class="add" style="width:76.97%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+971</span></td>
+        <td class="sum">The schema reference: enumerations, error numbers 50001-50007, six table types, eight tables with columns, constraints and indexes, six views, and twenty-six procedures with parameters and result sets, plus the permissions matrix. What someone writing a report or debugging a query reads rather than prose. v1.3.1 adds DeletedUtc and CK_Item_Deleted, and records that uspRecordWritten clears both timestamps on resurrection.</td>
       </tr>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>docs/CRAWL-STATE-DEPLOYMENT.md</code><span class="bar" title="+887 -0"><i class="add" style="width:73.57%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+887</span></td>
-        <td class="sum">Operator guide for standing up ConnectorState: sql/20 to sql/25 in order, the two accounts (svc_gca_reader in crawl_writer, svc_connector_dashboard in crawl_reader), what to edit, what each script prints, retention, backup, the delete guard, recovery, and sql/26. The guard section is the substantial one — uspGetPendingDeletes throws 50004/50005/50006/50007, @MaxDeletePercent default 10.00 compared strictly greater, @OverrideGuard default 0, refusal before the UPDATE. DEFECT: it opens by saying the engine-side configuration keys &quot;are not settled yet&quot; and that nothing here depends on an appsettings.json key — but this same release ships CrawlStateWiring reading Settings:StateConnectionString and wires all three executables to it.</td>
+        <td class="pathcell"><code>docs/CRAWL-STATE-DEPLOYMENT.md</code><span class="bar" title="+907 -0"><i class="add" style="width:74.39%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+907</span></td>
+        <td class="sum">The operator&#x27;s guide: prerequisites, the order the scripts run in and as whom, the two service accounts, the file-path edits, what each script prints, retention with a SQL Agent job, backup posture, and disaster recovery. Its longest section is the delete guard - how to investigate a refusal and how to clear one deliberately. v1.3.1 corrects the one thing that made it unusable: it previously said the connector&#x27;s configuration keys were unsettled, so an operator who followed it had no documented way to point a connector at the database they had just built. Settings:StateConnectionString is now documented, including that Integrated Security is required and a password is refused.</td>
       </tr>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>docs/release-diff.html</code><span class="bar" title="+491 -0"><i class="add" style="width:54.73%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+491</span></td>
-        <td class="sum">An HTML page tabulating a release&#x27;s files with status chips, square-root-scaled add/delete bars and per-file summaries. Not self-contained: it preconnects to fonts.googleapis.com/gstatic and links a stylesheet for JetBrains Mono, Source Sans 3 and Source Serif 4. Its title, masthead, totals (41 files, +6,786/-1,962, tests 268 to 283) and footer all name v1.2.20 to v1.2.23 deliberately — the footer says it was generated from that diff and that publishing it lands after v1.2.23. The defect is therefore the README line introducing it as &quot;What changed in the current release range&quot;, which a reader will follow to the previous release.</td>
+        <td class="pathcell"><code>docs/release-diff.html</code><span class="bar" title="+742 -0"><i class="add" style="width:67.28%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+742</span></td>
+        <td class="sum">The page you are reading, self-hosting. A standalone document - the artifact host supplies a wrapper and a reset, GitHub Pages does not - carrying the design tokens inline and pulling three families from Google Fonts, which is the one external dependency the locked-down-network rule tolerates for a public page. Status chips, square-root-scaled add/delete bars so a fourteen-line file stays visible beside a 1,639-line one, and per-file summaries. Rewritten in this range from v1.2.20-to-v1.2.23 to the current range, and again for v1.3.1.</td>
       </tr>
       <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
@@ -727,11 +742,12 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
   </section>
 
 <footer class="foot">
-  <p>Generated from <code>git diff v1.2.23 v1.3.0</code>. Every summary was written by reading the
+  <p>Generated from <code>git diff v1.2.23 v1.3.1</code>. Every summary was written by reading the
   actual hunks, then checked by a second pass whose brief was to find invented, overstated or
   missing claims &mdash; <strong>51 of the 75 entries were rewritten as a result</strong>, and five
   of those corrections turned out to be defects in the shipped code rather than in the summary.
-  Those five are fixed on <code>main</code> after the tag.</p>
+  Those five are what v1.3.1 fixes; the ten files they touched were re-summarised against the
+  corrected code.</p>
   <p>Line counts are from <code>git diff --numstat</code> and were taken from git rather than from
   the summaries; bars are square-root scaled so a fourteen-line file stays visible beside a
   1,639-line one.</p>
