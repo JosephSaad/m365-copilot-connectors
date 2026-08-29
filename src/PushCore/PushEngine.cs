@@ -94,6 +94,22 @@ public sealed class PushEngine
     // store, and the store refuses anything it should not answer.
     private CrawlMode crawlMode = CrawlMode.Full;
 
+    // Set the moment any item in this run is refused, and never cleared.
+    //
+    // A batch refusal does not end the run - that is the point of per-item
+    // outcomes - so without this flag the NEXT chunk would commit in full and
+    // move the marker straight over the gap the refusal left. The item would be
+    // neither in the index nor ever re-read, which is precisely what this
+    // repository's oldest invariant forbids.
+    //
+    // Once it is set, later items are still written and still recorded in the
+    // store, because they are genuinely in the index and the sweep must not
+    // delete them. What stops is the marker: no further source commits and no
+    // further checkpoint advance, so the next run resumes from before the gap
+    // and retries the refused item. Re-reading what was already written is free
+    // - every write is an upsert.
+    private bool markerBlocked;
+
     /// <summary>Initializes a new instance of the <see cref="PushEngine"/> class.</summary>
     /// <param name="connector">The source description.</param>
     /// <param name="options">Validated configuration.</param>
@@ -1294,11 +1310,15 @@ public sealed class PushEngine
             summary.CountFailed(prepared.Mapped.ItemType);
         }
 
-        // 4. Count and commit, in the order the source yielded.
-        foreach (Prepared prepared in confirmed)
+        // 4. Count what LANDED - not the commit prefix.
+        //
+        //    These two differ whenever a batch refused something in the middle,
+        //    and counting the prefix would have the run under-report its own
+        //    work: nineteen items reach Graph, RecordWrittenAsync writes
+        //    nineteen item rows, and the run row would claim four. The same
+        //    database disagreeing with itself is worse than either number.
+        foreach (Prepared prepared in stored)
         {
-            long commitStarted = PushTiming.Now();
-
             if (unchanged.Contains(prepared.Mapped.Id))
             {
                 summary.CountUnchanged(prepared.Mapped.ItemType);
@@ -1325,17 +1345,38 @@ public sealed class PushEngine
                 }
             }
 
-            await source.OnItemCommittedAsync(prepared.Mapped, recording);
-
-            summary.Timing.Commit.Add(PushTiming.MicrosecondsSince(commitStarted));
             summary.Timing.RowTotal.Add(PushTiming.MicrosecondsSince(prepared.StartedAt));
         }
 
+        // 5. Move the marker, over the unbroken prefix only, and never once this
+        //    run has left a gap behind it.
+        if (!this.markerBlocked)
+        {
+            foreach (Prepared prepared in confirmed)
+            {
+                long commitStarted = PushTiming.Now();
+                await source.OnItemCommittedAsync(prepared.Mapped, recording);
+                summary.Timing.Commit.Add(PushTiming.MicrosecondsSince(commitStarted));
+            }
+        }
+
+        if (!this.markerBlocked && confirmed.Count < chunk.Count)
+        {
+            // Set after this chunk's own prefix has been committed, so the
+            // marker still reaches the last good item before the gap.
+            this.markerBlocked = true;
+
+            this.log.Warning(
+                "An item in this chunk was not written, so the checkpoint stops here for the rest of the run. " +
+                "Later items are still indexed and recorded; the next run resumes from before the gap and " +
+                "retries what was refused. Re-reading what was already written costs time and nothing else.");
+        }
+
         // The checkpoint, once, from the last item that carried a marker. Every
-        // item in the chunk is confirmed by the time this runs, so the position
+        // item in the prefix is confirmed by the time this runs, so the position
         // is honest; doing it per item would put a database round trip beside
         // every Graph write for a value only the next run reads.
-        if (this.store.IsEnabled && confirmed.Count > 0)
+        if (this.store.IsEnabled && confirmed.Count > 0 && !this.markerBlocked)
         {
             Prepared? marked = confirmed
                 .Where(prepared => prepared.Mapped.LastModifiedUtc.HasValue)

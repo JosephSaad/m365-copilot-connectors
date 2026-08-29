@@ -30,8 +30,12 @@
 -- where the source read itself outgrows the crawl window. This script is what
 -- moves the connector to Tier 1, where most runs read almost nothing.
 --
--- Requires SQL Server 2022 or later, for GREATEST(). It is the only file in the
--- set that does - sql/20 through sql/25 need nothing above 2016.
+-- Requires SQL Server 2022 or later, and only in section 4's backfill and the
+-- section 6 snippet, both of which use GREATEST(). The columns, indexes,
+-- triggers and view need nothing above 2016 - so an older source instance can
+-- have all of those by rewriting three UPDATE statements in the MAX-over-VALUES
+-- form. It is the only file in the set with any such requirement: sql/20
+-- through sql/25 build the state database and need nothing above 2016.
 --
 -- Run once per environment, after sql/10 and sql/12. Independent of sql/20-25:
 -- this changes the SOURCE database, those create the state database.
@@ -278,25 +282,41 @@ DISABLE TRIGGER dbo.trgEngagements_Effective ON dbo.Engagements;
 DISABLE TRIGGER dbo.trgTimeEntries_Effective ON dbo.TimeEntries;
 GO
 
+-- All three in ONE transaction, and one batch. Separate batches would let a
+-- failure in the middle statement - a lock timeout on a large Engagements table
+-- is the realistic one - leave the sequence half applied while the batches after
+-- it carried on regardless: the time-entry update would run against partly
+-- corrected ancestors, and the deployment would look finished with descendants
+-- behind their parents. XACT_ABORT ON rolls the whole thing back instead, and
+-- the ENABLE TRIGGER batch below still runs, so a failed backfill leaves the
+-- source exactly as it was found with its triggers live.
+SET XACT_ABORT ON;
+
+BEGIN TRANSACTION;
+
 UPDATE  dbo.Customers
 SET     EffectiveLastModified = LastModified
 WHERE   EffectiveLastModified <> LastModified;
-GO
 
 UPDATE  e
 SET     e.EffectiveLastModified = GREATEST(e.LastModified, c.EffectiveLastModified)
 FROM    dbo.Engagements AS e
 INNER JOIN dbo.Customers AS c ON c.CustomerId = e.CustomerId
 WHERE   e.EffectiveLastModified <> GREATEST(e.LastModified, c.EffectiveLastModified);
-GO
 
 UPDATE  te
 SET     te.EffectiveLastModified = GREATEST(te.LastModified, e.EffectiveLastModified)
 FROM    dbo.TimeEntries   AS te
 INNER JOIN dbo.Engagements AS e ON e.EngagementId = te.EngagementId
 WHERE   te.EffectiveLastModified <> GREATEST(te.LastModified, e.EffectiveLastModified);
+
+COMMIT TRANSACTION;
 GO
 
+-- Unconditional on purpose. Whether the backfill committed or rolled back, the
+-- triggers must come back on: leaving them disabled is the one outcome that
+-- fails silently, because the source would keep accepting writes while quietly
+-- no longer maintaining the column every incremental crawl depends on.
 ENABLE TRIGGER dbo.trgCustomers_Effective   ON dbo.Customers;
 ENABLE TRIGGER dbo.trgEngagements_Effective ON dbo.Engagements;
 ENABLE TRIGGER dbo.trgTimeEntries_Effective ON dbo.TimeEntries;

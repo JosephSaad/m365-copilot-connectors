@@ -350,29 +350,32 @@ namespace SqlTicketsConnector.Tests.TestSupport
 
                 Interlocked.Increment(ref this.batchRoundTrips);
 
-                var buffer = new MemoryStream();
+                string body;
+                int carried = 0;
 
-                using (var writer = new Utf8JsonWriter(buffer))
+                using (var buffer = new MemoryStream())
                 {
-                    writer.WriteStartObject();
-                    writer.WriteStartArray("responses");
-
-                    int carried = 0;
-
-                    foreach (JsonElement request in requests.EnumerateArray())
+                    using (var writer = new Utf8JsonWriter(buffer))
                     {
-                        this.WriteSubResponse(writer, request);
-                        carried++;
+                        writer.WriteStartObject();
+                        writer.WriteStartArray("responses");
+
+                        foreach (JsonElement request in requests.EnumerateArray())
+                        {
+                            this.WriteSubResponse(writer, request);
+                            carried++;
+                        }
+
+                        writer.WriteEndArray();
+                        writer.WriteEndObject();
                     }
 
-                    writer.WriteEndArray();
-                    writer.WriteEndObject();
-                    writer.Flush();
+                    body = Encoding.UTF8.GetString(buffer.ToArray());
+                }
 
-                    lock (this.WrittenItemIds)
-                    {
-                        this.BatchSizes.Add(carried);
-                    }
+                lock (this.WrittenItemIds)
+                {
+                    this.BatchSizes.Add(carried);
                 }
 
                 // HTTP 200 on the envelope, whatever the sub-responses said.
@@ -381,8 +384,7 @@ namespace SqlTicketsConnector.Tests.TestSupport
                 // GraphBatchWriter's header describes.
                 var message = new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent(
-                        Encoding.UTF8.GetString(buffer.ToArray()), Encoding.UTF8, "application/json"),
+                    Content = new StringContent(body, Encoding.UTF8, "application/json"),
                 };
 
                 ResponseHandlerOption option = requestInfo.RequestOptions

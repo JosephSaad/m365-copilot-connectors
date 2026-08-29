@@ -31,7 +31,7 @@ documentation that ships with it.
 | [**Production onboarding**](PRODUCTION-ONBOARDING.md) | What has to be true before either connector is a supported service rather than a pilot that happens to be running |
 | [CDP connector](CDP-DEPLOYMENT.md) | HDFS documents, Hive tables and the Atlas catalogue, from a Kerberised cluster |
 | [Hierarchy connector](HIERARCHY-DEPLOYMENT.md) | The worked three-level example, flattened for a flat index |
-| [Crawl state database](CRAWL-STATE-DEPLOYMENT.md) | Standing up `ConnectorState`: the six scripts in order, the two service accounts, retention, and the delete guard an operator has to know before the first refusal |
+| [Crawl state database](CRAWL-STATE-DEPLOYMENT.md) | Standing up `ConnectorState`: the six state-database scripts in order, the two service accounts, retention, and the delete guard an operator has to know before the first refusal — plus `sql/26`, the seventh, which changes the source rather than the state |
 | [App registration](APP-REGISTRATION.md) | Entra setup, certificate auth, and the permissions each path actually needs |
 | [Runbook](RUNBOOK.md) | Scheduling, certificate rotation, the ACL staleness bound, and what each exit code means |
 
