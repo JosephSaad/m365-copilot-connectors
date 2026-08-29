@@ -16,6 +16,7 @@
       cannot drift between the push tools.
     -->
     <ProjectReference Include="..\PushCore\PushCore.csproj" />
+    <ProjectReference Include="..\PushCore.State\PushCore.State.csproj" />
     <ProjectReference Include="..\PushCore.Sql\PushCore.Sql.csproj" />
   </ItemGroup>
 

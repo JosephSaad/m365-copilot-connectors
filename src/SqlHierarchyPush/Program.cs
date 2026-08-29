@@ -14,5 +14,10 @@
 // ---------------------------------------------------------------------------
 
 using PushCore;
+using PushCore.State;
 
-return await PushHost.RunAsync(args);
+// The factory rather than the store: PushCore cannot reference SqlClient,
+// so the executable is where the two halves meet. Without a
+// Settings:StateConnectionString this returns null and the tool behaves
+// exactly as it did before crawl state existed.
+return await PushHost.RunAsync(args, CrawlStateWiring.FromSettings);
