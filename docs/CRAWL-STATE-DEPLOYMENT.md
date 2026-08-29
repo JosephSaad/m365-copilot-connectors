@@ -1,6 +1,6 @@
 ---
 title: Deploying the crawl state database
-description: Standing up and running ConnectorState — the six scripts and their order, the two service accounts, the delete guard and how to clear it, retention, backup posture, and what a lost or rewound state database costs.
+description: Standing up and running ConnectorState — the six scripts that build the state database and the order they run in, the two service accounts, the delete guard and how to clear it, retention, backup posture, what a lost or rewound state database costs, and sql/26, which changes the source rather than the state.
 ---
 
 # Deploying the crawl state database
@@ -815,51 +815,65 @@ The script ends with three queries.
 
 | Query | A healthy result |
 |---|---|
-| Descendants older than an ancestor | **Zero rows.** Any row returned is a time entry whose effective timestamp is behind its engagement's or its customer's — the stale-name defect this script exists to prevent, meaning the backfill did not complete or a trigger is disabled |
-| The three triggers | Three rows, `is_disabled = 0` on each |
+| Any child behind its parent | **Zero rows.** A three-way `UNION ALL` covering every parent-child edge — engagement behind customer, time entry behind engagement, time entry behind customer. Each row it returns is the stale-name defect this script exists to prevent, and means the backfill did not complete or a trigger is still disabled |
+| The three triggers | Three rows, `is_disabled = 0` on each. A trigger left disabled is the failure the first query detects, and this says which one |
 | The view's item count by type | One row per item type, with `oldest` and `newest` bracketing the corpus |
 
-It checks the time-entry level against both ancestors. An engagement stale
-relative to its own customer is not covered by that query; add the equivalent
-two-table check if you want the level between them proved as well.
+The first query checks the **middle** edge as well as the two leaf ones, and that
+is the point: an engagement item carries its customer's name too, so an
+engagement that has fallen behind its customer is already serving one wrong name.
+A leaf-only check would pass that source.
 
-### Two things to know before you run it
+### Three design decisions worth knowing
 
-**The backfill re-stamps the corpus, and it is not idempotent.** The triggers are
-created in section 3 and the backfill runs in section 4, so each backfill
-statement fires the trigger for the table it just updated — which sets
-`EffectiveLastModified` to `SYSUTCDATETIME()` and cascades that down the tree.
-The net effect is that every row ends up carrying the time the script ran rather
-than its historical `LastModified`. On a first deployment that is harmless: the
-connector's first run is a full crawl whatever the timestamps say, and the
-checkpoint it leaves behind is the maximum of them. **Re-running the file later
-is not harmless** — it re-stamps every row to "now", and the next incremental run
-therefore reads the entire source. Nothing is written that should not be, because
-the hashes still decide, but the run costs what a full read costs. The column and
-index guards make the rest of the file safe to re-run; section 4 is the part that
-is not.
+They are not optional details, and each one closes a failure that is silent.
 
-**`EffectiveLastModified` is nullable.** The `ALTER TABLE ... ADD` declares no
-`NOT NULL`, unlike its `LastModified` sibling, and a `DEFAULT` on a nullable
-added column does not populate existing rows — they are null until the backfill
-sets them. That matters beyond the deployment: a row inserted later with an
-explicit null in that column is skipped by the incremental predicate
-(`EffectiveLastModified > @marker` is unknown for null, so the row never comes
-back) *and* skipped by the trigger's own recursion guard
-(`WHERE EffectiveLastModified < @Now` is unknown too, so the trigger will not
-repair it). Such a row is invisible to every incremental crawl for ever, and only
-a full crawl finds it. Check for nulls after deployment, and again after any bulk
-load:
+**`NOT NULL`, unlike the `LastModified` sibling.** A null in this column would be
+invisible twice over: the incremental predicate `EffectiveLastModified > @marker`
+is unknown for a null and therefore never true, *and* the triggers' own recursion
+guard `WHERE EffectiveLastModified < @Now` is unknown too — so nothing would
+repair the row either. Such a row would be skipped by every incremental crawl for
+ever and found only by a full one. `NOT NULL` with a default removes the class,
+and populates the existing rows on the `ALTER` rather than leaving them to the
+backfill.
 
-```sql
-USE [Ops];
+**`DATETIME2(3)`, matching `crawl.Checkpoint.MarkerTime` exactly.** The sibling
+`LastModified` is precision 7, and converting 7 to 3 rounds to *nearest* rather
+than truncating — so a marker taken from a precision-7 value can land ahead of
+the row it came from, and everything in between is skipped permanently. The store
+already floors a marker to whole milliseconds before saving, so this was defended
+rather than live; matching the precision at the source makes the comparison exact
+instead of merely defended. That matters here specifically, because the triggers
+stamp an entire cascade with one value, and same-timestamp groups are exactly
+what this source produces.
 
-SELECT 'Customers' AS t, COUNT(*) AS nulls FROM dbo.Customers   WHERE EffectiveLastModified IS NULL
-UNION ALL SELECT 'Engagements', COUNT(*)   FROM dbo.Engagements WHERE EffectiveLastModified IS NULL
-UNION ALL SELECT 'TimeEntries', COUNT(*)   FROM dbo.TimeEntries WHERE EffectiveLastModified IS NULL;
-```
+**The backfill runs with the triggers disabled, and its statements are
+idempotent.** Both guards are needed and they do different jobs. Section 3
+creates the triggers, so an unguarded `UPDATE` in section 4 would fire them, they
+would overwrite the historical value with `SYSUTCDATETIME()` and cascade it
+down, and the whole corpus would end up stamped with the moment the script ran —
+making the ancestors-before-descendants ordering pointless. The `DISABLE TRIGGER`
+around the section stops that. The `WHERE` on each statement — only touch rows
+whose value differs from what it should be — stops a re-run rewriting rows that
+were already correct. **The file is therefore safe to re-run**: the column and
+index guards skip what exists, and the backfill corrects only rows that are
+genuinely wrong.
 
-Expect zero on all three rows.
+### The one accepted cost
+
+Each branch of `dbo.vwExternalItemsIncremental` joins a `sql/12` view back to its
+base table on a **constructed** key — `N'cust-' + CAST(CustomerId AS NVARCHAR(32))
+= v.ItemId` — because those views project the composed item ID and not the
+numeric key it was built from. That comparison is not sargable, so the join costs
+a scan per branch.
+
+It is documented in the script rather than fixed, and the reasoning is worth
+repeating: the incremental predicate still seeks `IX_*_Effective`, which is where
+the saving actually is, so this is a constant per run rather than a cost that
+grows with the size of the delta. The clean fix is upstream — have the `sql/12`
+views project their numeric key alongside `ItemId` — and those views are read by
+the agent-hosted path too, which puts the change outside this file's blast
+radius. It is a deliberate deferral, not a defect in `sql/26`.
 
 ---
 

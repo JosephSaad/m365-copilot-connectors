@@ -134,6 +134,7 @@ docs/
   HIERARCHY-TEST-CASE.md               The three level test case: why a flat index needs flattening, and how
   HIERARCHY-DEPLOYMENT.md              Step-by-step deployment of the three level connector, net10 and net9
   CRAWL-STATE-DEPLOYMENT.md            Standing up ConnectorState: the six scripts, the two roles, the delete guard
+                                       — and sql/26, the seventh, which changes the source rather than the state
   CRAWL-STATE-REFERENCE.md             Every table, view and procedure in the state database, with parameters
   SOURCE-CONTRACT.md                   What a source must guarantee before a push can detect deletes or resume
   ASSUMPTIONS.md                       Decisions, deviations, open questions
@@ -162,7 +163,7 @@ sql/
   23-crawl-state-procedures.sql        The connector's write path, and the delete guard that bounds it
   24-crawl-state-reporting.sql         Seven paged read procedures, clamped page sizes, no write anywhere
   25-crawl-state-least-privilege.sql   crawl_writer and crawl_reader, with no table permission for either
-  26-timesheet-incremental.sql         Hierarchy-aware EffectiveLastModified for the source — Tier 1, needs SQL 2022
+  26-timesheet-incremental.sql         Hierarchy-aware EffectiveLastModified in the SOURCE database. Tier 1, SQL 2022
 src/
   SqlTicketsConnector/
     Contracts/*.proto                  Microsoft contracts, unmodified

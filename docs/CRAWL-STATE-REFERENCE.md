@@ -11,6 +11,10 @@ returns what it returns. For standing the database up, the roles, the delete
 guard and retention, see
 [`CRAWL-STATE-DEPLOYMENT.md`](CRAWL-STATE-DEPLOYMENT.md).
 
+`sql/20` through `sql/25` build everything below. `sql/26` is in the same
+numbered set and is **not** part of this schema — it adds a hierarchy-aware
+timestamp to the *source* database and creates no object in `ConnectorState`.
+
 **Conventions that hold everywhere in this schema:**
 
 - Every object is in `[crawl]`. Nothing is created in `dbo`, so a grant on `dbo`

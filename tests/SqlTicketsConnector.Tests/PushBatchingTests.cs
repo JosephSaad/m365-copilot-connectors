@@ -186,17 +186,47 @@ namespace SqlTicketsConnector.Tests
 
             Assert.Equal(1, summary.Failed);
 
-            // KNOWN DEFECT, PINNED DELIBERATELY. Nineteen items reached Graph and
-            // the run reports four, because FlushChunkAsync counts over the commit
-            // prefix rather than over what landed. PushSummary.Total is documented
-            // as "the total number of items written to Graph", and with a state
-            // store attached the same database then holds nineteen recorded item
-            // rows beside a run row claiming four.
+            // The run reports what it WROTE, not how far the marker got. These
+            // are different numbers whenever a batch refused something in the
+            // middle, and reporting the prefix would have a run that sent
+            // nineteen items claim four - while the state store, which records
+            // what landed, held nineteen item rows beside it. The same database
+            // disagreeing with itself is worse than either number alone.
+            Assert.Equal(19, summary.Total);
+        }
+
+        [Fact]
+        public async Task Once_a_run_has_left_a_gap_the_marker_never_moves_again()
+        {
+            // The other half of the gap rule, and the one that is invisible in a
+            // single chunk. A batch refusal does not end the run, so the NEXT
+            // chunk would commit in full and carry the marker straight over the
+            // gap the refusal left - putting the source's position past an item
+            // that is not in the index, which is the oldest invariant in this
+            // repository and the one the whole IPushSource contract exists for.
             //
-            // Asserted as-is rather than corrected, because the fix belongs in
-            // PushEngine.FlushChunkAsync step 4. When that lands this line fails
-            // and points at itself, which is the intent.
-            Assert.Equal(4, summary.Total);
+            // Forty items, two chunks, a5 refused in the first. The marker stops
+            // at a4 and stays there: a21-a40 are written and recorded, because
+            // they are genuinely in the index and the delete sweep must not
+            // remove them, but the source is not told. The next run resumes from
+            // before a5 and retries it, re-reading what was already written -
+            // which costs time and nothing else, because every write is an upsert.
+            var source = new FakePushSource(Items(40));
+            (PushEngine engine, StubGraphAdapter adapter) = Engine(batch: true);
+
+            adapter.BatchStatusFor = id => id == "a5" ? 400 : (int?)null;
+
+            PushSummary summary = await engine.PushItemsAsync(source);
+
+            Assert.Equal(new[] { "a1", "a2", "a3", "a4" }, source.Committed.ToArray());
+
+            // Written and counted regardless - the gap freezes the marker, not
+            // the work.
+            Assert.Equal(39, adapter.WrittenItemIds.Count);
+            Assert.Contains("a40", adapter.WrittenItemIds);
+            Assert.DoesNotContain("a5", adapter.WrittenItemIds);
+            Assert.Equal(39, summary.Total);
+            Assert.Equal(1, summary.Failed);
         }
 
         [Fact]

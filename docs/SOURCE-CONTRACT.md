@@ -6,9 +6,9 @@ description: The constraints a source system has to meet before a direct push ca
 # What a source must guarantee
 
 A direct push has no Graph connector agent behind it, so everything the agent
-remembered on your behalf is now remembered in `ConnectorState` (`sql/20`
-through `sql/25`). That store can do its job **only if the source system holds
-up its end**, and the end it has to hold up is smaller than people expect — but
+remembered on your behalf is now remembered in `ConnectorState`, the state
+database built by `sql/20` through `sql/25`. That store can do its job **only if
+the source system holds up its end**, and the end it has to hold up is smaller than people expect — but
 it is not empty, and every item on it has a failure mode that is silent.
 
 This document is what to send the team that owns the source before a pilot. It
