@@ -167,6 +167,16 @@ longer exists. A view that exposes
 `GREATEST(te.LastModified, e.LastModified, c.LastModified)` solves it; nothing
 in the connector can.
 
+For the three-level timesheet source this is implemented:
+`sql/26-timesheet-incremental.sql` adds a
+persisted `EffectiveLastModified` to all three tables, keeps it true with
+cascading triggers, and exposes `dbo.vwExternalItemsIncremental` for the
+connector to read. It is deliberately **not** part of the state-database
+deployment — it alters the source, needs SQL Server 2022, and is optional until
+the full source read outgrows the crawl window. The trade-off between triggers, a
+computed view and an application-maintained column is set out in
+[`CRAWL-STATE-DEPLOYMENT.md` section 10](CRAWL-STATE-DEPLOYMENT.md#10-sql26-making-the-timesheet-source-readable-incrementally).
+
 ### Tier 2 — no timestamp: differencing only
 
 If the source has no usable timestamp, **the connector still works**. It reads
@@ -285,6 +295,7 @@ writing.
 | Full read completeness | `crawl.uspGetPendingDeletes` percentage guard |
 | Checkpoint monotonicity | `crawl.uspSaveCheckpoint` — refuses to move backwards |
 | Timestamp presence | The connector declares its tier; a Tier 1 claim with no checkpoint forces a full crawl in `crawl.uspBeginRun` |
+| Hierarchy-aware timestamps | Not enforceable from this side — the source has to maintain them. `sql/26-timesheet-incremental.sql` is the worked implementation for the timesheet source, and its first verification query returns any descendant whose effective timestamp is behind an ancestor's |
 
 The row worth looking at twice is **determinism**, because nothing can enforce
 it. The symptom is a connector whose `UnchangedPercent` never rises above zero

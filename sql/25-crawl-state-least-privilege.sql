@@ -242,12 +242,22 @@ LEFT JOIN   sys.types                AS t  ON t.user_type_id = p.major_id AND p.
 WHERE       dp.name IN (N'crawl_writer', N'crawl_reader')
 ORDER BY    dp.name, p.state_desc DESC, object_type, object_name;
 
--- The finding query: any direct table permission for either role.
+-- The finding query: any direct table permission for either role. Expected to
+-- return nothing.
+--
+-- p.class = 1 is not optional here, even though the inventory query above reads
+-- fine without it. sys.database_permissions.major_id means different things per
+-- class - an object_id for class 1, a user_type_id for class 6 - so joining to
+-- sys.objects unfiltered lets a TYPE grant whose id happens to match a table's
+-- object_id surface as a table grant nobody made. This is the query an auditor
+-- runs and the one whose output has to be trusted literally, so it filters
+-- rather than relying on two id spaces not colliding.
 SELECT  dp.name AS principal_name, o.name AS table_name, p.permission_name, p.state_desc
 FROM        sys.database_permissions AS p
 INNER JOIN  sys.database_principals  AS dp ON dp.principal_id = p.grantee_principal_id
 INNER JOIN  sys.objects              AS o  ON o.object_id = p.major_id
 WHERE       dp.name IN (N'crawl_writer', N'crawl_reader')
+  AND       p.class = 1
   AND       o.type = 'U'
   AND       p.state_desc = 'GRANT';
 GO
