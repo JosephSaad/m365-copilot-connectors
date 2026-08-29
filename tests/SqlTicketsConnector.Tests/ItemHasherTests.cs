@@ -118,6 +118,45 @@ namespace SqlTicketsConnector.Tests
         }
 
         [Fact]
+        public void An_unspecified_datetime_is_taken_as_utc_rather_than_shifted()
+        {
+            // THE ONE THAT WOULD HAVE HAD TWO HOSTS REWRITE EACH OTHER'S ITEMS.
+            // ToUniversalTime on a DateTime whose Kind is Unspecified shifts it
+            // by the HOST's local offset - and Unspecified is exactly what
+            // SqlDataReader.GetDateTime returns, so it is the ordinary case, not
+            // an edge one. Two connectors in different timezones would each see
+            // every one of the other's items as changed, for ever.
+            //
+            // The assertion is the property rather than a reproduction: the same
+            // wall-clock value, once Unspecified and once stamped UTC, must hash
+            // alike. On a host already at UTC this passes either way - it is the
+            // developer machines and non-UTC deployment hosts where it bites,
+            // which is precisely where it went unnoticed.
+            var unspecified = new PushItem { Id = "te-1", ItemType = "TimeEntry", Content = "text" };
+            unspecified.Properties["workDate"] = new DateTime(2026, 3, 14, 9, 30, 0, DateTimeKind.Unspecified);
+
+            var stamped = new PushItem { Id = "te-1", ItemType = "TimeEntry", Content = "text" };
+            stamped.Properties["workDate"] = new DateTime(2026, 3, 14, 9, 30, 0, DateTimeKind.Utc);
+
+            Assert.Equal(Hash(stamped), Hash(unspecified));
+        }
+
+        [Fact]
+        public void A_datetime_that_says_what_it_is_is_still_converted()
+        {
+            // The other half: treating Unspecified as UTC must not stop a value
+            // that genuinely carries an offset from being normalised. Local and
+            // Utc kinds naming the same instant have to agree.
+            var local = new PushItem { Id = "x-1", ItemType = "item" };
+            local.Properties["at"] = new DateTime(2026, 3, 14, 9, 30, 0, DateTimeKind.Utc).ToLocalTime();
+
+            var utc = new PushItem { Id = "x-1", ItemType = "item" };
+            utc.Properties["at"] = new DateTime(2026, 3, 14, 9, 30, 0, DateTimeKind.Utc);
+
+            Assert.Equal(Hash(utc), Hash(local));
+        }
+
+        [Fact]
         public void Changing_the_content_changes_the_hash()
         {
             PushItem before = Item("te-1", "TimeEntry");

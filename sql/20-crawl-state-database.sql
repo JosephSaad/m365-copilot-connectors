@@ -50,6 +50,12 @@ GO
    a cache is paying for the wrong thing. If your estate mandates FULL for every
    database, change it here; nothing downstream depends on the model.
 
+   THE FILE PATHS BELOW ARE PLACEHOLDERS AND WILL FAIL ON ANY INSTANCE WITHOUT A
+   D: DRIVE. That is deliberate rather than defaulted: a CREATE DATABASE that
+   silently lands in the instance's default data directory is one nobody notices
+   until the volume it chose fills up. Edit them, or delete the ON PRIMARY and
+   LOG ON clauses entirely to accept the instance defaults knowingly.
+
    Adjust the file paths to match the instance. The sizes are starting points,
    not limits: autogrowth is on and in fixed increments rather than percentages,
    because percentage growth on a file that is already large is how a crawl
@@ -76,21 +82,38 @@ BEGIN
 END
 GO
 
-ALTER DATABASE [ConnectorState] SET RECOVERY SIMPLE;
+-- GUARDED, because this file is meant to be re-runnable and these three
+-- statements are the ones that are not idempotent in the way that matters.
+-- Unguarded, SET RECOVERY SIMPLE silently reverts the FULL override the header
+-- above explicitly invites an estate to make, and RCSI's WITH ROLLBACK
+-- IMMEDIATE kills every live session on a database that is already serving a
+-- crawl.
+--
+-- The recovery model is set only while the database is still EMPTY - that is,
+-- on the first run, before sql/21 creates anything. After that the operator's
+-- choice stands: this file states a preference and does not enforce one.
+IF EXISTS (SELECT 1 FROM sys.databases
+           WHERE name = N'ConnectorState' AND recovery_model_desc <> N'SIMPLE')
+   AND NOT EXISTS (SELECT 1 FROM [ConnectorState].sys.tables)
+BEGIN
+    ALTER DATABASE [ConnectorState] SET RECOVERY SIMPLE;
+END
 GO
 
--- Read-committed snapshot, and this one is not optional. The delete sweep in
--- sql/23 reads the whole inventory for a connection while writers are still
--- upserting rows into it. Under the default isolation those readers and writers
--- block each other, and the symptom is a crawl that appears to hang at the end
--- rather than an error anyone can act on.
-ALTER DATABASE [ConnectorState] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
+IF EXISTS (SELECT 1 FROM sys.databases
+           WHERE name = N'ConnectorState' AND is_read_committed_snapshot_on = 0)
+BEGIN
+    ALTER DATABASE [ConnectorState] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
+END
 GO
 
 -- Auto-close off: a connector that runs every fifteen minutes would otherwise
 -- pay database startup on most runs, which shows up as a slow first query and
 -- gets misdiagnosed as a network problem.
-ALTER DATABASE [ConnectorState] SET AUTO_CLOSE OFF;
+IF EXISTS (SELECT 1 FROM sys.databases WHERE name = N'ConnectorState' AND is_auto_close_on = 1)
+BEGIN
+    ALTER DATABASE [ConnectorState] SET AUTO_CLOSE OFF;
+END
 GO
 
 USE [ConnectorState];

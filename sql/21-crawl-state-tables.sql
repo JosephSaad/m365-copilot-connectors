@@ -217,6 +217,14 @@ BEGIN
         -- comes back.
         PendingSinceUtc   DATETIME2(3)   NULL,
 
+        -- When the item was tombstoned, and null until it is. Retention needs
+        -- its own clock: uspPurgeHistory ages tombstones, and aging them on
+        -- LastWrittenUtc means an item that had not changed for a year was
+        -- immediately past a 180-day window the moment it became a tombstone -
+        -- purged before anyone could see it had been deleted, which is the one
+        -- row an audit of a deletion actually wants.
+        DeletedUtc        DATETIME2(3)   NULL,
+
         -- How many consecutive runs found this item unchanged. Not needed by any
         -- decision here; it is the number that makes the case for incremental
         -- reads to the SQL team, because "94% of items were unchanged for the
@@ -232,7 +240,12 @@ BEGIN
 
         -- The two halves of State 2 travel together or the age is a lie.
         CONSTRAINT CK_Item_Pending CHECK
-            ((State = 2 AND PendingSinceUtc IS NOT NULL) OR (State <> 2 AND PendingSinceUtc IS NULL))
+            ((State = 2 AND PendingSinceUtc IS NOT NULL) OR (State <> 2 AND PendingSinceUtc IS NULL)),
+
+        -- The same rule for the tombstone clock, for the same reason: a state
+        -- and the timestamp that dates it must travel together or the age lies.
+        CONSTRAINT CK_Item_Deleted CHECK
+            ((State = 3 AND DeletedUtc IS NOT NULL) OR (State <> 3 AND DeletedUtc IS NULL))
     );
 END
 GO
@@ -254,7 +267,8 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'crawl.Item') AND name = N'IX_Item_NotLive')
 BEGIN
     CREATE NONCLUSTERED INDEX IX_Item_NotLive
-        ON [crawl].[Item] (ConnectionId, State, LastWrittenUtc)
+        ON [crawl].[Item] (ConnectionId, State, DeletedUtc)
+        INCLUDE (PendingSinceUtc)
         WHERE State <> 1;
 END
 GO
