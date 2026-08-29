@@ -52,6 +52,23 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+
+    <!--
+      Not used by this project directly, and pinned anyway.
+
+      SqlClient depends on Azure.Identity for its AAD authentication modes. This
+      project uses none of them - it connects with Integrated Security - but the
+      package is in the restore graph regardless, and without this line NuGet
+      resolves SqlClient's own floor of 1.11.4 while every other project in the
+      solution carries 1.21.0. Two versions of the same identity library in one
+      solution is the situation PushCore.Sql's comment about two SqlClients
+      describes: a load conflict rather than a merge, and eight extra transitive
+      packages that the offline restore set then has to carry at versions
+      nothing else uses.
+
+      Same version as PushCore and Connector.Security. Move all three together.
+    -->
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
   </ItemGroup>
 
   <!--
