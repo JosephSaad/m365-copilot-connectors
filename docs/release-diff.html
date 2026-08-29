@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>v1.2.20 to v1.2.23 &middot; m365-copilot-connectors</title>
-<meta name="description" content="Every file that changed between v1.2.20 and v1.2.23 of the M365 Copilot connectors for SQL Server and Cloudera CDP, with what each change does and why.">
+<title>v1.2.23 to v1.3.0 &middot; m365-copilot-connectors</title>
+<meta name="description" content="Every file that changed between v1.2.23 and v1.3.0 of the M365 Copilot connectors for SQL Server and Cloudera CDP, with what each change does and why.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128256;</text></svg>">
 <style>
@@ -122,368 +122,619 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
 .foot{border-top:1px solid var(--hair);margin-top:50px;padding-top:22px;font-size:13.5px;color:var(--ink-3)}
 @media (max-width:640px){body{padding:0 15px 70px}header.mast{padding-top:44px}.split{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.sp .n{font-size:12px;font-family:"JetBrains Mono",monospace;color:var(--ink-3);
+  text-transform:uppercase;letter-spacing:.1em;margin:0 0 10px}
 </style>
 </head>
 <body>
 <div class="wrap">
 <header class="mast">
   <p class="eyebrow">m365-copilot-connectors &middot; release diff</p>
-  <h1><span class="mono">v1.2.20</span> &rarr; <span class="mono">v1.2.23</span></h1>
-  <p class="stand">Thirty-two commits across <strong>41 files</strong>, and they are three unrelated
-  pieces of work that happen to share a range. Only three of those commits changed how items reach
-  Graph; four changed who can see them; twenty-four are documentation; and the last one corrects what
-  the timing report <em>says</em> about the first three.</p>
+  <h1><span class="mono">v1.2.23</span> &rarr; <span class="mono">v1.3.0</span></h1>
+  <p class="stand">A direct push had no memory of what it had sent. Eight commits give it one:
+  a separate database that records every item written, so the connector can finally detect a
+  deletion, skip an item that has not changed, and resume where it stopped. <strong>Seventy-four
+  of the seventy-five files are new</strong> &mdash; this release is very nearly a second codebase
+  beside the first.</p>
 
   <div class="totals">
-    <div class="t"><b>41</b><span>Files touched</span></div>
-    <div class="t"><b class="a">+6,786</b><span>Lines added</span></div>
-    <div class="t"><b class="d">&minus;1,962</b><span>Lines removed</span></div>
-    <div class="t"><b>13</b><span>Added &middot; 1 deleted</span></div>
-    <div class="t"><b class="k">+15</b><span>Tests, 268&nbsp;&rarr;&nbsp;283</span></div>
+    <div class="t"><b>75</b><span>Files touched</span></div>
+    <div class="t"><b class="a">+16,901</b><span>Lines added</span></div>
+    <div class="t"><b class="d">&minus;106</b><span>Lines removed</span></div>
+    <div class="t"><b>74</b><span>Added &middot; 0 deleted</span></div>
+    <div class="t"><b class="k">+26</b><span>Tests, 283&nbsp;&rarr;&nbsp;309</span></div>
   </div>
 
   <div class="split">
     <div class="sp">
-      <p class="n">29 commits</p>
-      <h3>v1.2.21</h3>
-      <p>Ranger access-control fixes, the Copilot Router and pilot documentation, and the timing
-      instrumentation. Everything except the write path.</p>
+      <p class="n">Feature 2</p>
+      <h3>Deletion, without asking the source</h3>
+      <p>The sweep diffs the inventory against what a full run saw. A hard DELETE, a row leaving
+      the query and a permission change that hides it are one question. No soft-delete column is
+      needed, and one being present buys nothing.</p>
     </div>
     <div class="sp">
-      <p class="n">2 commits</p>
-      <h3>v1.2.22</h3>
-      <p>The SDK retry removal and concurrent writes. Small in commits, and the only part of this
-      range that changes how the connector talks to Graph.</p>
+      <p class="n">Features 3 and 10</p>
+      <h3>Only what moved is written</h3>
+      <p>Content and ACL hash separately, and both are compared. On a steady-state run most items
+      are already correct, and the write that is skipped is the expensive one.</p>
     </div>
     <div class="sp">
-      <p class="n">1 commit</p>
-      <h3>v1.2.23</h3>
-      <p>No behaviour change at all. The timing report stopped describing a retry handler the
-      previous release had already removed, and now states the precondition its reading rests on.</p>
+      <p class="n">Throughput</p>
+      <h3>Twenty at a time</h3>
+      <p>Writes go through <code>$batch</code> with per-item outcomes, so one refused item no
+      longer abandons the other nineteen. <code>Settings:Batch&nbsp;=&nbsp;false</code> restores
+      the previous path.</p>
     </div>
   </div>
 
   <div class="note warn">
-    <span class="tag">Found while writing this, and shipped as v1.2.23</span>
-    <p>An adversarial pass over this diff caught a defect <em>shipped in v1.2.22</em>.
-    <code>PushTiming</code>'s header and its mostly-in-flight verdict still described Kiota's
-    <code>RetryHandler</code> as sitting inside <code>PutAsync</code>, and closed by advising the
-    operator to &ldquo;re-run with <code>RetryHandlerOption.MaxRetry&nbsp;=&nbsp;0</code>&rdquo; to
-    settle whether the run was throttled.</p>
-    <p><code>GraphPipeline</code> does exactly that, in the same release. So v1.2.22 told an
-    operator to perform a fix already in the build, and withheld a conclusion the build had earned.
-    The prose was written in v1.2.21 when it was true; the commit that removed the handler touched
-    that file only to make its counters interlocked. The tests did not catch it because they asserted
-    the stale string.</p>
-    <p><strong>v1.2.23 is that correction and nothing else</strong> &mdash; two files, no behaviour
-    change. The verdict now reads <code>LATENCY-BOUND</code> and names <code>GraphPipeline</code> as
-    the reason it is allowed to, so re-adding a retrying handler contradicts a sentence somebody can
-    read rather than silently invalidating the table.</p>
+    <span class="tag">The guard to understand before deploying</span>
+    <p><code>uspGetPendingDeletes</code> refuses any sweep that would remove more than
+    <strong>ten percent</strong> of the live corpus, and refuses one after an incremental run
+    outright. A threshold rather than a flag, because the realistic failure is not a missing row
+    but a <em>missing set</em>: a view redefined, a <code>WHERE</code> clause that stopped
+    matching, a permission revoked, a source restored to last month. Each produces a run that
+    completes cleanly and reads too little, and each would otherwise have the difference swept
+    out of the index.</p>
+    <p>Clearing it takes <code>Settings:OverrideDeleteGuard</code> and a deliberate decision.
+    A retry will not do it.</p>
   </div>
 
   <div class="note">
-    <span class="tag">The one change to watch on deployment</span>
-    <p><strong>RNG-01 is live.</strong> A CDP cluster using Ranger <em>security zones</em> now refuses
-    to index rather than reading zone-blind &mdash; exit code 4, no opt-out. That was the intended
-    fix, but it shipped while the cluster team still has not answered whether they use zones. The SQL
-    connector is unaffected.</p>
+    <span class="tag">The line that looks like bookkeeping and is not</span>
+    <p>An item found unchanged is not written &mdash; that is the whole optimisation &mdash; but it
+    must still be marked <em>seen</em>. Skipping the write and skipping the mark are one line apart
+    in <code>FlushChunkAsync</code> and produce opposite outcomes: the first is the saving, the
+    second has the next full crawl conclude the source dropped every item that did not change, and
+    remove them. The corpus empties one run at a time, starting with whatever is most stable.</p>
+  </div>
+
+  <div class="note warn">
+    <span class="tag">What has and has not been verified</span>
+    <p><strong>None of this has run against a real SQL Server or a real tenant.</strong> All seven
+    scripts are unexecuted, the dashboard has never rendered a row, and <code>Settings:Batch</code>
+    defaults on &mdash; so the first production run uses a write path that has never spoken to
+    Graph. 309 tests pass and every project builds; that is a different claim. Each SQL file
+    carries a verification block at its foot for a scratch instance.</p>
+    <p><strong><code>sql/26</code> is the one to treat differently.</strong> The other six create a
+    separate database and are reversible by dropping it. <code>sql/26</code> adds columns and
+    installs cascading triggers on the customer&rsquo;s <em>source</em> tables. It is independent:
+    defer it and everything else still works, at differencing rather than incremental reads.</p>
   </div>
 </header>
 
   <section>
-    <h2>The push engine</h2>
-    <p class="blurb">Instrumentation, then concurrency. The only area whose changes alter how items reach Graph.</p>
-    <p class="tally"><span>7 files</span><span class="c-add">+1,096</span><span class="c-del">&minus;132</span></p>
+    <h2>The state database</h2>
+    <p class="blurb">Seven scripts. Six create a separate database; the seventh alters the customer&rsquo;s own tables.</p>
+    <p class="tally"><span>7 files</span><span class="c-add">+3,298</span></p>
     <div class="scroll"><table>
       <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
       <tbody>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>src/PushCore/PushEngine.cs</code><span class="bar" title="+478 -115"><i class="add" style="width:38.71%"></i><i class="del" style="width:9.31%"></i></span></td>
-        <td class="num"><span class="c-add">+478</span> <span class="c-del">&minus;115</span></td>
-        <td class="sum">PushItemsAsync was split into two paths: the original serial WriteInOrderAsync and a new WriteConcurrentlyAsync that runs one reader thread feeding N writers over a bounded Channel&lt;Pending&gt; (writers = Settings:Writers, default 4, clamped to 16 because Graph allows 25 concurrent operations per connection), with ResolveWriterCount forcing 1 writer for dry runs and for sources whose RequiresOrderedCommit is true. Per-row work was factored into Prepare/CommitAsync, the read loop is now driven by hand through GetAsyncEnumerator so MoveNextAsync time is attributable to the source, and WriteWithRetryAsync now separately accumulates in-flight versus backoff microseconds and records both in a finally so a row that gave up still reports what it spent. Two operational behaviour changes ride along: the per-item &quot;Indexed {ItemId}&quot; line dropped from Information to Debug and was replaced by an &quot;Indexed {Count} items so far&quot; line every 250 rows, and concurrent failures are unwrapped so the reader&#x27;s fault (or the first non-cancellation exception) surfaces instead of the OperationCanceledException it caused.</td>
-      </tr>
-      <tr class="s-added">
+      <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>src/PushCore/PushTiming.cs</code><span class="bar" title="+415 -0"><i class="add" style="width:40.17%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+415</span></td>
-        <td class="sum">New fixed-memory timing subsystem: TimingSeries is a lock-free quarter-octave histogram (48 octaves x 4 sub-buckets, 192 counters, ~1.5 KB regardless of run size) with interlocked count/sum/nonZero, a compare-and-swap max, and percentiles interpolated inside the containing bucket; PushTiming holds one series each for source read, prepare, write in flight, write backoff, commit, row total and content bytes. Report() renders the p50/p95/p99/max/share table the host prints - share taken against summed row total, not wall clock, so the run&#x27;s fixed setup cost is not attributed to a segment - and Verdict() classifies the run as THROTTLE-BOUND (backoff &gt;= 40% of per-row time), LATENCY-BOUND (in-flight &gt;= 50%), or NEITHER. It records only durations and byte counts, never IDs, properties or content, so it is safe to leave on in production. The verdict changed name across this range, and the reason is the whole story: v1.2.21 shipped MOSTLY IN FLIGHT under a header section titled &quot;ONE BLIND SPOT, AND IT IS LOAD-BEARING&quot;, because Kiota&#x27;s RetryHandler sat inside PutAsync and made a throttled run indistinguishable from a slow one; v1.2.22 removed that handler but edited this file only to interlock TimingSeries, leaving prose that asserted the handler was still there and told the operator to settle the question by re-running with RetryHandlerOption.MaxRetry = 0 - which GraphPipeline.cs and PushHost.cs had already done in the same commit. v1.2.23 rewrites both: the section is now &quot;WHY &#x27;WRITE IN FLIGHT&#x27; CAN BE BELIEVED, AND WHAT WOULD BREAK IT&quot;, the verdict is LATENCY-BOUND, and it carries its own precondition - that GraphPipeline removed the SDK retry handler and PushConcurrencyTests pins its absence - so the guarantee is stated as exactly one line deep rather than assumed.</td>
+        <td class="pathcell"><code>sql/23-crawl-state-procedures.sql</code><span class="bar" title="+1033 -0"><i class="add" style="width:79.39%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+1,033</span></td>
+        <td class="sum">New file. Nineteen procedures form the write surface; sql/25 grants seventeen, and the engine holds no table permission. uspBeginRun reaps status-1 runs older than @AbandonAfterHours (12) as status 4 &#x27;abandoned&#x27; and records @ActualMode, escalating to full when the last full success is older than @FullEveryHours (168) or - the case the header calls easiest to forget - when no checkpoint exists. uspGetPendingDeletes throws 50004/50005 on an unknown or foreign RunId, 50006 on a non-full run, returns an empty set for a dry run, and throws 50007 above @MaxDeletePercent (10.00) - but only when @OverrideGuard = 0. The header admits nothing here can check that the run enumerated to the end.</td>
       </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>src/PushCore/PushSummary.cs</code><span class="bar" title="+83 -16"><i class="add" style="width:16.45%"></i><i class="del" style="width:3.17%"></i></span></td>
-        <td class="num"><span class="c-add">+83</span> <span class="c-del">&minus;16</span></td>
-        <td class="sum">Every counter became thread-safe because several writers now increment them at once: Truncated, ThrottleWaits, Skipped and Duplicates moved from internal-set auto-properties, and Total from a private-set auto-property mutated only inside Count(), to Volatile.Read over interlocked backing fields, with new internal CountTruncated/CountThrottleWait/CountSkipped(count)/CountDuplicate methods replacing direct assignment. The byType dictionary is now behind a lock, ByType returns a copy and Describe() reads under the same lock, Count(itemType) changed from void to int and returns the running total straight from Interlocked.Increment so a caller pacing progress on it sees each number exactly once, and a Timing property was added carrying the run&#x27;s PushTiming to the host without new plumbing.</td>
-      </tr>
-      <tr class="s-added">
+      <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>src/PushCore/GraphPipeline.cs</code><span class="bar" title="+76 -0"><i class="add" style="width:17.19%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+76</span></td>
-        <td class="sum">New static GraphPipeline: CreateHandlers() takes GraphClientFactory.CreateDefaultHandlers(), removes and disposes every handler whose type name contains &quot;RetryHandler&quot;, and Create() builds the HttpClient over what is left in the SDK&#x27;s own order. The name test rather than a type test is chosen because the retry handler already moved package once (Microsoft.Graph.Core v1 to Kiota) and a name match survives that; it can still be defeated by a rename, and the file is explicit that PushPipelineTests is what stops it from quietly matching nothing. This removes Kiota&#x27;s hidden MaxRetry 3 / 3s retry on 429, 503 and 504, which previously never reached the engine: it left ThrottleWaits reading zero on a fully throttled run, charged its sleeps to write-in-flight time, stacked up to 20 HTTP requests per row (five engine attempts around four SDK attempts), and threw AggregateException on exhaustion, which matched none of PushHost&#x27;s typed catches.</td>
+        <td class="pathcell"><code>sql/21-crawl-state-tables.sql</code><span class="bar" title="+483 -0"><i class="add" style="width:54.29%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+483</span></td>
+        <td class="sum">Creates the eight crawl tables — Connection, Run, Item, Checkpoint, PrincipalMap, ThrottleEvent, RunPhaseTiming, RunItemType — idempotently, never ALTERing an existing one. Run.Mode (1 = full, 2 = incremental) is the highest-stakes column: only a full run may conclude an absent item was deleted, so Mode is stored, not inferred. Item splits ContentHash from AclHash and LastSeenRunId from LastWrittenRunId; CK_Item_Pending binds State = 2 to PendingSinceUtc. PrincipalMap caches negative resolutions as a null EntraObjectId with ExpiresUtc. Filtered IX_Item_Sweep (State = 1) and IX_Run_Open (Status = 1) serve the hot paths. Defect: no DeletedUtc — uspPurgeHistory ages State-3 tombstones on LastWrittenUtc against a 180-day default, so a long-unchanged item&#x27;s tombstone is purgeable immediately.</td>
       </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>src/PushCore.Sql/SqlPushSource.cs</code><span class="bar" title="+14 -0"><i class="add" style="width:7.38%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+14</span></td>
-        <td class="sum">SqlPushSource overrides RequiresOrderedCommit to return false, which is what actually switches the SQL connector onto the engine&#x27;s concurrent write path. The justification is that a SQL push re-reads its whole query every run, so OnItemCommittedAsync records nothing and there is no marker for out-of-order completion to move past; the remark instructs that any future incremental-read implementation must delete this override in the same change.</td>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>sql/26-timesheet-incremental.sql</code><span class="bar" title="+483 -0"><i class="add" style="width:54.29%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+483</span></td>
+        <td class="sum">New file, on the SOURCE database (Ops). Adds EffectiveLastModified DATETIME2(3) NOT NULL with a default to Customers, Engagements and TimeEntries, indexed on (EffectiveLastModified, CustomerId/EngagementId/TimeEntryId) - not &quot;Id&quot; - with INCLUDE lists that also carry CustomerId and EngagementId, not just IsDeleted. Three AFTER INSERT, UPDATE triggers cascade an ancestor&#x27;s change downward, a backfill runs in one transaction with the triggers disabled, and vwExternalItemsIncremental is what the connector reads. It needs SQL Server 2022 for GREATEST, the only file in sql/20-26 above 2016, and its view joins on a constructed ItemId, so each branch scans. Both stated defects hold.</td>
       </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>src/PushCore/PushHost.cs</code><span class="bar" title="+6 -1"><i class="add" style="width:4.47%"></i><i class="del" style="width:0.75%"></i></span></td>
-        <td class="num"><span class="c-add">+6</span> <span class="c-del">&minus;1</span></td>
-        <td class="sum">The GraphServiceClient is now constructed over GraphPipeline.Create() instead of the SDK default, which is the wiring that actually takes Kiota&#x27;s retry handler out of the running process. A separate Log.Information call was added after the summary line to print summary.Timing.Report() as a multi-line block, kept out of the structured summary message on purpose so the table stays readable in both places.</td>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>sql/24-crawl-state-reporting.sql</code><span class="bar" title="+430 -0"><i class="add" style="width:51.22%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+430</span></td>
+        <td class="sum">New file. Seven read procedures, none of which writes - the header makes &quot;can the web tier corrupt crawl state&quot; answerable by the absence of an UPDATE in the file. Only four are lists; they page (default 50, clamped at 500; 100/1,000 for uspListThrottleEvents) and return TotalRows via COUNT(*) OVER(). The omission is uspDashboardSummary: the entire front page in one round trip - tiles, per-connection health, a 30-day trend and the last ten runs as four unpaged result sets - with uspGetRun and uspGetConnectionDetail doing the same for one run and one connection. uspListItems anchors @Search as LIKE @Search + &#x27;%&#x27;. Defect confirmed: @Page is clamped below at 1 but not above, so (@Page - 1) * @PageSize overflows INT.</td>
       </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>src/PushCore/IPushSource.cs</code><span class="bar" title="+24 -0"><i class="add" style="width:9.66%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+24</span></td>
-        <td class="sum">Added a RequiresOrderedCommit member defaulting to true, so every existing source keeps serial writes and the watermark guarantee that comes with them. The contract documented on it is narrow: a source may return false only if it keeps no position at all (OnItemCommittedAsync does nothing), because only then is there no checkpoint for out-of-order completion to push past an item the index never received.</td>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>sql/22-crawl-state-views.sql</code><span class="bar" title="+363 -0"><i class="add" style="width:47.06%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+363</span></td>
+        <td class="sum">Creates six views with CREATE OR ALTER: vwRunHistory (ItemsPerSecond and UnchangedPercent, NULLIF-guarded), vwConnectionHealth, vwPendingDeletes (aged on PendingSinceUtc), plus three the summary omits — vwItemInventory, which renders hashes as CHAR(64) hex; vwThrottleSummary, which splits 429s from 5xx and reports DistinctMinutes; and vwDailyActivity, the per-day trend that excludes dry runs. Health&#x27;s CASE arms are priority-ordered, and &#x27;late&#x27; means twice ExpectedIntervalMinutes past the last SUCCESS, not the last run. These are not the dashboard&#x27;s only read surface: sql/25 also grants crawl_reader EXECUTE on seven paged procedures in sql/24. Defect confirmed: three correlated crawl.Item counts per connection, State = 2 counted twice.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>sql/25-crawl-state-least-privilege.sql</code><span class="bar" title="+263 -0"><i class="add" style="width:40.06%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+263</span></td>
+        <td class="sum">New file. Two Windows logins created in master (securityadmin required), two roles. crawl_writer (svc_gca_reader) gets EXECUTE on seventeen of sql/23&#x27;s procedures plus the six table types; crawl_reader (svc_connector_dashboard) gets EXECUTE on sql/24&#x27;s seven and SELECT on six views. uspResetCheckpoint and uspPurgeHistory are withheld. The denials are asymmetric: both roles are DENYed INSERT, UPDATE, DELETE, ALTER, REFERENCES on SCHEMA::crawl, but only crawl_writer is additionally DENYed SELECT - its procedures still read through ownership chaining. CONTROL is excluded because it implies the granted EXECUTE. The closing note&#x27;s scope reasoning is genuinely wrong, though nothing breaks today: the reader is never denied SELECT.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>sql/20-crawl-state-database.sql</code><span class="bar" title="+243 -0"><i class="add" style="width:38.50%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+243</span></td>
+        <td class="sum">Creates the ConnectorState database, the [crawl] schema and six table types (ItemStateList, ItemIdList, PrincipalKeyList, ThrottleEventList, ItemTypeCountList, PhaseTimingList). Separate from Ops so the connector stays SELECT-only there while writing its own bookkeeping; RECOVERY SIMPLE because losing state costs one recrawl, not correctness. Hashes are BINARY(32), so a collation mismatch cannot mark every item changed; PrincipalKeyList is NVARCHAR(256) because an AD distinguished name overruns ItemIdList&#x27;s 128. The header&#x27;s &quot;sixteen procedures&quot; is stale: sql/23 defines 19, sql/25 grants the writer 17. Defect: only CREATE DATABASE is guarded — all three ALTER DATABASE calls re-run, so RECOVERY SIMPLE reverts a FULL override and RCSI&#x27;s WITH ROLLBACK IMMEDIATE kills live sessions. Paths are hardcoded to D:\.</td>
       </tr>
       </tbody>
     </table></div>
   </section>
   <section>
-    <h2>CDP access control</h2>
-    <p class="blurb">Four Ranger findings. One of them stops a cluster indexing rather than reading it wrong.</p>
-    <p class="tally"><span>5 files</span><span class="c-add">+448</span><span class="c-del">&minus;26</span></p>
+    <h2>The engine</h2>
+    <p class="blurb">Chunked change detection, the delete sweep, and $batch. The only heavily modified code in the release.</p>
+    <p class="tally"><span>12 files</span><span class="c-add">+2,787</span><span class="c-del">&minus;96</span></p>
     <div class="scroll"><table>
       <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
       <tbody>
-      <tr class="s-modified">
+      <tr>
         <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>src/CdpConnector.Source/Ranger/RangerPolicyClient.cs</code><span class="bar" title="+158 -7"><i class="add" style="width:24.26%"></i><i class="del" style="width:1.07%"></i></span></td>
-        <td class="num"><span class="c-add">+158</span> <span class="c-del">&minus;7</span></td>
-        <td class="sum">PoliciesAsync now pages the Ranger REST policy list instead of issuing one unpaged GET: a new private PageAsync appends pageSize=1000&amp;startIndex=N, and the loop advances startIndex by the page&#x27;s actual count (Ranger clamps pageSize to ranger.db.maxrows.default, typically 200, so advancing by the requested size would silently skip policies), de-duplicates by policy Id, breaks when a page adds nothing new (a server ignoring startIndex), and throws past a MaxPolicies backstop of 100,000. A new RefuseSecurityZones guard throws InvalidOperationException listing the affected zones when any policy carries a non-empty zoneName, and Parse now reads that zoneName field (absent or empty both meaning unzoned). Operationally this fixes truncated policy reads on large clusters and stops the connector evaluating a zoned cluster zone-blind, where an unzoned legacy grant would be applied to a resource a zone protects.</td>
+        <td class="pathcell"><code>src/PushCore/PushEngine.cs</code><span class="bar" title="+816 -78"><i class="add" style="width:67.41%"></i><i class="del" style="width:6.44%"></i></span></td>
+        <td class="num"><span class="c-add">+816</span> <span class="c-del">&minus;78</span></td>
+        <td class="sum">Adds a chunked path (ChunkSize = 20, Graph&#x27;s $batch ceiling) beside the single-item one, which Settings:Batch=false still selects. OpenRunAsync begins the run before the source exists, lets the store escalate a requested Incremental to Full (Settings:FullEveryHours, default 168) and puts the checkpoint on context.ResumeFrom; the run closes via CompleteRunAsync or FailRunAsync. Prepare hashes content and ACL after truncation and resolution. FlushChunkAsync writes only what moved, records after Graph confirms, commits the marker over the unbroken prefix, then markerBlocked freezes it. SweepDeletedItemsAsync is fenced by full-mode, MaxDeletePercent (10), OverrideDeleteGuard, 404-as-success. Defect: batch-refused items are never marked seen, so uspGetPendingDeletes deletes them the same run.</td>
       </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>src/CdpConnector.Source/Hdfs/HdfsPushSource.cs</code><span class="bar" title="+104 -3"><i class="add" style="width:19.83%"></i><i class="del" style="width:0.57%"></i></span></td>
-        <td class="num"><span class="c-add">+104</span> <span class="c-del">&minus;3</span></td>
-        <td class="sum">The crawl now carries a traversal gate down the tree: a new NarrowAsync intersects the inherited group set with HdfsAclBuilder.TraverseGroups for each directory entered (a world-traversable directory passes the gate and the everyone flag through untouched), WalkAsync threads (gate, everyone) through recursion, and each indexable file&#x27;s pair is recorded in a new `reachable` dictionary - one GETACLSTATUS per directory rather than per file. Roots are narrowed by their own status before the walk begins; a root whose StatusAsync returns null is treated as (null, true), so both the gate AND the world-traversable flag stay open - that branch fails open, and a world-readable file beneath an unreadable root can still reach the otherReadable group. When grants are built, by contrast, a file missing from `reachable` is gated shut with an empty set and everyone=false, so a walk gap costs an item rather than leaking one. The ungated ClusterGroups call in the &quot;resolves to no Entra group&quot; warning at line 502 was not updated, so that log line still reports pre-gate groups.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>src/CdpConnector.Source/Acl/HdfsAclBuilder.cs</code><span class="bar" title="+70 -6"><i class="add" style="width:15.84%"></i><i class="del" style="width:1.36%"></i></span></td>
-        <td class="num"><span class="c-add">+70</span> <span class="c-del">&minus;6</span></td>
-        <td class="sum">ClusterGroups takes a new optional `traversable` gate and filters the POSIX-derived groups through it before adding the Ranger-granted groups, which are deliberately left ungated because a Ranger path policy authorises the path itself rather than deferring to the POSIX walk; a null gate means unrestricted and is explicitly not the same as an empty one. A new TraverseGroups returns the groups that may execute one directory plus a world-traversable flag, resolving the mode&#x27;s group digit as the ACL mask when an extended ACL is present. BuildAsync gains `traversable` and `everyoneCanTraverse` parameters and now withholds the configured otherReadable group unless the whole path is world-traversable, so a 644 file under a 750 directory is no longer published to everyone on the cluster.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>src/CdpConnector.Source/Ranger/RangerPolicy.cs</code><span class="bar" title="+46 -10"><i class="add" style="width:12.12%"></i><i class="del" style="width:2.64%"></i></span></td>
-        <td class="num"><span class="c-add">+46</span> <span class="c-del">&minus;10</span></td>
-        <td class="sum">Pattern() gains an explicit ignoreCase parameter, and the shared private PathMatches helper now compiles case-SENSITIVE regexes (CultureInvariant, no IgnoreCase) while Hive identifier matching in Matches - database/table/column - stays case-insensitive with CultureInvariant. HDFS is case-sensitive, so /data/Finance and /data/finance were previously folded together. Because PathMatches serves both CoversPath and CoversPathForDeny, this cuts both ways: a grant written for one path is no longer applied to the other (the over-grant this was aimed at), and a deny written for one no longer catches the other either - RoutingEvaluator.EvaluatePath consults CoversPathForDeny before any grant, so a mis-cased deny that used to stop a path from being indexed now does not. Also adds the ZoneName property, parsed here but never evaluated, purely so RangerPolicyClient can refuse a zoned policy set rather than read it as though the zones were not there.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>src/CdpConnector.Source/Hdfs/HdfsModels.cs</code><span class="bar" title="+70 -0"><i class="add" style="width:16.50%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+70</span></td>
-        <td class="sum">Adds the execute-bit half of the permission model that the traversal gate needs: HdfsFileStatus.GroupCanExecute and OtherCanExecute read the execute bit from the group and other digits, and HdfsAclStatus gains OwningGroupCanExecute, the static MaskGrantsExecute, the GroupsGrantedExecute enumerator over named access entries (default: entries skipped, mask applied), and a private GrantsExecute bit test. Pure additions mirroring the existing read-side accessors; no existing behaviour changes here, but nothing in the traversal fix works without them.</td>
-      </tr>
-      </tbody>
-    </table></div>
-  </section>
-  <section>
-    <h2>Tests and scaffolding</h2>
-    <p class="blurb">Two independent workstreams needed proving: the Ranger gating and the concurrent writer.</p>
-    <p class="tally"><span>7 files</span><span class="c-add">+1,038</span><span class="c-del">&minus;11</span></p>
-    <div class="scroll"><table>
-      <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
-      <tbody>
-      <tr class="s-added">
+      <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/CdpTraverseAndPagingTests.cs</code><span class="bar" title="+472 -0"><i class="add" style="width:42.85%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+472</span></td>
-        <td class="sum">New xUnit class of 13 tests across four Ranger findings. Three are over-grant defects asserted from the leaking side: RNG-09 pins that RoutingEvaluator.EvaluatePath treats /data/Finance and /data/finance as distinct while EvaluateCatalogueEntry still folds Hive database/table case, and that a path deny stays case-sensitive; RNG-04 exercises HdfsAclBuilder.TraverseGroups and the new traversable gate argument on ClusterGroups, including the load-bearing null-gate (no ancestor restricted anyone) versus empty-gate (nobody passes) distinction, the exemption for Ranger-granted groups, and ACL mask handling where the mode&#x27;s group digit is the mask; RNG-05 drives a PagingRanger stub serving 200 rows however many are asked for, proving RangerPolicyClient.PoliciesAsync steps by the rows a page actually returned (startIndexes 0/200/400/600) and terminates rather than spinning against a server that ignores startIndex. The fourth, RNG-01, is asserted from the refusal side instead: a ZonedRanger stub proves a zoned policy set throws InvalidOperationException naming every zone and the service, while null, empty and whitespace zoneName all read normally so the guard cannot fire on an ordinary cluster.</td>
+        <td class="pathcell"><code>src/PushCore/GraphBatchWriter.cs</code><span class="bar" title="+808 -0"><i class="add" style="width:70.21%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+808</span></td>
+        <td class="sum">New writer sending up to MaxRequestsPerBatch = 20 PUTs in one $batch POST, built from ToPutRequestInformation so batched and single writes cannot drift. It inspects every sub-response, never the envelope: a 200 envelope can carry 429s and terminal 4xx, and an item nobody answered for is retried and then failed, never recorded as written. Refusals are reported, not thrown — only a terminal envelope error climbs out; a retryable envelope or transport failure refuses all twenty individually. Retries honour the longest Retry-After up to MaxWriteAttempts = 5, duplicated from PushEngine. ThrottleWaits counts per sub-request and onThrottle feeds crawl.ThrottleEvent. Batches also close on 4 MiB.</td>
       </tr>
-      <tr class="s-added">
+      <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/PushTimingTests.cs</code><span class="bar" title="+230 -0"><i class="add" style="width:29.91%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+230</span></td>
-        <td class="sum">New class of eight facts pinning the TimingSeries histogram&#x27;s accuracy contract and the PushTiming verdict logic. It states exactly how much exactness the fixed-memory buckets cost - Max, Count and Sum stay exact while a percentile is only guaranteed inside its power-of-two bucket (median in [512,1024), p99 in [2097152,4194304)), asserted as `p99 &gt; median * 100` with a comment noting a mean would have read ~61ms for a population where no row was near that - and that an empty series answers 0 rather than dividing by its count. The behavioural half asserts that backoff time and time in flight are never summed: a row with 200ms in flight and 4s asleep after a 429 reports THROTTLE-BOUND, while a 3s in-flight row with no backoff reports LATENCY-BOUND and names GraphPipeline as what that reading rests on - v1.2.23 renamed that test from A_run_that_is_mostly_in_flight_refuses_to_call_itself_latency_bound to A_run_that_is_mostly_in_flight_reads_as_latency_bound_and_says_what_that_rests_on and flipped its assertions with the verdict, which is the change that would have caught the stale prose had it existed a release earlier; a further test pins that the report carries only phase labels and durations, never an item id or its content. Two end-to-end tests confirm a real run records one RowTotal per item and one extra SourceRead for the terminal MoveNextAsync, and that a dry run measures Prepare and RowTotal while recording no WriteInFlight or Commit samples.</td>
+        <td class="pathcell"><code>src/PushCore/State/CrawlState.cs</code><span class="bar" title="+232 -0"><i class="add" style="width:37.62%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+232</span></td>
+        <td class="sum">The vocabulary the engine and store share, so PushCore can describe a crawl without naming SQL Server: CrawlMode (Full=1, Incremental=2), SourceChangeDetection (Differencing=0, ChangeMarker=1) and nine readonly record structs — CrawlConnectionInfo, CrawlRunStart, CrawlItemState, CrawlDeletion, CrawlMarker, PrincipalGrant, RunTotals, ItemTypeTotals, ThrottleEvent. CrawlMode is the load-bearing value: the sweep is meaningful only after a full run, and crawl.uspGetPendingDeletes refuses an incremental one. Differencing means every run is a full crawl, earning delete detection each time. CrawlMarker is composite because timestamps tie to the millisecond; the sole method, CrawlItemState.Matches, compares content and ACL hashes together.</td>
       </tr>
-      <tr class="s-added">
+      <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/PushConcurrencyTests.cs</code><span class="bar" title="+204 -0"><i class="add" style="width:28.17%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+204</span></td>
-        <td class="sum">New class asserting the ordered-commit gate as an observed fact rather than an inference, reading StubGraphAdapter.MaxConcurrentWrites: a source with RequiresOrderedCommit=false genuinely overlaps writes, while a watermarked source is held to exactly one write in flight even with Writers=8 configured, preserving the commit order the checkpoint depends on. Also pins that a dry run never goes concurrent and writes nothing, that a failing write surfaces the originating ODataError (status 400) rather than the OperationCanceledException it triggers in sibling writers and leaves Completed false, that Writers=999 is clamped well under the 25 concurrent operations Graph documents, and that 200 items are each written exactly once with zero duplicates. The last test asserts GraphPipeline.CreateHandlers() contains no RetryHandler — so the SDK cannot retry invisibly inside PutAsync and mis-attribute its sleeps to time in flight — plus a NotEmpty guard so an SDK rename cannot make the check vacuous.</td>
+        <td class="pathcell"><code>src/PushCore/State/ICrawlStateStore.cs</code><span class="bar" title="+221 -0"><i class="add" style="width:36.72%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+221</span></td>
+        <td class="sum">The seam: fourteen members over run lifecycle (BeginRunAsync, CompleteRunAsync, FailRunAsync), change detection, deletion, checkpointing and a principal cache, and implementations must be thread-safe for the concurrent write path. Three rules: every call is batched, never per item; hashes are recorded only after Graph confirms, since recording first makes one failure a permanently stale, permanently invisible item; RecordUnchangedAsync is mandatory or the sweep empties the corpus. BeginRunAsync may escalate an incremental run with no checkpoint to full. GetPendingDeletesAsync refuses incremental runs and applies maxDeletePercent — a guard an operator can bypass with overrideGuard. SaveCheckpointAsync never moves a marker backwards.</td>
       </tr>
-      <tr class="s-modified">
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/PushCore/State/ItemHasher.cs</code><span class="bar" title="+199 -0"><i class="add" style="width:34.84%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+199</span></td>
+        <td class="sum">Computes the two SHA-256 hashes (HashBytes = 32, matching the BINARY(32) columns in sql/21). Determinism is the contract: ordinal-sorted property keys, InvariantCulture rendering, four-byte little-endian length prefix per field, with itemId and itemType folded in. HashContent hashes post-truncation content; HashAcl sorts resolved Graph grants &quot;Type|Value|AccessType&quot; and maps null/empty to &quot;(no grants)&quot;. Two determinism holes remain: Render&#x27;s collection branches use string.Join(&quot;&quot;, list), so [&quot;ab&quot;,&quot;c&quot;] and [&quot;a&quot;,&quot;bc&quot;] collide despite the prefix; and the DateTime branches call ToUniversalTime(), which shifts an Unspecified-kind value by the host&#x27;s local offset.</td>
+      </tr>
+      <tr>
         <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/TestSupport/StubGraphAdapter.cs</code><span class="bar" title="+71 -5"><i class="add" style="width:16.06%"></i><i class="del" style="width:1.13%"></i></span></td>
+        <td class="pathcell"><code>src/PushCore/PushSummary.cs</code><span class="bar" title="+183 -12"><i class="add" style="width:32.37%"></i><i class="del" style="width:2.12%"></i></span></td>
+        <td class="num"><span class="c-add">+183</span> <span class="c-del">&minus;12</span></td>
+        <td class="sum">Splits the run counters so written and unchanged never merge: Total is what reached Graph, Unchanged what the hashes said was already correct. Folding them together would flatter the run — a run that skipped almost every PUT would read as one that did everything, hiding whether change detection works. Adds Deleted, Failed, Batches, BytesWritten, per-type skipped, a mutable TypeTally and TypeTotals(); ByType stays written-only, Describe() renders &quot;TimeEntry=4 (+1040 unchanged)&quot;. Failed is non-zero only on the batching path — a single-item write that exhausts its attempts throws instead. TypeTally is a class because a struct read from a dictionary is copied, losing the increment.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/PushCore/State/NullCrawlStateStore.cs</code><span class="bar" title="+134 -0"><i class="add" style="width:28.59%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+134</span></td>
+        <td class="sum">A singleton (private constructor, static readonly Instance) implementing every member as a no-op with IsEnabled false, so a connector without Settings:StateConnectionString behaves exactly as before: writes everything every run, never deletes. BeginRunAsync reports CrawlRunStart(0, CrawlMode.Full, true, null, 0); GetCheckpointAsync returns null, forcing a full read; ResolvePrincipalsAsync an empty dictionary, read as a miss; GetPendingDeletesAsync an empty list rather than throwing. RecordThrottle drops the event, but PushSummary.ThrottleWaits still counts it for the log line. The header explains why the engine branches on IsEnabled: &quot;no items on record&quot; here and from a real store on a new connection are indistinguishable.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/PushCore/PushHost.cs</code><span class="bar" title="+71 -5"><i class="add" style="width:20.12%"></i><i class="del" style="width:1.42%"></i></span></td>
         <td class="num"><span class="c-add">+71</span> <span class="c-del">&minus;5</span></td>
-        <td class="sum">The stub gained the instrumentation the concurrency tests read. SendAsync became async and now honours a settable WriteDelay so writes can actually overlap (a stub returning instantly can be driven by eight writers and still never show two in flight), and EnterWrite/LeaveWrite bracket that delay while maintaining an interlocked high-water mark exposed as MaxConcurrentWrites via a CompareExchange loop - so the counter reflects overlap of the simulated delay window, which is why every test asserting on it sets WriteDelay first. Appends to WrittenItemIds, WrittenBodies and Writes are now made in two blocks that both take the same lock object, so a torn List&lt;T&gt; cannot fail a concurrency test for reasons unrelated to the engine.</td>
+        <td class="sum">Threads crawl state through startup. A CrawlStateStoreFactory delegate is supplied by the executable rather than constructed here, keeping SqlClient out of PushCore; both RunAsync entry points gain an overload taking it, and the store reaches PushEngine&#x27;s new constructor parameter. It is disposed with await using, though that only warns about an unclosed run — the throttle buffer is flushed by CompleteRunAsync/FailRunAsync, not by disposal. A missing or disabled store logs that every item will be written every run and nothing deleted. Graph now takes Settings:GraphProxy; the completion line adds unchanged, deleted, failed, batches. Defect: the old RunAsync doc block is stranded above the delegate.</td>
       </tr>
-      <tr class="s-modified">
+      <tr>
         <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/TestSupport/FakePushSource.cs</code><span class="bar" title="+26 -3"><i class="add" style="width:9.52%"></i><i class="del" style="width:1.10%"></i></span></td>
-        <td class="num"><span class="c-add">+26</span> <span class="c-del">&minus;3</span></td>
-        <td class="sum">Added a requiresOrderedCommit constructor parameter surfacing the new IPushSource.RequiresOrderedCommit property, defaulted to true so every pre-existing test keeps exercising the serial path it was written for. OnItemCommittedAsync now appends to Committed under a lock, since an unordered source is committed from several writer threads at once; the doc comment now notes the list is in completion order for unordered sources.</td>
+        <td class="pathcell"><code>src/PushCore/GraphPipeline.cs</code><span class="bar" title="+57 -1"><i class="add" style="width:18.49%"></i><i class="del" style="width:0.32%"></i></span></td>
+        <td class="num"><span class="c-add">+57</span> <span class="c-del">&minus;1</span></td>
+        <td class="sum">Create() now delegates to a new Create(string? proxyUrl). Null or blank builds the same direct client; a value attaches a WebProxy (BypassOnLocal false, UseProxy true) as the final HttpClientHandler, the one that opens the socket, so every request this client makes — writes, the schema poll, $batch — leaves through it. Token acquisition does not: the credentials are built with no transport override, so Azure.Identity keeps its own pipeline. The value is unvalidated; a malformed URL throws from WebProxy at startup. No proxy credential is attached deliberately, since a proxy password in appsettings.json is what the build gate blocks.</td>
       </tr>
-      <tr class="s-modified">
+      <tr>
         <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/TestSupport/FakeWebHdfs.cs</code><span class="bar" title="+19 -3"><i class="add" style="width:7.99%"></i><i class="del" style="width:1.26%"></i></span></td>
-        <td class="num"><span class="c-add">+19</span> <span class="c-del">&minus;3</span></td>
-        <td class="sum">Directory() was widened from a one-argument helper that hardcoded a 755 entry into `Directory(path, permission = &quot;755&quot;, group = &quot;hadoop-contracts-read&quot;, params string[] aclEntries)`, so a future test can stage a non-traversable parent the way File() already stages a restricted file. No test in this diff uses it: the only caller remains the ancestor auto-fill loop inside File(), which passes the path alone and takes every default, and the RNG-04 traversal tests construct HdfsFileStatus objects by hand rather than going through the fake. The `group` default matches FakeHdfsEntry&#x27;s existing default, so auto-filled parents are unchanged. The rest of the change is a comment recording that the auto-fill loop&#x27;s `!entries.ContainsKey(parent)` guard - which pre-dates this diff - leaves a deliberately configured parent untouched. Significance: low.</td>
+        <td class="pathcell"><code>src/PushCore/IPushSource.cs</code><span class="bar" title="+29 -0"><i class="add" style="width:13.30%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+29</span></td>
+        <td class="sum">Adds one default interface property, ChangeDetection, returning SourceChangeDetection.Differencing, so existing sources compile and behave unchanged. Differencing is the always-safe tier: read everything, let the content and ACL hashes decide what is written — reading a hundred thousand rows from SQL is seconds, writing them to Graph is hours. Declaring ChangeMarker requires all four: a monotonic UTC modification time that moves on every change including bulk updates and triggers, reading PushSourceContext.ResumeFrom, yielding in ascending (marker, id) order, and setting PushItem.LastModifiedUtc. It also warns that such a source should leave RequiresOrderedCommit true, since it now has a position out-of-order completion could overshoot.</td>
       </tr>
-      <tr class="s-modified">
+      <tr>
         <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/ControlEvidenceTests.cs</code><span class="bar" title="+16 -0"><i class="add" style="width:7.89%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+16</span></td>
-        <td class="sum">Registered seven CdpTraverseAndPagingTests methods in the protected evidence list, so none can be renamed or deleted without failing the control check. Five cover the Ranger findings that hold on any cluster regardless of configuration; the other two are both halves of the zone guard — that a zoned policy set stops the run, and that an unzoned one is still read normally, since a guard nobody can switch off is only safe while it cannot fire on an ordinary cluster.</td>
+        <td class="pathcell"><code>src/PushCore/PushSourceContext.cs</code><span class="bar" title="+20 -0"><i class="add" style="width:11.05%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+20</span></td>
+        <td class="sum">Adds CrawlMarker? ResumeFrom with an internal setter. The engine fills it from the state store before the source is opened, but only when the run&#x27;s mode is Incremental — on a full crawl, and for any connector without a store, it stays null, meaning read everything. That is why ignoring the property entirely still produces correct behaviour, just not an incremental one. The comment ties it to the rest of the contract: a source that reads ResumeFrom must declare ChangeDetection as ChangeMarker and yield in ascending (marker, id) order, since resuming out of order loses rows after an interruption. Also adds a using for PushCore.State.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/PushCore/PushItem.cs</code><span class="bar" title="+17 -0"><i class="add" style="width:10.18%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+17</span></td>
+        <td class="sum">Adds a single nullable property, DateTime? LastModifiedUtc, with no other change. It is the first half of the composite checkpoint, the item ID being the second; the engine advances the checkpoint to (LastModifiedUtc, Id) only after the write is confirmed, so a run that dies cannot leave the marker past an item the index does not hold. The comment is blunt about when to leave it null: only a genuinely monotonic modification time that moves on every change, including bulk updates and direct edits, qualifies. A timestamp that is merely usually right yields a checkpoint that silently skips the edits it missed, which it argues is worse than having no checkpoint at all.</td>
       </tr>
       </tbody>
     </table></div>
   </section>
   <section>
-    <h2>Documentation, Pages and CI</h2>
-    <p class="blurb">The largest area by volume, and almost none of it is about the connector&#x27;s behaviour.</p>
-    <p class="tally"><span>22 files</span><span class="c-add">+4,204</span><span class="c-del">&minus;1,793</span></p>
+    <h2>The state store</h2>
+    <p class="blurb">The SQL Server implementation of the seam, over stored procedures and nothing else.</p>
+    <p class="tally"><span>3 files</span><span class="c-add">+1,781</span></p>
     <div class="scroll"><table>
       <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
       <tbody>
-      <tr class="s-added">
+      <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>docs/copilot-router.html</code><span class="bar" title="+2571 -0"><i class="add" style="width:100.00%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+2,571</span></td>
-        <td class="sum">New self-contained decision tool replacing copilot-decision-matrix.html: nineteen questions (Q1-Q19) driving twelve routes through a JS engine of decide/gate/pbiMode/modeWhy/warnings functions, plus three reference tables (capability by surface, grounding &amp; invocation paths, the three live-call packagings) and a &#x27;two planes&#x27; section. It has zero external references — five IBM Plex/Spectral woff2 faces are embedded as base64 data URIs and the palette is pinned to dark via color-scheme, so it renders identically offline and from file://. Footer carries a revision stamp: 2026-08-28 · r19.</td>
+        <td class="pathcell"><code>src/PushCore.State/SqlCrawlStateStore.cs</code><span class="bar" title="+1639 -0"><i class="add" style="width:100.00%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+1,639</span></td>
+        <td class="sum">ICrawlStateStore over sixteen EXECed crawl.usp procedures (the header says seventeen, sql/25&#x27;s grant count). sql/25 DENYs SELECT, INSERT, UPDATE, DELETE on SCHEMA::crawl, so an ad-hoc query fails at runtime, not in review. One pooled connection per call, since writers call RecordWrittenAsync and RecordUnchangedAsync concurrently; only the run close holds one across uspRecordRunItemTypes, uspSaveRunTiming, the throttle flush and uspCompleteRun — detail first, and those three are best-effort, each downgraded to a warning so only the close may throw and leave a run open for the twelve-hour reaper. CommandTimeoutSeconds is 120, not SqlClient&#x27;s 30. Fits throws on an over-long ItemId (128) or SourceKey (256); FloorToMillisecond rounds down; 50007 is caught and re-wrapped as InvalidOperationException carrying the server&#x27;s message.</td>
       </tr>
-      <tr class="s-deleted">
-        <td class="st"><span class="chip ch-deleted">DEL</span></td>
-        <td class="pathcell"><code>docs/copilot-decision-matrix.html</code><span class="bar" title="+0 -1665"><i class="add" style="width:0.00%"></i><i class="del" style="width:80.47%"></i></span></td>
-        <td class="num"><span class="c-del">&minus;1,665</span></td>
-        <td class="sum">The previous eleven-question decision tool (80 KB, Google Fonts loaded over the network, light/dark auto palette) is removed outright rather than edited. Its successor is docs/copilot-router.html; every inbound reference — README, COPILOT-ROUTING.md, the build.yml release manifest — was repointed in the same range.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>docs/COPILOT-ROUTING.md</code><span class="bar" title="+470 -30"><i class="add" style="width:41.45%"></i><i class="del" style="width:2.65%"></i></span></td>
-        <td class="num"><span class="c-add">+470</span> <span class="c-del">&minus;30</span></td>
-        <td class="sum">Rewritten from four gates/two outcomes to five gates and three outcomes, adding MODEL IT (Power BI semantic model) as a peer of INDEX IT and CALL IT, and adding the federated Copilot connector as a fourth CALL leaf. New sections cover the three storage modes and their security consequences (the central warning: Direct Lake on OneLake does not apply SQL-endpoint row- or column-level security), the three constraints that disqualify Direct Lake (no gateway of any kind, same-region workspaces, guardrail-failed refresh blocking all queries), Fabric capacity thresholds F2/F64, Power BI against Cloudera per engine, the MCP gateway question, merging/joining, audience-size economics, and the M365-vs-Fabric plane split. Note one stale figure: line 274 still states the embedded PNG is 2480×1692 while the checked-in file is 3108×2132.</td>
-      </tr>
-      <tr class="s-added">
+      <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>docs/GENESIS-PROMPT-COPILOT-ROUTER.md</code><span class="bar" title="+400 -0"><i class="add" style="width:39.44%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+400</span></td>
-        <td class="sum">The full instruction set that regenerates copilot-router.html from an empty directory — role and failure asymmetry (over-granting ends engagements, mis-costing merely embarrasses), doctrine, the nineteen questions, the engine, platform facts stamped &#x27;verified 2026-08-28&#x27;, design system, verification, decisions not to re-open, and landmines. It explicitly subordinates itself to the page: where the two disagree the page is right. Sections 2-5 are portable doctrine; section 6 is dated platform fact that must be re-verified rather than copied.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>docs/copilot-route-decision-tree.svg</code><span class="bar" title="+155 -76"><i class="add" style="width:20.11%"></i><i class="del" style="width:9.86%"></i></span></td>
-        <td class="num"><span class="c-add">+155</span> <span class="c-del">&minus;76</span></td>
-        <td class="sum">The editable drawing is rebuilt from a 1000×830 viewBox with four leaves to 1554×1066 with ten, splitting INDEX IT into gallery/agent-hosted/direct-push, adding the MODEL IT branch (Direct Lake, Import, DirectQuery) on a new dashed .n-model node style, and adding Federated to the CALL IT leaves. A .t-leafr risk-coloured leaf style is introduced to mark the caveat line on a leaf (Direct Lake&#x27;s &#x27;SQL-endpoint RLS off&#x27;, direct push&#x27;s &#x27;you must delete&#x27;), and the aria-label and desc are rewritten to describe all five gates.</td>
-      </tr>
-      <tr class="s-added">
-        <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>docs/SQL-PILOT-PARAMETERS.md</code><span class="bar" title="+123 -0"><i class="add" style="width:21.87%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+123</span></td>
-        <td class="sum">New client-facing parameter request for a SQL Server pilot, structured so section 0 (&#x27;how fast must a deleted record stop appearing&#x27;) decides agent-hosted versus direct push before anything else is asked, with the two paths compared row by row. Sections 4 and 5 are path-specific and mutually skippable. Every authentication row asks for a reference — a Key Vault secret&#x27;s name, a certificate thumbprint, an account to grant — never a value, and the closing note says an attached credential would have to be treated as an incident.</td>
-      </tr>
-      <tr class="s-added">
-        <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>docs/PRODUCTION-ONBOARDING.md</code><span class="bar" title="+120 -0"><i class="add" style="width:21.60%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+120</span></td>
-        <td class="sum">New Gate/Check checklist for promoting either connector from pilot to supported service, with an owner and state column on every row because the stated failure mode is a control nobody owns. Covers go/no-go gates (deletion SLA met by the chosen path, ACL staleness bound written into the risk register, a named connection owner, a rehearsed backout), then identity, access model, capacity, monitoring, change management, and CDP- and SQL-only sections, ending with a sign-off table and the three rows that habitually get skipped.</td>
-      </tr>
-      <tr class="s-added">
-        <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>docs/CDP-PILOT-PARAMETERS.md</code><span class="bar" title="+92 -0"><i class="add" style="width:18.92%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="pathcell"><code>src/PushCore.State/CrawlStateWiring.cs</code><span class="bar" title="+92 -0"><i class="add" style="width:23.69%"></i><i class="del" style="width:0.00%"></i></span></td>
         <td class="num"><span class="c-add">+92</span></td>
-        <td class="sum">New client-facing parameter request for a CDP pilot, ordered by lead time: identity and trust first (Kerberos realm trust, the frequently-missed cm_atlas entity-read grant, cluster group names and their Entra object IDs), then endpoints, scope, network, and a Ranger policy-model section. Section 5 exists to establish whether the connector will refuse to run at all — a yes to 5.1 (security zones) stops the pilot until it is designed for — and 5.4 asks for Ranger Admin&#x27;s policy count so a truncated read is detectable. It also warns that Atlas hdfs_path will catalogue nothing, since a path entry matches no Hive policy and fails closed.</td>
+        <td class="sum">Static factory FromSettings(PushOptions, ILogger) that all three push executables pass to PushHost.RunAsync, keeping SqlClient out of PushCore. The key lives in one constant, ConnectionStringSetting (&quot;StateConnectionString&quot;); an absent or blank value returns null, so the connector runs without durable memory as pre-state releases did. ContainsPassword is a case-insensitive substring scan of the whole string for &quot;password&quot; or &quot;pwd&quot; — deliberately not SqlConnectionStringBuilder, which would throw on a malformed value — so it also refuses a valid Integrated Security string whose server or Application Name contains those letters, with no override; nothing actually checks Integrated Security is present. On success it logs &quot;Crawl state is enabled&quot;, the operator&#x27;s only confirmation the key was read. Gap: only the connection-string constructor is reachable, leaving the SqlConnectionFactory (Entra) overload unconfigurable.</td>
       </tr>
-      <tr class="s-added">
+      <tr>
         <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>.github/scripts/render-genesis.py</code><span class="bar" title="+75 -0"><i class="add" style="width:17.08%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+75</span></td>
-        <td class="sum">Renders GENESIS-PROMPT-COPILOT-ROUTER.md to a styled HTML page at deploy time using python-markdown with the tables and fenced_code extensions, wrapping every &lt;table&gt; in a .scroller div so wide tables scroll rather than stretching the page. Styling is an inline dark-only template in the router&#x27;s design family, with Google Fonts linked rather than embedded. Running it at deploy time is what stops the published page drifting from the markdown source.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>docs/RUNBOOK.md</code><span class="bar" title="+57 -1"><i class="add" style="width:14.76%"></i><i class="del" style="width:0.26%"></i></span></td>
-        <td class="num"><span class="c-add">+57</span> <span class="c-del">&minus;1</span></td>
-        <td class="sum">Adds §3.1 documenting the new per-run timing attribution table (p50/p95/p99/max and share across source read, prepare item, write in flight, write backoff, commit; percentiles not means, always on at a fixed 1.5 KB cost) with &#x27;read write backoff first&#x27; as the tuning rule, and §3.2 documenting Settings:Writers — default 4, clamped 1-16, and deliberately inert for any source that keeps a watermark because IPushSource.RequiresOrderedCommit defaults to true. The cdphdfsdocs row in §6 is amended to say grants are intersected with the groups that can traverse every directory above the file.</td>
-      </tr>
-      <tr class="s-added">
-        <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>.github/workflows/pages.yml</code><span class="bar" title="+49 -0"><i class="add" style="width:13.81%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+49</span></td>
-        <td class="sum">New GitHub Pages deployment publishing exactly two documents — copilot-router.html (also copied to _site/index.html so the bare URL works) and the genesis prompt rendered to HTML — with contents:read, pages:write and id-token:write permissions and a cancel-in-progress &#x27;pages&#x27; concurrency group. Automatic runs are narrowed to pushes to main touching the router, the genesis markdown, the render script or the workflow itself, so the rest of docs/ stays repository source rather than a website; workflow_dispatch is also declared, so it can be redeployed by hand. Two is right for this range: the commit that publishes the page you are reading makes it three, and lands after v1.2.23.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>docs/TROUBLESHOOTING-DIRECT-PUSH.md</code><span class="bar" title="+18 -4"><i class="add" style="width:7.57%"></i><i class="del" style="width:1.68%"></i></span></td>
-        <td class="num"><span class="c-add">+18</span> <span class="c-del">&minus;4</span></td>
-        <td class="sum">Documents two v1.2.22 behaviour changes an operator would otherwise mis-diagnose. throttleWaits= only became trustworthy now, because the Graph SDK&#x27;s own retry handler used to absorb 429s inside the call (three attempts, three seconds apart) and has been removed from GraphPipeline; and the &#x27;last Indexed line is the high-water mark&#x27; recovery advice is withdrawn, because that line is at Debug and because concurrent writers (Settings:Writers) mean the last line printed is simply the last write to finish. The replacement advice is to re-run, since a SQL push re-reads its whole query and writes are upserts.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>docs/SECURITY.md</code><span class="bar" title="+5 -1"><i class="add" style="width:4.03%"></i><i class="del" style="width:0.81%"></i></span></td>
-        <td class="num"><span class="c-add">+5</span> <span class="c-del">&minus;1</span></td>
-        <td class="sum">Adds four Ranger/HDFS control rows with their proving tests: CDP-14 (HdfsPushSource.WalkAsync now carries a traversal gate, intersecting HdfsAclBuilder.TraverseGroups down the walk so read-on-file without execute-on-ancestors no longer publishes a file), CDP-15 (RangerPolicyClient.PoliciesAsync pages and advances by what a page actually held, because Ranger clamps pageSize to ranger.db.maxrows.default), CDP-16 (RangerPolicy.PathMatches drops IgnoreCase for path while Matches keeps it for Hive identifiers), and CDP-17 (RangerPolicyClient.RefuseSecurityZones stops the run rather than reading a zoned service zone-blind, with no setting to disable it). The evidence command&#x27;s test count moves 255 → 283.</td>
-      </tr>
-      <tr class="s-added">
-        <td class="st"><span class="chip ch-added">ADD</span></td>
-        <td class="pathcell"><code>docs/index.md</code><span class="bar" title="+53 -0"><i class="add" style="width:14.36%"></i><i class="del" style="width:0.00%"></i></span></td>
-        <td class="num"><span class="c-add">+53</span></td>
-        <td class="sum">A Jekyll-style landing page (YAML front matter, a {{ site.github.repository_url }} liquid tag) with Start here / Deploying / Reviewing / Troubleshooting tables linking the whole docs set, plus a note that all sample data is fictional. Worth flagging: the pages.yml that shipped after it publishes only copilot-router.html (copied to _site/index.html) and the rendered genesis prompt, and runs no Jekyll — so this file is not currently served by the Pages site and nothing in .github/, docs/ or README.md references it.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>README.md</code><span class="bar" title="+11 -11"><i class="add" style="width:4.63%"></i><i class="del" style="width:4.63%"></i></span></td>
-        <td class="num"><span class="c-add">+11</span> <span class="c-del">&minus;11</span></td>
-        <td class="sum">Repoints every GitHub URL from m365-copilot-sql-connector to m365-copilot-connectors — the build badge, both release-table links, the VS2022 caveat links and the release/net9 clone command — following the repository rename. The docs tree listing swaps copilot-decision-matrix.html for copilot-router.html described as a 19-question router, and the test counts move 255 → 283 with the ControlEvidenceTests tripwire covering forty-seven rather than forty control-evidence tests.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>docs/CDP-DEPLOYMENT.md</code><span class="bar" title="+1 -1"><i class="add" style="width:1.39%"></i><i class="del" style="width:1.39%"></i></span></td>
-        <td class="num"><span class="c-add">+1</span> <span class="c-del">&minus;1</span></td>
-        <td class="sum">The exit-code 4 row now lists a Ranger service using security zones among the named causes, quoting the log signature `has N polic(y/ies) in security zone(s)` and pointing at control CDP-17. Without this an operator hitting the new zone refusal would see an ingestion failure with no documented cause.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>.github/workflows/build.yml</code><span class="bar" title="+1 -1"><i class="add" style="width:1.39%"></i><i class="del" style="width:1.39%"></i></span></td>
-        <td class="num"><span class="c-add">+1</span> <span class="c-del">&minus;1</span></td>
-        <td class="sum">The release-package manifest assertion swaps &#x27;docs/copilot-decision-matrix.html&#x27; for &#x27;docs/copilot-router.html&#x27;, keeping the comment that it is linked by COPILOT-ROUTING.md; without this the packaging check would fail on the renamed file. Note the five documents added in this range — CDP-PILOT-PARAMETERS.md, SQL-PILOT-PARAMETERS.md, PRODUCTION-ONBOARDING.md, GENESIS-PROMPT-COPILOT-ROUTER.md and index.md — were not added to this list, so the release zip is not asserted to contain them.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>docs/copilot-route-decision-tree.png</code><span class="binary">binary</span></td>
-        <td class="num"><span class="c-bin">—</span></td>
-        <td class="sum">Regenerated light-theme raster of the decision tree, 2000×1660 → 3108×2132 (an exact 2× render of the new 1554×1066 SVG). It depicts the five-gate tree with its ten leaves — the three INDEX IT connector kinds, the three Power BI storage modes, and the four CALL IT packagings including the new federated connector. This is the image COPILOT-ROUTING.md embeds.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>docs/copilot-route-decision-tree-dark.png</code><span class="binary">binary</span></td>
-        <td class="num"><span class="c-bin">—</span></td>
-        <td class="sum">Regenerated dark-theme raster of the same five-gate tree, 2000×1660 → 3108×2132, kept for decks and dark documents. Content matches the light render leaf for leaf.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>docs/copilot-delivery-paths.png</code><span class="binary">binary</span></td>
-        <td class="num"><span class="c-bin">—</span></td>
-        <td class="sum">Regenerated standalone render of the router&#x27;s delivery-path table, 3220×2260 → 4434×4426. The table grew on both axes: seven new columns (the federated connector, the three Power BI storage modes, a Fabric data agent, a ready-made MCP server, and Custom split into agent-hosted and direct-push) and five new rows — &#x27;Plane — whose governance approves it&#x27;, &#x27;Licence it needs&#x27;, &#x27;Where the rows physically sit&#x27; (the residency row the storage-mode discussion turns on), &#x27;Answers across more than one source&#x27; and &#x27;Retrieval you control&#x27;. The near-doubling of height comes from those rows plus the extra wrapping the wider grid forces.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>docs/copilot-surface-matrix.png</code><span class="binary">binary</span></td>
-        <td class="num"><span class="c-bin">—</span></td>
-        <td class="sum">Regenerated standalone render of the capability-by-surface matrix, 3220×2287 → 4094×3446. It grew on both axes: three new surface columns (Cowork, Power BI, Fabric data agent) alongside the existing Copilot/M365/SharePoint/Researcher/Frontier/Azure AI set, and three new capability rows — &#x27;Runs without a Fabric or Premium capacity&#x27;, &#x27;Answer appears in M365 Copilot chat&#x27; and &#x27;You choose the retrieval&#x27; — added beneath the existing regulated/licensed-data and network-isolation rows.</td>
-      </tr>
-      <tr class="s-modified">
-        <td class="st"><span class="chip ch-modified">MOD</span></td>
-        <td class="pathcell"><code>docs/HIERARCHY-DEPLOYMENT.md</code><span class="bar" title="+3 -3"><i class="add" style="width:2.42%"></i><i class="del" style="width:2.42%"></i></span></td>
-        <td class="num"><span class="c-add">+3</span> <span class="c-del">&minus;3</span></td>
-        <td class="sum">Repository rename only: the two release download links and the release/net9 git clone command move from m365-copilot-sql-connector to m365-copilot-connectors. No procedural change.</td>
+        <td class="pathcell"><code>src/PushCore.State/PushCore.State.csproj</code><span class="bar" title="+50 -0"><i class="add" style="width:17.47%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+50</span></td>
+        <td class="sum">New project carrying the one ICrawlStateStore implementation, registered in SqlTicketsConnector.sln. Split from PushCore so the compiler enforces that PushCore never references SqlClient: a connector reading a non-database source stops at PushCore, and a SqlClient advisory re-releases only projects that open connections. Adds exactly one package, Microsoft.Data.SqlClient 5.2.2, matching the pin in PushCore.Sql and Connector.Security, because two SqlClient versions in one output directory is a load conflict. References PushCore and Connector.Security; imports build/SecretHygiene.targets. One stale header claim: it says nothing here is referenced by the engine yet, though SqlGraphPush, CdpGraphPush and SqlHierarchyPush all reference it at this tag. Its &quot;sixteen stored procedures&quot; is correct — that is what the store EXECs; sql/25 grants seventeen only because uspRecordThrottle is never called.</td>
       </tr>
       </tbody>
     </table></div>
   </section>
+  <section>
+    <h2>The dashboard</h2>
+    <p class="blurb">A read-only ASP.NET Core Razor Pages app. Seven pages, every list paged in the database.</p>
+    <p class="tally"><span>34 files</span><span class="c-add">+5,200</span></p>
+    <div class="scroll"><table>
+      <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
+      <tbody>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Data/CrawlStateQueries.cs</code><span class="bar" title="+739 -0"><i class="add" style="width:67.15%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+739</span></td>
+        <td class="sum">The entire read surface: seven procedures from sql/24 (uspDashboardSummary, uspListRuns, uspGetRun, uspListThrottleEvents, uspGetConnectionDetail, uspListItems, uspListPendingDeletes) plus one SELECT of ConnectionId and DisplayName from crawl.vwConnectionHealth. Every value goes down as a typed SqlParameter, and AddDateTime2 sets Scale = 3 to match DATETIME2(3). Two omissions: AddNVarChar sends DBNull for a null, empty or whitespace string, which is what makes a blank filter box mean &quot;no filter&quot;; and ListThrottleEventsAsync&#x27;s fallback page size is a hard-coded 100, not DefaultPageSize, with ClampPageSize falling back to 50 if the configured default is invalid. Clamps are 500 and 1000; ReadNextSetAsync returns empty for a missing set.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Data/CrawlStateModels.cs</code><span class="bar" title="+645 -0"><i class="add" style="width:62.73%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+645</span></td>
+        <td class="sum">One record per result set from sql/22 and sql/24: DashboardTiles, ConnectionHealthRow, DailyActivityRow, RunHistoryRow, RunListRow, RunItemTypeRow, RunPhaseTimingRow, ThrottleSummaryRow, ThrottleEventRow, ItemRow, PendingDeleteRow, ItemTypeMixRow and CheckpointRow, plus ConnectionRef — the positional (ConnectionId, DisplayName) record every filter dropdown binds to, and the one type fed by the vwConnectionHealth SELECT rather than a procedure — and the composites DashboardSummary, RunDetail and ConnectionDetail, whose Run, Health, Checkpoint and Throttling members are nullable so a 404 or an omitted set is representable. Nullability is copied from the schema: null UnchangedPercent is not 0%, null MinutesSinceLastSuccess is never succeeded, null LastSeenRunStartedUtc is retention.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/wwwroot/dashboard.css</code><span class="bar" title="+529 -0"><i class="add" style="width:56.81%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+529</span></td>
+        <td class="sum">One stylesheet from the application&#x27;s own origin, no framework and no CDN link, matching the style-src &#x27;self&#x27; policy in Program.cs. Colours are custom properties declared twice — a light :root block and a prefers-color-scheme: dark override — and the header states that a literal colour further down the file is a bug in one of the two; there are in fact no hex values below the two blocks. Two other rules are called out as the ones an edit is most likely to undo: colour encodes status and nothing else (green, amber and red appear only on pills, failure counts and the chart&#x27;s failed markers), and figures use font-variant-numeric: tabular-nums, right-aligned, which is what makes 18,402 and 184,020 comparable at a glance.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Index.cshtml</code><span class="bar" title="+238 -0"><i class="add" style="width:38.11%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+238</span></td>
+        <td class="sum">The overview: eight tiles, a nine-column per-connection table, the thirty-day chart and a recent-runs strip, with 24h/7d/30d shortcuts. The omission is the banner above the tiles, shown only when ConnectionsNeedingAttention &gt; 0, where the page defines its vocabulary: a connection is late when its last success is older than twice its expected interval, and failing after any run not since followed by a success. Colour appears only where status is encoded — is-bad on failed runs, is-warn on throttle waits — and an error kind renders as a following colspan=&quot;9&quot; row. The note explains &quot;since success&quot; against the last successful run, not the last run.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Presentation/TrendChart.cs</code><span class="bar" title="+225 -0"><i class="add" style="width:37.05%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+225</span></td>
+        <td class="sum">Emits the daily-activity chart as inline SVG built on the server, because the network blocks outbound HTTP. Rows are summed into per-day buckets over a window ending today, so days with no runs are gaps and a connector that stopped shows as a hole. Written stacks on the baseline with unchanged above it, separated by weight; the only colour spent is the failed-day marker below the axis. Unmentioned: when every bucket totals zero it returns no SVG but a &lt;p class=&quot;chart-empty&quot;&gt;, distinguishing &quot;No runs in this window&quot; from &quot;Runs in this window, but none of them wrote or matched an item&quot;. Three gridlines, three date labels.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Presentation/Format.cs</code><span class="bar" title="+222 -0"><i class="add" style="width:36.80%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+222</span></td>
+        <td class="sum">Every formatting decision in one static class, on three stated rules. Timestamps render as stored, in UTC, with the pages labelling the column rather than converting, so a run quoted in a ticket and the same run here read alike. Null renders as None, an em dash, so no page can coalesce a null UnchangedPercent into a plausible 0%. Everything uses InvariantCulture, so two people reading one incident quote the same figures. Duration returns the em dash for a negative value rather than clamping to zero — that is clock skew between the connector host and the SQL host, worth showing. Bytes uses binary units; Compact gives k/M/B axis labels; HashPrefix keeps twelve characters.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Runs/Detail.cshtml</code><span class="bar" title="+203 -0"><i class="add" style="width:35.19%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+203</span></td>
+        <td class="sum">Routed @page &quot;/Runs/{runId:long}&quot;. Four sections from one procedure call: a seventeen-item facts list, the per-item-type table, the phase timing table and the throttle aggregate. Timing shows p50/p95/p99/max with a note that Share is of the RowTotal phase, so rows need not sum to 100%. Absent throttling renders as an explicit &quot;never throttled&quot;; an empty per-type table is attributed to a tool version predating crawl.RunItemType. Missing: the throttle panel&#x27;s note — read time asked for against distinct minutes, ten minutes lost in four meaning the writer count is too wide, the same spread over an hour meaning it is not — and its link to all events.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Connections/Detail.cshtml</code><span class="bar" title="+184 -0"><i class="add" style="width:33.51%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+184</span></td>
+        <td class="sum">Renders one connection: an ErrorKind banner when set, a ten-item health facts list, links to that connection&#x27;s runs, inventory and pending deletes, the thirty-day TrendChart, an eight-column item-type mix table and the checkpoint block. Routed @page &quot;/Connections/{connectionId}&quot;, a single segment; links are built with Uri.EscapeDataString and nothing in the page handles or rejects an id containing a slash either way. The tfoot totals only Live and Content size. The notes carry the interpretation: content size is bytes hashed, never stored content, and a checkpoint that stops advancing while runs report success is the quiet failure.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Runs/Index.cshtml</code><span class="bar" title="+162 -0"><i class="add" style="width:31.44%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+162</span></td>
+        <td class="sum">The run list and its GET filter form: connection, status, mode, a UTC from/to date pair, a rows box capped at max=&quot;500&quot; to match MaxListPageSize, and an &quot;Include dry runs&quot; checkbox. Fourteen columns, with failed counts promoted to a pill and throttle counts to a link into /Runs/{id}/Throttling only when non-zero, so a healthy row stays grey. An error kind renders as a following colspan=&quot;14&quot; row. The closing note was omitted and is the page&#x27;s interpretive core: Read is what the source returned, Written what was sent to Graph, and the gap between them is the change detection working rather than a shortfall.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Program.cs</code><span class="bar" title="+141 -0"><i class="add" style="width:29.33%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+141</span></td>
+        <td class="sum">The composition root. AddAuthentication(IISDefaults.AuthenticationScheme) plus a FallbackPolicy requiring an authenticated user, chosen over per-page attributes because a new page cannot opt out of a fallback. The header is explicit that under plain Kestrel there is no handler and every page 500s, and that this is the correct failure. ValidateOnStart is weaker than described: the validators only check Server and Database are non-blank and both timeouts exceed zero, so a wrong-but-present server name still starts. CrawlStateQueries is a singleton holding only a connection string. One defect: the CSP and no-store middleware runs before UseStaticFiles, so dashboard.css is refetched every page view.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Items/Index.cshtml.cs</code><span class="bar" title="+139 -0"><i class="add" style="width:29.12%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+139</span></td>
+        <td class="sum">Binds c, q, type, state, streak, p and ps. It is not true that HasConnection false returns before any query: ListConnectionsAsync — the vwConnectionHealth SELECT — always runs first to fill the dropdown, and only uspListItems is skipped, which is the query that would scan every corpus to produce fifty rows. State words go through StateCodes.ItemState; Pager stays null until a connection is chosen. The header explains why the unchanged-streak filter is the interesting one. One rough edge: the view&#x27;s Rows box reads Model.Result.PageSize, the hard-coded 50 before a connection is chosen, so a ps value is dropped from the form.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Data/RowSet.cs</code><span class="bar" title="+137 -0"><i class="add" style="width:28.91%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+137</span></td>
+        <td class="sum">Wraps SqlDataReader with access by column name, building an ordinal dictionary once per result set from the reader&#x27;s own metadata. The header states the failure it exists to prevent: reader.GetInt32(11) keeps compiling and starts lying the moment a column is inserted into sql/24, showing ItemsSkipped in the ItemsDeleted column, both plausible small integers. A missing name throws instead, naming the column, listing what did come back, and telling the reader to redeploy sql/22 and sql/24. Nullable and non-nullable accessors are separate methods so a NOT NULL column that turns up null throws rather than defaulting to a plausible zero. Duplicate column names resolve last-wins.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Presentation/Pager.cs</code><span class="bar" title="+137 -0"><i class="add" style="width:28.91%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+137</span></td>
+        <td class="sum">Builds the prev/next URLs, and exists so that paging a filtered list does not drop the filters: a bare link to &quot;?p=2&quot; resets the connection, the status and the date range, and the operator who was looking at failed runs for one connection lands on page two of everything. Url copies the supplied query pairs, skipping empty values and any existing p, percent-encodes both key and value with Uri.EscapeDataString, then appends the page number. PageKey is the const &quot;p&quot;, shared with the [BindProperty] names on every list page so the two cannot drift. Pager.For lifts the counts off a PagedResult; the class computes no totals of its own.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Runs/Index.cshtml.cs</code><span class="bar" title="+134 -0"><i class="add" style="width:28.59%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+134</span></td>
+        <td class="sum">Binds six filters — c, status, mode, from, to, dry — plus p and ps, not seven, onto uspListRuns: one procedure serving the all-connections list, one connection&#x27;s history and the failures-only view, where null means no filter and StateCodes returns null for an unrecognised word, so a hand-edited query string widens the result. It also calls ListConnectionsAsync for the dropdown. The date handling is load-bearing: From is truncated with .Date, and To sent as To.Date.AddDays(1) because @ToUtc is exclusive in sql/24. PageNumber is named that way because PageModel.Page() exists; QueryForPager re-emits dates as yyyy-MM-dd.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Items/Index.cshtml</code><span class="bar" title="+130 -0"><i class="add" style="width:28.16%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+130</span></td>
+        <td class="sum">The inventory table (eleven columns) and its filter form. The search box is labelled &quot;Item ID starts with&quot; and placeholdered &quot;prefix, not contains&quot; because sql/24 applies LIKE @Search + &#x27;%&#x27;; the type box is an exact match, state comes from StateCodes.ItemStates. With no connection chosen the page renders a banner saying the inventory is clustered by connection and declines the query — it does not name (ConnectionId, ItemId); that is in the code-behind header. Two closing notes, not one: no item content exists to show, and the content and ACL hashes are separate so the engine can say which of the two moved — plus written-by versus last-seen.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Runs/Throttling.cshtml</code><span class="bar" title="+117 -0"><i class="add" style="width:26.72%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+117</span></td>
+        <td class="sum">Routed @page &quot;/Runs/{runId:long}/Throttling&quot;. The aggregate panel — seven facts, dropping the first and last event timestamps the run page shows — sits above the raw events, replaced by a banner when the run was never throttled, explaining that clean runs are absent from the summary by design. Columns: occurred, into run, status (429 pill-warn, anything else pill-bad), Retry-After, endpoint, attempt, event id. A missing Retry-After renders &quot;not sent&quot; with a title naming the engine&#x27;s own backoff. The closing note also states what was omitted: Endpoint is a short token, not a URL, and no item identifier is recorded here.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Runs/Throttling.cshtml.cs</code><span class="bar" title="+110 -0"><i class="add" style="width:25.91%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+110</span></td>
+        <td class="sum">Calls uspGetRun for the header AND the throttle aggregate, then uspListThrottleEvents for the page — two round trips, discarding two of uspGetRun&#x27;s four result sets (per-item-type and timing), not three: the aggregate is precisely what it keeps, which is the stated reason for the extra call. Returns 404 when the run header is missing. DefaultPageSize is 100, matching the fallback ListThrottleEventsAsync applies, and only ps is carried into the pager links. The header names SecondsIntoRun as the column the page exists for, since the offset from each run&#x27;s own start makes the shape of the throttling comparable.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Data/CrawlStateOptions.cs</code><span class="bar" title="+108 -0"><i class="add" style="width:25.67%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+108</span></td>
+        <td class="sum">Binds the &quot;CrawlState&quot; section and is the only place a connection string is built. BuildConnectionString sets IntegratedSecurity = true in code with no key to override it, so appsettings.json offers no slot for a SQL login; the app pool identity is the crawl_reader principal. The bool Encrypt (default true) maps to SqlConnectionEncryptOption.Mandatory, TrustServerCertificate false, ConnectTimeoutSeconds 15 kept separate from CommandTimeoutSeconds 60. Missing from the summary: Pooling = true is set explicitly, with the comment giving the reason — a web tier opens a connection per request, and without pooling that is a Kerberos handshake per page load. Database defaults to &quot;ConnectorState&quot;.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/PendingDeletes/Index.cshtml</code><span class="bar" title="+98 -0"><i class="add" style="width:24.45%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+98</span></td>
+        <td class="sum">Table of deletes Graph has not confirmed, with a connection filter and a &quot;Pending for at least (minutes)&quot; number box stepping in fifteens. Rows aged 60 minutes or more get a pill-warn; below that the age renders plain. The empty state reads &quot;Nothing is awaiting deletion. That is the expected state between runs&quot; rather than a generic no-results line. The closing note states what a persistent row means — a DELETE refused, retried and refused again, an item the source dropped that is still answering searches — and points at the last-seen run&#x27;s numbers as the place to start rather than the item alone.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/PendingDeletes/Index.cshtml.cs</code><span class="bar" title="+98 -0"><i class="add" style="width:24.45%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+98</span></td>
+        <td class="sum">Binds c, age, p and ps and calls uspListPendingDeletes, always querying — unlike the inventory page, this list is useful across all connections. The header explains why @MinAgeMinutes carries the page: without it the list is dominated by deletes pending because a run is in flight right now, which is normal and uninteresting, and &quot;older than one crawl interval&quot; is the rule that catches a stuck delete without firing on every run in progress. Paged because the run after a large source change produces a list the size of the change, and a page that tries to render all of it stops rendering anything.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/ConnectorState.Dashboard.csproj</code><span class="bar" title="+95 -0"><i class="add" style="width:24.08%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+95</span></td>
+        <td class="sum">Web SDK project targeting $(ConnectorTargetFramework), importing build/SecretHygiene.targets and referencing no other project, so the Graph SDK and Azure.Identity never enter the web tier. The header records why Razor Pages rather than Web Forms: .aspx is .NET Framework 4.8 only. Three pins: Microsoft.Data.SqlClient 5.2.2 matching PushCore.Sql and Connector.Security; Azure.Identity 1.21.0 over SqlClient&#x27;s floor of 1.11.4; and Azure.Core 1.54.0 — where 1.53.0 is Azure.Identity&#x27;s own floor, not SqlClient&#x27;s, and 1.54.0 is what Azure.Security.KeyVault.Secrets 4.11.0 pulls elsewhere. The comment also notes .cshtml compiles into this assembly, so deployment is a file copy plus an app pool recycle.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Connections/Detail.cshtml.cs</code><span class="bar" title="+91 -0"><i class="add" style="width:23.56%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+91</span></td>
+        <td class="sum">Calls uspGetConnectionDetail once for all four result sets and returns NotFound() when Health is null, so a mistyped id gives 404 rather than a blank page. TrendDays is a const 30, matched to the front page so the two charts compare. It accumulates TotalLiveItems and TotalContentBytes for the mix table&#x27;s footer. The header makes two points, not one: the item-type mix comes from the live inventory rather than the last run — a connection whose last run wrote twelve items still holds four hundred thousand — and the checkpoint is on the page because &quot;where would the next incremental run start&quot; is otherwise answered by writing a query, so nobody asks.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Presentation/StateCodes.cs</code><span class="bar" title="+88 -0"><i class="add" style="width:23.17%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+88</span></td>
+        <td class="sum">The bridge between the words the sql/22 views emit and the tinyint codes the sql/24 procedures take. RunStatuses, RunModes and ItemStates are ordered to match CK_Run_Status (1..4), CK_Run_Mode (1..2) and CK_Item_State (1..3), and the private Index returns 1-based codes case-insensitively, or null for anything unrecognised, so a hand-edited query string widens the result. Tone is not symmetric with that: it is a plain switch on the string, ordinal and case-sensitive, mapping healthy/succeeded/live to ok, failing/failed/abandoned to bad, late/pending delete to warn, running to busy — anything else, &quot;Healthy&quot; included, falls through to idle.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Runs/Detail.cshtml.cs</code><span class="bar" title="+83 -0"><i class="add" style="width:22.50%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+83</span></td>
+        <td class="sum">Calls uspGetRun once for all four result sets and 404s when the header row is missing, because a blank page for a mistyped id is a page somebody concludes the run was purged from. The header sets out why the three tables share a page: crawl.Run says a run wrote 1,118 items, and the per-type table says it wrote 12 customers, 62 engagements and 1,044 time entries — the second sentence is the one that tells you whether the source or the connector changed. Raw throttle events are deliberately a separate page, because a badly throttled run has thousands of them.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Index.cshtml.cs</code><span class="bar" title="+76 -0"><i class="add" style="width:21.53%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+76</span></td>
+        <td class="sum">Calls uspDashboardSummary and nothing else — four result sets in one round trip, specifically so the front page cannot drift into six queries as it grows. The hours query parameter is clamped between 1 and MaxWindowHours (24 × 90), because @WindowHours feeds DATEADD and a hostile value there turns a seek into a scan of the whole history; unset, it falls back to CrawlState:SummaryWindowHours. The header gives the reason a window exists at all: &quot;1.4 million items written since installation&quot; is a figure nobody acts on, and twenty-four hours against the day before is one somebody does.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Data/PagedResult.cs</code><span class="bar" title="+71 -0"><i class="add" style="width:20.81%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+71</span></td>
+        <td class="sum">Holds a page of rows plus TotalRows, which every list procedure returns on every row via COUNT(*) OVER() — one round trip, and a count that cannot disagree with the page beside it. PageCount returns 1 rather than 0 when TotalRows is zero so the pager never reads &quot;page 1 of 0&quot;. The header names a consequence it does not handle: because COUNT(*) OVER() rides on rows, an empty page reports TotalRows 0. A page number past the end therefore gives PageCount 1 while Page keeps the requested value, so the pager renders &quot;Page 9,999 of 1&quot; and a no-rows message over a filter that in fact matches thousands.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Shared/_Layout.cshtml</code><span class="bar" title="+53 -0"><i class="add" style="width:17.98%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+53</span></td>
+        <td class="sum">The shell: a masthead with four nav links, the signed-in name from User.Identity?.Name falling back to &quot;not signed in&quot;, one stylesheet linked with asp-append-version=&quot;true&quot;, and a colophon repeated on every page — EXECUTE on seven procedures, SELECT on six views, no permission on any table, Windows integrated authentication with no stored credential, no item content, all times UTC. Missing: the file opens with an IsCurrent local function marking the active nav link by path prefix, with &quot;/&quot; matched exactly so Overview does not light up everywhere; titles render as &quot;&lt;page&gt; — Connector crawl state&quot;.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Shared/_Pager.cshtml</code><span class="bar" title="+46 -0"><i class="add" style="width:16.75%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+46</span></td>
+        <td class="sum">Renders the row range and the First/Previous/Next/Last links, degrading unavailable links to plain spans rather than hiding them so the control keeps its shape between pages. Its numbers come from the Pager, so it counts nothing itself. Two rough edges: it formats the page number through Format.Count, which puts thousands separators on a page number, and when a request asks for a page past the end it prints &quot;No {noun} match these filters&quot; beside &quot;Page N of 1&quot;, because an empty page carries no COUNT(*) OVER() row to report the real total.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Error.cshtml.cs</code><span class="bar" title="+35 -0"><i class="add" style="width:14.61%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+35</span></td>
+        <td class="sum">Captures Activity.Current?.Id ?? HttpContext.TraceIdentifier into RequestId and does nothing else. Marked [AllowAnonymous] for the reason the header gives: a failure inside authentication itself must still render a page rather than recurse into another authorization failure against the fallback policy in Program.cs. The detail stays in the application log, behind the same access control as the server, because a stack trace from this application names the SQL Server, the database, the crawl schema and the failing procedure — reconnaissance handed to whoever caused the error.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Error.cshtml</code><span class="bar" title="+22 -0"><i class="add" style="width:11.59%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+22</span></td>
+        <td class="sum">The failure page: a heading, a &quot;could not be rendered&quot; subtitle, the request identifier in a code element inside a banner, and a note naming the most likely cause — sql/22 and sql/24 both deployed, the app pool identity in the crawl_reader role from sql/25 — closing with the reassurance that nothing here writes. No exception message or stack trace appears, but it is not uninformative: it names three schema scripts and the database role, telling whoever provoked the error what this app reads and how. What stays out is the server, database and procedure names.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/appsettings.json</code><span class="bar" title="+21 -0"><i class="add" style="width:11.32%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+21</span></td>
+        <td class="sum">Twenty-one lines: logging levels, AllowedHosts &quot;*&quot; — omitted from the summary, and the only key besides logging outside the CrawlState section, leaving host filtering wide open — plus CrawlState itself: Server, Database, Encrypt true, TrustServerCertificate false, ConnectTimeoutSeconds 15, CommandTimeoutSeconds 60, DefaultPageSize 50, SummaryWindowHours 24, ApplicationName. There is deliberately no connection-string key, which is CrawlStateOptions&#x27; point: no slot exists for a password. The shipped default is &quot;Server&quot;: &quot;SQLPROD01&quot;, a specific host name rather than a placeholder, so an unedited deployment points at it — a live-looking default rather than an obvious blank.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/Shared/_ConnectionPill.cshtml</code><span class="bar" title="+15 -0"><i class="add" style="width:9.57%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+15</span></td>
+        <td class="sum">Fifteen lines. Takes a status word as its model and emits a span with class pill pill-@StateCodes.Tone(Model), or a pill-idle &quot;unknown&quot; for an empty string. Its comment makes the boundary explicit: it never decides what &quot;healthy&quot; means. The word comes from crawl.vwConnectionHealth or vwRunHistory, so the combining rule stays in the view where every consumer agrees on it, and this file only picks the colour.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/_ViewImports.cshtml</code><span class="bar" title="+5 -0"><i class="add" style="width:5.52%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+5</span></td>
+        <td class="sum">Five lines, and trivial: @using for the root, Data and Presentation namespaces, @namespace ConnectorState.Dashboard.Pages, and the MVC tag helpers. It is what lets every view name Format, StateCodes and the row records unqualified, and what makes asp-append-version work on the stylesheet link in the layout. Nothing here is a decision worth explaining.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>src/ConnectorState.Dashboard/Pages/_ViewStart.cshtml</code><span class="bar" title="+3 -0"><i class="add" style="width:4.28%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+3</span></td>
+        <td class="sum">Three lines setting Layout = &quot;_Layout&quot;. It applies to every page under Pages/, Error.cshtml included, so no page carries its own layout directive and none can quietly opt out of the colophon that states the read-only boundary on every render. There is nothing else in the file and nothing else to say about it.</td>
+      </tr>
+      </tbody>
+    </table></div>
+  </section>
+  <section>
+    <h2>Tests</h2>
+    <p class="blurb">Twenty-six new tests, and the stub that had to learn $batch before any of them could run.</p>
+    <p class="tally"><span>4 files</span><span class="c-add">+1,086</span><span class="c-del">&minus;2</span></p>
+    <div class="scroll"><table>
+      <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
+      <tbody>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/PushBatchingTests.cs</code><span class="bar" title="+412 -0"><i class="add" style="width:50.14%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+412</span></td>
+        <td class="sum">Nine facts covering the $batch path, previously reachable only against a live tenant: batch/single equivalence on Total, Failed, Unchanged, Duplicates, BytesWritten and byte-identical bodies; 24 items splitting 20+4; one 400 costing one item; a 429 retried alone (BatchSizes 20 then 1); Batch=false and a dry run posting no batch at all. Two are load-bearing and unmentioned: the commit prefix stops at the refusal while Total still reports the nineteen that landed, and a later chunk never moves the marker over the gap. A ninth drives GraphBatchWriter directly, pinning ThrottleEvent Endpoint &quot;batch&quot;, 429, RetryAfterSeconds 1. DEFECT: the header still reports both as unfixed; 7fc7135 fixed them.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/ItemHasherTests.cs</code><span class="bar" title="+364 -0"><i class="add" style="width:47.13%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+364</span></td>
+        <td class="sum">Seventeen facts pinning ItemHasher, with the asymmetry in the header: a hash that changes needlessly costs a write; one that fails to change leaves the index wrong for ever. Determinism is the theme — property insertion order (ordinal sort, because dictionary order has changed between .NET versions), culture (de-DE and tr-TR), and four-byte length-prefixed fields so (&quot;ab&quot;,&quot;c&quot;) cannot hash as (&quot;a&quot;,&quot;bc&quot;). HashAcl renders each grant as Type|Value|AccessType (Acl.Type, not &quot;AclType&quot;) and sorts ordinally; null or empty hashes the literal &quot;(no grants)&quot;. One test deliberately runs the other way: a string collection&#x27;s order is content and must NOT be sorted. CrawlItemState.Matches is an AND.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/TestSupport/StubGraphAdapter.cs</code><span class="bar" title="+288 -2"><i class="add" style="width:41.77%"></i><i class="del" style="width:0.29%"></i></span></td>
+        <td class="num"><span class="c-add">+288</span> <span class="c-del">&minus;2</span></td>
+        <td class="sum">Teaches the fake Kiota adapter to answer $batch. SendNoContentAsync now branches on IsBatch, which matches the URL template rather than requestInfo.URI because Microsoft.Graph.Core&#x27;s hand-written batch builder never seeds &quot;baseurl&quot; and reading the URI throws first. It parses the envelope, emits one sub-response per request with a status from BatchStatusFor, puts Retry-After on 429s (BatchRetryAfterSeconds defaults to 1, since GraphThrottling ignores a non-positive value and the writer would then pay four real seconds of backoff), and returns HTTP 200 on the envelope regardless — the asymmetry GraphBatchWriter exists for. The response goes back through the request&#x27;s NativeResponseHandler; leaving that unset was what made a batch NRE inside the SDK. FailItem is translated into a status, 500 when the exception carries none. Adds BatchRoundTrips and BatchSizes; a batch counts as one write in flight.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>tests/SqlTicketsConnector.Tests/TestSupport/TestData.cs</code><span class="bar" title="+22 -0"><i class="add" style="width:11.59%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+22</span></td>
+        <td class="sum">ValidPushOptions now sets Settings[&quot;Batch&quot;] = &quot;false&quot;. Every test written before $batch existed asserts the single-item contract - this write threw so the watermark stopped here, this item was written exactly once, these ids arrived in this order - and that contract is still real. Rather than rewrite those tests to assert something weaker, the fixture pins the path they were written for; PushBatchingTests turns batching on and pins its genuinely different contract separately.</td>
+      </tr>
+      </tbody>
+    </table></div>
+  </section>
+  <section>
+    <h2>Documentation</h2>
+    <p class="blurb">Three new documents, one of which is what gets sent to the team that owns the source.</p>
+    <p class="tally"><span>8 files</span><span class="c-add">+2,698</span><span class="c-del">&minus;5</span></p>
+    <div class="scroll"><table>
+      <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
+      <tbody>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>docs/CRAWL-STATE-REFERENCE.md</code><span class="bar" title="+970 -0"><i class="add" style="width:76.93%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+970</span></td>
+        <td class="sum">Schema reference: six table types, eight tables, six views, nineteen write and seven reporting procedures (twenty-six in the front matter), two roles, with columns, parameters, result sets and errors 50001 to 50007. Conventions up front — everything in [crawl]; UTC DATETIME2(3) with the millisecond load-bearing in the checkpoint; BINARY(32) hashes exposed as CHAR(64) hex; microseconds stored, milliseconds reported. Enumerations are the contract. The omitted half is Permissions: neither role holds a permission on any table, crawl_writer gets EXECUTE by name on seventeen of the nineteen procedures and all six types, uspResetCheckpoint and uspPurgeHistory go to neither, and writes reach tables purely by ownership chaining.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>docs/CRAWL-STATE-DEPLOYMENT.md</code><span class="bar" title="+887 -0"><i class="add" style="width:73.57%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+887</span></td>
+        <td class="sum">Operator guide for standing up ConnectorState: sql/20 to sql/25 in order, the two accounts (svc_gca_reader in crawl_writer, svc_connector_dashboard in crawl_reader), what to edit, what each script prints, retention, backup, the delete guard, recovery, and sql/26. The guard section is the substantial one — uspGetPendingDeletes throws 50004/50005/50006/50007, @MaxDeletePercent default 10.00 compared strictly greater, @OverrideGuard default 0, refusal before the UPDATE. DEFECT: it opens by saying the engine-side configuration keys &quot;are not settled yet&quot; and that nothing here depends on an appsettings.json key — but this same release ships CrawlStateWiring reading Settings:StateConnectionString and wires all three executables to it.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>docs/release-diff.html</code><span class="bar" title="+491 -0"><i class="add" style="width:54.73%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+491</span></td>
+        <td class="sum">An HTML page tabulating a release&#x27;s files with status chips, square-root-scaled add/delete bars and per-file summaries. Not self-contained: it preconnects to fonts.googleapis.com/gstatic and links a stylesheet for JetBrains Mono, Source Sans 3 and Source Serif 4. Its title, masthead, totals (41 files, +6,786/-1,962, tests 268 to 283) and footer all name v1.2.20 to v1.2.23 deliberately — the footer says it was generated from that diff and that publishing it lands after v1.2.23. The defect is therefore the README line introducing it as &quot;What changed in the current release range&quot;, which a reader will follow to the previous release.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-added">ADD</span></td>
+        <td class="pathcell"><code>docs/SOURCE-CONTRACT.md</code><span class="bar" title="+304 -0"><i class="add" style="width:43.07%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+304</span></td>
+        <td class="sum">Aimed at the team owning a source system. Six requirements: unique and immutable identifiers (the table calls this &quot;the only non-negotiable one&quot;; sections 1-4 are grouped as the hard ones), no reuse, a full read returning every live record, deterministic item IDs; a monotonic last-modified timestamp only buys Tier 1. Failures are named — a (CustomerName, ProjectName) key, a content hash as key, a reused key read as resurrection by uspRecordWritten. Two omissions: Tier 1&#x27;s hierarchy trap, where a customer rename leaves a thousand descendants stale and only sql/26 fixes it, and the closing table mapping each requirement to what enforces or merely detects it.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/SECURITY.md</code><span class="bar" title="+22 -1"><i class="add" style="width:11.33%"></i><i class="del" style="width:0.52%"></i></span></td>
+        <td class="num"><span class="c-add">+22</span> <span class="c-del">&minus;1</span></td>
+        <td class="sum">Adds a crawl state store section, STATE-1 to STATE-9, and bumps the evidence command from 283 to 309 tests. Beyond the separate database, the no-table-permission roles, the content-free schema, the 10.00% guard and the forward-only checkpoint, three go unmentioned: STATE-5 (50006 for an incremental RunId, 50005 for a foreign one, an empty result set for a dry run), STATE-8 (sql/24 contains no INSERT, UPDATE or DELETE and clamps page size inside each procedure), and STATE-9 (PendingSinceUtc, CK_Item_Pending, vwPendingDeletes.AgeMinutes). Note crawl_reader does hold SELECT on six views; the &quot;no table permission&quot; claim is about tables. Several evidence cells are cross-references, not queries.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>README.md</code><span class="bar" title="+15 -2"><i class="add" style="width:8.99%"></i><i class="del" style="width:1.20%"></i></span></td>
+        <td class="num"><span class="c-add">+15</span> <span class="c-del">&minus;2</span></td>
+        <td class="sum">Index updates only. Adds the three new documents and release-diff.html to the docs listing, and the seven new scripts to the sql listing — sql/20 to sql/25 build ConnectorState, and sql/26 is flagged as changing the source database rather than the state, Tier 1, SQL Server 2022. The test count moves from 283 to 309, which reconciles: ItemHasherTests adds 17 and PushBatchingTests 9. The zip manifest line for sql/ is rewritten from &quot;least-privilege grant, soft-delete migration, sample table&quot; to cover the state database and the incremental source view. No procedural or command change.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>.github/workflows/pages.yml</code><span class="bar" title="+6 -2"><i class="add" style="width:5.24%"></i><i class="del" style="width:1.75%"></i></span></td>
+        <td class="num"><span class="c-add">+6</span> <span class="c-del">&minus;2</span></td>
+        <td class="sum">Adds docs/release-diff.html to the Pages deployment: one line in the push-path filter and one cp into _site. The header comment moves from &quot;two documents&quot; to three. Everything else in docs/ stays repository source rather than a website, which is the property the file exists to hold.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>docs/index.md</code><span class="bar" title="+3 -0"><i class="add" style="width:4.28%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+3</span></td>
+        <td class="sum">Three navigation rows and nothing else. SOURCE-CONTRACT.md is placed at the top of the deployment table, above the pilot-parameter documents, described as the four requirements a source must meet before a push can detect deletions, skip unchanged items or resume. CRAWL-STATE-DEPLOYMENT.md joins the same table with a summary naming the six scripts, the two service accounts and the delete guard. CRAWL-STATE-REFERENCE.md joins the reference table beside SECURITY.md. No existing row is reworded and nothing is removed.</td>
+      </tr>
+      </tbody>
+    </table></div>
+  </section>
+  <section>
+    <h2>Build and solution</h2>
+    <p class="blurb">Project registration, package pins, and the Pages deployment.</p>
+    <p class="tally"><span>7 files</span><span class="c-add">+51</span><span class="c-del">&minus;3</span></p>
+    <div class="scroll"><table>
+      <thead><tr><th></th><th>File</th><th class="num">Lines</th><th>What changed</th></tr></thead>
+      <tbody>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>SqlTicketsConnector.sln</code><span class="bar" title="+30 -0"><i class="add" style="width:13.53%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+30</span></td>
+        <td class="sum">Registers two new projects, PushCore.State ({60FEDE7A-6450-4277-801B-1821D211E0E2}) and ConnectorState.Dashboard ({807A6022-7449-4498-A16E-369A3606C92A}), each with the full twelve configuration mappings across Debug and Release for Any CPU, x64 and x86, and nests both under the same solution folder ({827E0CD3-...}) that already holds the other src projects. Mechanical and complete: the x64 and x86 rows map to Any CPU exactly as every existing entry does, so neither project is left unbuilt when the solution is built for a non-default platform. Nothing else in the file moves.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/SqlGraphPush/Program.cs</code><span class="bar" title="+6 -1"><i class="add" style="width:5.60%"></i><i class="del" style="width:0.93%"></i></span></td>
+        <td class="num"><span class="c-add">+6</span> <span class="c-del">&minus;1</span></td>
+        <td class="sum">Six added lines, one removed: using PushCore.State, a four-line comment, and PushHost.RunAsync(args, CrawlStateWiring.FromSettings) replacing the no-argument call. All six are identical in the three push executables. The factory is passed rather than a store because PushCore cannot reference SqlClient. The comment records the null fallback — no Settings:StateConnectionString means the tool behaves exactly as before crawl state existed — but the factory&#x27;s other behaviour matters as much operationally: a connection string containing &quot;password&quot; or &quot;pwd&quot; throws InvalidOperationException and fails the run, because crawl state is reached with Integrated Security so the service identity is the crawl_writer principal.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/SqlHierarchyPush/Program.cs</code><span class="bar" title="+6 -1"><i class="add" style="width:5.60%"></i><i class="del" style="width:0.93%"></i></span></td>
+        <td class="num"><span class="c-add">+6</span> <span class="c-del">&minus;1</span></td>
+        <td class="sum">The same six lines as the other two push tools, character for character: using PushCore.State, the shared comment, PushHost.RunAsync(args, CrawlStateWiring.FromSettings). The connector class, source and schema are unchanged. Absent Settings:StateConnectionString the factory returns null and the run proceeds with no store, so existing hierarchy deployments are untouched; supply a string carrying &quot;password&quot; or &quot;pwd&quot; and startup throws instead, Integrated Security being the only supported route. Worth flagging for this tool specifically: the state store gives it hashes and delete detection, but incremental reads still need sql/26&#x27;s EffectiveLastModified in the source database.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/CdpGraphPush/Program.cs</code><span class="bar" title="+6 -1"><i class="add" style="width:5.60%"></i><i class="del" style="width:0.93%"></i></span></td>
+        <td class="num"><span class="c-add">+6</span> <span class="c-del">&minus;1</span></td>
+        <td class="sum">Identical wiring to the two SQL push tools: using PushCore.State, the shared four-line comment, PushHost.RunAsync(args, CrawlStateWiring.FromSettings). It means the cluster connector gets the state store, the hash-based unchanged skip and delete detection from the same code, with no Cloudera-specific store. With no Settings:StateConnectionString the factory returns null and a pilot running today is unaffected. But this is also the first SQL Server configuration a CDP operator touches, and CrawlStateWiring refuses any value containing &quot;password&quot; or &quot;pwd&quot; — throwing at startup rather than connecting, since the crawl_writer grant is on the service identity.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/SqlGraphPush/SqlGraphPush.csproj</code><span class="bar" title="+1 -0"><i class="add" style="width:2.47%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+1</span></td>
+        <td class="sum">One line: a ProjectReference to PushCore.State, added inside the existing ItemGroup whose comment says the push tools&#x27; references cannot drift. The project now references PushCore, PushCore.State and PushCore.Sql. Trivial on its own, but it is what makes CrawlStateWiring visible to Program.cs — the SQL-backed store lives in a separate assembly because PushCore itself must not reference SqlClient. No target framework, package version or publish setting changes.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/SqlHierarchyPush/SqlHierarchyPush.csproj</code><span class="bar" title="+1 -0"><i class="add" style="width:2.47%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+1</span></td>
+        <td class="sum">The same single ProjectReference to PushCore.State, in the same commented ItemGroup that pins the shared push references, giving this project PushCore, PushCore.State and PushCore.Sql. Nothing else in the file is touched: the hierarchy tool&#x27;s own settings, content items and framework targeting are unchanged. The reference exists purely so the executable&#x27;s entry point can name the state-store factory it now hands to PushHost.</td>
+      </tr>
+      <tr>
+        <td class="st"><span class="chip ch-modified">MOD</span></td>
+        <td class="pathcell"><code>src/CdpGraphPush/CdpGraphPush.csproj</code><span class="bar" title="+1 -0"><i class="add" style="width:2.47%"></i><i class="del" style="width:0.00%"></i></span></td>
+        <td class="num"><span class="c-add">+1</span></td>
+        <td class="sum">One ProjectReference to PushCore.State, added beside the existing PushCore, CdpConnector.Source and CdpConnector.Extraction references. Note that it pulls a SqlClient-backed assembly into the Cloudera tool, which has no other SQL Server dependency — deliberate, since the state store is about where the crawl&#x27;s bookkeeping lives rather than where the data comes from, but it does mean the CDP publish output now carries the SQL client libraries. Nothing else in the file changes.</td>
+      </tr>
+      </tbody>
+    </table></div>
+  </section>
+
 <footer class="foot">
-  <p>Generated from <code>git diff v1.2.20 v1.2.23</code>. Every summary was written by reading the
-  actual diff hunks, then checked by a second pass whose brief was to find invented, overstated or
-  missing claims &mdash; 12 of the 41 entries were corrected as a result, and one of those corrections
-  turned out to be a defect in the shipped code rather than in the summary. That defect is what
-  v1.2.23 fixes, so this page now describes the release it caused.</p>
-  <p>Line counts are from <code>git diff --numstat</code>; bars are square-root scaled so small files
-  stay visible beside a 2,571-line one. The four PNGs are binary and report no line counts.</p>
+  <p>Generated from <code>git diff v1.2.23 v1.3.0</code>. Every summary was written by reading the
+  actual hunks, then checked by a second pass whose brief was to find invented, overstated or
+  missing claims &mdash; <strong>51 of the 75 entries were rewritten as a result</strong>, and five
+  of those corrections turned out to be defects in the shipped code rather than in the summary.
+  Those five are fixed on <code>main</code> after the tag.</p>
+  <p>Line counts are from <code>git diff --numstat</code> and were taken from git rather than from
+  the summaries; bars are square-root scaled so a fourteen-line file stays visible beside a
+  1,639-line one.</p>
 </footer>
 </div>
 
