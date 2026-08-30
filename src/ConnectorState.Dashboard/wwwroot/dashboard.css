@@ -153,6 +153,20 @@ a:hover { text-decoration: underline; }
   font-variant-numeric: tabular-nums;
 }
 
+/* Quieter than the signed-in identity beside it, and carrying no colour: the
+   rule in this file is that colour encodes status and nothing else, and how
+   often a page reloads is not a status. */
+.refresh-note {
+  color: var(--ink-faint);
+  opacity: 0.75;
+}
+
+.refresh-note::after {
+  content: "·";
+  margin: 0 0.4em;
+  opacity: 0.6;
+}
+
 /* --- page furniture ----------------------------------------------------- */
 
 .page { padding-top: 22px; padding-bottom: 56px; }

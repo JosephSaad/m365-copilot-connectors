@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Answers, before any data moves, the one question a reviewer of this connector
     actually has: for each table in scope, does CdpGraphPush index it or route it

@@ -221,6 +221,72 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
     /// advanced the baseline - so every later run would be escalated too, for
     /// ever, with no sweep ever running.
     /// </remarks>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// One round trip, before the run is opened. The procedure advances the
+    /// stored version as it answers, so this reports a change exactly once -
+    /// see sql/28, where that decision and its consequence are set out.
+    ///
+    /// A missing procedure is treated as "no change" rather than thrown. sql/28
+    /// is a later addition to a database that may already be deployed, and an
+    /// operator who has not run it has an out-of-date schema, not a broken
+    /// crawl. Refusing to run would turn a missing migration into an outage;
+    /// the log line says what is not being checked.
+    /// </remarks>
+    public async Task<bool> CheckHashVersionAsync(
+        string connectionId,
+        int hashVersion,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(connectionId))
+        {
+            throw new ArgumentException("A connection ID is required.", nameof(connectionId));
+        }
+
+        try
+        {
+            await using SqlConnection sql = await this.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using SqlCommand check = Procedure(sql, "crawl.uspCheckHashVersion");
+
+            check.Parameters.Add(Text("@ConnectionId", connectionId, 64));
+            check.Parameters.Add(new SqlParameter("@HashVersion", SqlDbType.TinyInt) { Value = (byte)hashVersion });
+
+            await using SqlDataReader reader =
+                await check.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return false;
+            }
+
+            bool changed = reader.GetBoolean(reader.GetOrdinal("WasChanged"));
+
+            if (changed)
+            {
+                this.log.Warning(
+                    "The hash framing changed from version {Previous} to {Current}. Every hash on record was " +
+                    "computed by the previous one and none of them will match, so this run is escalated to full " +
+                    "and will rewrite the corpus. This is a migration, not a fault - but it costs a full write " +
+                    "cycle, and it happens once.",
+                    reader.GetByte(reader.GetOrdinal("PreviousVersion")),
+                    reader.GetByte(reader.GetOrdinal("CurrentVersion")));
+            }
+
+            return changed;
+        }
+        catch (SqlException ex) when (ex.Number == 2812)
+        {
+            // 2812: could not find stored procedure. sql/28 has not been run.
+            this.log.Warning(
+                "crawl.uspCheckHashVersion is not present, so the hash framing version is not being checked. " +
+                "Run sql/28 against ConnectorState. Until then a change to the hasher would rewrite the whole " +
+                "corpus silently, which is the thing that script exists to make visible.");
+
+            return false;
+        }
+    }
+
+    /// <inheritdoc/>
     public async Task<CrawlRunStart> BeginRunAsync(
         CrawlConnectionInfo connection,
         CrawlMode requested,

@@ -328,6 +328,35 @@ public static class PushHost
             // structured log message makes it unreadable in both places.
             Log.Information("Where the time went:{NewLine}{Attribution}", Environment.NewLine, summary.Timing.Report());
 
+            // A RUN THAT LOST ITEMS IS NOT A CLEAN RUN, and this used to return 0
+            // regardless. Exit 4 is documented as "ingestion failed", and the
+            // genesis prompt spells it out further as "Graph rejected an item" -
+            // so returning 0 after Graph rejected some was never a policy choice,
+            // it was the code disagreeing with its own contract.
+            //
+            // It mattered: a throttled run refused 191 items, logged them at
+            // Information among fourteen other counters, exited 0 and recorded
+            // itself as succeeded. Every signal an operator has said the run was
+            // fine while 191 rows were absent from the index - and absent
+            // silently, because a failed write records no hash, so nothing about
+            // the corpus looks wrong afterwards either.
+            //
+            // Deliberately not a new exit code. PRODUCTION-ONBOARDING 5.1 asks
+            // for codes that route to different people, and this routes to the
+            // same person as any other ingestion failure: whoever owns the data
+            // path. Inventing a fifth code would split one audience in two.
+            if (summary.Failed > 0)
+            {
+                Log.Error(
+                    "{Failed} item(s) were refused and are NOT in the index. The run is otherwise complete: " +
+                    "{Written} item(s) were written and their hashes recorded, so a later run will retry only " +
+                    "the refused ones. Exit code 4.",
+                    summary.Failed,
+                    summary.Total);
+
+                return 4;
+            }
+
             return 0;
         }
         catch (AuthenticationFailedException ex)
@@ -389,10 +418,18 @@ public static class PushHost
     /// <returns>The configured logger.</returns>
     public static Serilog.Core.Logger CreateLogger(string executable)
     {
+        // The file template carries RunId and the console one does not. The file
+        // is what gets read beside a dashboard row hours later, where "which run
+        // was this?" is the whole question; the console is watched live by
+        // somebody who already knows. {RunId} renders empty outside a run and as
+        // a bare number inside one, so the prefix is written to disappear rather
+        // than leave a dangling bracket on startup lines.
         return ConfigurePushPipeline(new LoggerConfiguration())
             .WriteTo.Console(outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
             .WriteTo.File(
                 Path.Combine(AppContext.BaseDirectory, "Logs", executable + ".log"),
+                outputTemplate:
+                    "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {RunTag}{Message:lj}{NewLine}{Exception}",
                 fileSizeLimitBytes: 10L * 1024 * 1024,
                 rollOnFileSizeLimit: true,
                 retainedFileCountLimit: 30,
@@ -412,6 +449,12 @@ public static class PushHost
         return configuration
             .MinimumLevel.Information()
             .Enrich.With(new ScrubbingEnricher())
+
+            // Carries RunId, pushed by PushEngine for the life of a run, onto
+            // every event raised inside it - including the batch writer's, which
+            // logs through its own ILogger and would not inherit a ForContext on
+            // the engine's. Without this the enrichment silently does nothing.
+            .Enrich.FromLogContext()
 
             // The engine logs item IDs and counts, never objects - but that is a
             // convention, and conventions drift. These registrations make the

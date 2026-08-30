@@ -133,8 +133,40 @@ namespace SqlTicketsConnector.Tests.TestSupport
         /// </remarks>
         public List<int> BatchSizes { get; } = new List<int>();
 
-        public ISerializationWriterFactory SerializationWriterFactory =>
-            new global::Microsoft.Kiota.Serialization.Json.JsonSerializationWriterFactory();
+        /// <summary>
+        /// The same writer factory a real GraphServiceClient builds: JSON,
+        /// wrapped so the backing store is honoured.
+        /// </summary>
+        /// <remarks>
+        /// THE WRAPPER IS THE POINT, and its absence hid a defect for the life
+        /// of this project. Graph SDK models are backed models, and this proxy is
+        /// what makes a second serialization of the same instance emit only what
+        /// changed since - which, for an object nobody touched, is nothing.
+        /// GraphServiceClient installs it; a bare JsonSerializationWriterFactory
+        /// does not.
+        ///
+        /// So every test here serialized in full every time, however many
+        /// attempts an item took, and the harness could not express the failure
+        /// where a retried item loses its ACL and Graph refuses it 400. That
+        /// failure reached a tenant instead, on the first run that was ever
+        /// throttled, and cost 191 items under a run that reported success.
+        ///
+        /// A fake that is easier to satisfy than the real thing is a fake that
+        /// certifies code the real thing rejects.
+        /// </remarks>
+        public ISerializationWriterFactory SerializationWriterFactory
+        {
+            get
+            {
+                var registry = new global::Microsoft.Kiota.Abstractions.Serialization.SerializationWriterFactoryRegistry();
+
+                registry.ContentTypeAssociatedFactories["application/json"] =
+                    new global::Microsoft.Kiota.Serialization.Json.JsonSerializationWriterFactory();
+
+                return global::Microsoft.Kiota.Abstractions.ApiClientBuilder
+                    .EnableBackingStoreForSerializationWriterFactory(registry);
+            }
+        }
 
         public string BaseUrl { get; set; } = "https://graph.microsoft.com/v1.0";
 

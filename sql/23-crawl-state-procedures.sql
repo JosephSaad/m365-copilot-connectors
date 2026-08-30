@@ -39,6 +39,29 @@
 USE [ConnectorState];
 GO
 
+-- ---------------------------------------------------------------------------
+-- SET OPTIONS ARE STORED WITH THE MODULE, NOT SUPPLIED BY THE CALLER.
+--
+-- SQL Server records QUOTED_IDENTIFIER as it stands in THIS session at CREATE
+-- time and replays that stored setting every time the module runs, ignoring
+-- whatever the caller has set. sqlcmd connects with it OFF; SSMS connects with
+-- it ON. The same script therefore yields a working module from a query window
+-- and a broken one from the command line, and the deployment output is
+-- identical either way.
+--
+-- crawl.Item carries a filtered index, and any UPDATE against a table carrying one is refused
+-- unless QUOTED_IDENTIFIER was ON at CREATE time:
+--   "UPDATE failed because the following SET options have incorrect settings"
+-- The refusal lands at EXECUTION, not deployment. The deploy reports success,
+-- and the failure surfaces later in an application that has not changed - which
+-- is as far from the cause as this failure mode can put you.
+--
+-- Setting it here makes the stored setting independent of who ran the script.
+-- Verify with sys.sql_modules.uses_quoted_identifier; sql/30 checks it.
+-- ---------------------------------------------------------------------------
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
 /* ===========================================================================
    CONNECTION LIFECYCLE
    =========================================================================== */
@@ -233,8 +256,23 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
+    -- 2 SUCCEEDED, 5 PARTIAL. A run that finished with items refused is not a
+    -- success, and the word matters more than it looks: succeeded is the one
+    -- value that stops anybody looking, and a refused write records no hash, so
+    -- the corpus does not look wrong afterwards either. The first run to hit
+    -- this refused 191 items and was stored as a success.
+    --
+    -- Not 3. Failed means the run died - no totals, an ErrorKind, a crawl to
+    -- repeat in full. A partial run completed, kept every hash it earned, and
+    -- needs only its refused items retried, which the next run does by itself.
+    -- Collapsing the two would send somebody to repeat a crawl that does not
+    -- need repeating.
+    --
+    -- Status 5 needs sql/29, which widens CK_Run_Status. Without it this
+    -- UPDATE throws on the first partial run rather than silently storing a
+    -- success, which is the right way round for a missing migration.
     UPDATE  [crawl].[Run]
-    SET     Status         = 2,
+    SET     Status         = CASE WHEN @ItemsFailed > 0 THEN 5 ELSE 2 END,
             CompletedUtc   = SYSUTCDATETIME(),
             ItemsRead      = @ItemsRead,
             ItemsWritten   = @ItemsWritten,
@@ -534,10 +572,23 @@ BEGIN
 
     IF @OverrideGuard = 0 AND @MissingPercent > @MaxDeletePercent
     BEGIN
+        -- THE PERCENT SIGNS ARE DOUBLED, AND THEY HAVE TO BE. An error message
+        -- is a format string, so a lone % is read as a specifier: it is
+        -- swallowed, and a sequence like '%)' destroys the rest of the message.
+        -- This message is almost nothing but percentages, so undoubled it
+        -- arrives EMPTY - the exception raises, the guard holds, and the
+        -- operator is told only that error 50007 happened.
+        --
+        -- That is the worst message in this file to lose. Every other THROW
+        -- here is a literal with no % in it; this is the only one that needs
+        -- the doubling, and it is the one refusal whose whole value is the two
+        -- numbers it carries. It was found by tripping the guard deliberately
+        -- and reading what came back, which is the only way it could be found:
+        -- the SQL is valid, the exception is correct, and the text is empty.
         DECLARE @Message NVARCHAR(2000) =
             CONCAT(N'Delete sweep refused. It would remove ', @MissingCount, N' of ', @LiveCount,
-                   N' live items (', @MissingPercent, N'%), above the ', @MaxDeletePercent,
-                   N'% guard. This is far more likely to be a source that returned too few rows - ',
+                   N' live items (', @MissingPercent, N'%%), above the ', @MaxDeletePercent,
+                   N'%% guard. This is far more likely to be a source that returned too few rows - ',
                    N'a dropped view, a revoked permission, a filter that matched nothing - than a ',
                    N'real deletion of that size. Verify the source count, then re-run with the ',
                    N'guard raised deliberately.');

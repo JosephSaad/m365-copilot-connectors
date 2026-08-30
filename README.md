@@ -138,6 +138,9 @@ docs/
   CRAWL-STATE-REFERENCE.md             Every table, view and procedure in the state database, with parameters
   SOURCE-CONTRACT.md                   What a source must guarantee before a push can detect deletes or resume
   ASSUMPTIONS.md                       Decisions, deviations, open questions
+  GO-LIVE-READINESS.md                 Every feature: built, part-built, not built — and the six verification
+                                       tasks between this release and a supported service
+  PRODUCTION-ONBOARDING.md             The other half: who owns the connection, who is woken, what is accepted
   ADDING-A-PUSH-CONNECTOR.md           One class and one config file: the recipe and the reasoning
   COPILOT-ROUTING.md                   Connector, action, MCP or Foundry - the decision upstream of this repository
   copilot-router.html                 The Copilot Router: a 19 question router, the tree, and the matrices
@@ -217,7 +220,7 @@ hadoop/
   03-Start-LocalWebHdfsStub.ps1        A loopback-only WebHDFS test double, for a laptop with no cluster
   04-create-atlas-test-metadata.sh     Descriptions, owners, classifications and terms for the catalogue to find
 tests/
-  SqlTicketsConnector.Tests/           309 tests, no live tenant, vault, database or cluster
+  SqlTicketsConnector.Tests/           326 tests, no live tenant, vault, database or cluster
     CdpAclMaskTests.cs                 The POSIX ACL mask, where this connector's worst over-grant lived
     CdpRangerFidelityTests.cs          Reading a Ranger policy the way Ranger reads it
     CdpHiveWatermarkTests.cs           The Hive marker, round tripped through a checkpoint into the next query

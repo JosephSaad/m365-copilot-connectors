@@ -30,6 +30,29 @@
 USE [ConnectorState];
 GO
 
+-- ---------------------------------------------------------------------------
+-- SET OPTIONS ARE STORED WITH THE MODULE, NOT SUPPLIED BY THE CALLER.
+--
+-- SQL Server records QUOTED_IDENTIFIER as it stands in THIS session at CREATE
+-- time and replays that stored setting every time the module runs, ignoring
+-- whatever the caller has set. sqlcmd connects with it OFF; SSMS connects with
+-- it ON. The same script therefore yields a working module from a query window
+-- and a broken one from the command line, and the deployment output is
+-- identical either way.
+--
+-- crawl.Item carries a filtered index, and any UPDATE against a table carrying one is refused
+-- unless QUOTED_IDENTIFIER was ON at CREATE time:
+--   "UPDATE failed because the following SET options have incorrect settings"
+-- The refusal lands at EXECUTION, not deployment. The deploy reports success,
+-- and the failure surfaces later in an application that has not changed - which
+-- is as far from the cause as this failure mode can put you.
+--
+-- Setting it here makes the stored setting independent of who ran the script.
+-- Verify with sys.sql_modules.uses_quoted_identifier; sql/30 checks it.
+-- ---------------------------------------------------------------------------
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
 /* ---------------------------------------------------------------------------
    1. crawl.vwRunHistory
 
@@ -52,8 +75,9 @@ SELECT
     c.DisplayName,
     c.ConnectorKey,
     CASE r.Mode   WHEN 1 THEN N'full'    WHEN 2 THEN N'incremental' END      AS Mode,
-    CASE r.Status WHEN 1 THEN N'running' WHEN 2 THEN N'succeeded'
-                  WHEN 3 THEN N'failed'  WHEN 4 THEN N'abandoned'   END      AS Status,
+    CASE r.Status WHEN 1 THEN N'running'   WHEN 2 THEN N'succeeded'
+                  WHEN 3 THEN N'failed'    WHEN 4 THEN N'abandoned'
+                  WHEN 5 THEN N'partial'   END                      AS Status,
     r.IsDryRun,
     r.StartedUtc,
     r.CompletedUtc,
@@ -146,8 +170,9 @@ SELECT
     c.ExpectedIntervalMinutes,
 
     lr.RunId                                                        AS LastRunId,
-    CASE lr.Status WHEN 1 THEN N'running' WHEN 2 THEN N'succeeded'
-                   WHEN 3 THEN N'failed'  WHEN 4 THEN N'abandoned' END AS LastRunStatus,
+    CASE lr.Status WHEN 1 THEN N'running'   WHEN 2 THEN N'succeeded'
+                   WHEN 3 THEN N'failed'    WHEN 4 THEN N'abandoned'
+                   WHEN 5 THEN N'partial'   END AS LastRunStatus,
     lr.StartedUtc                                                   AS LastRunStartedUtc,
     ls.CompletedUtc                                                 AS LastSuccessUtc,
     DATEDIFF(MINUTE, ls.CompletedUtc, SYSUTCDATETIME())             AS MinutesSinceLastSuccess,
@@ -165,6 +190,17 @@ SELECT
         WHEN lr.RunId IS NULL                      THEN N'never run'
         WHEN lr.Status = 1                         THEN N'running'
         WHEN ISNULL(fs.ConsecutiveFailures, 0) > 0 THEN N'failing'
+
+        -- Below 'failing' and above 'late': a connection whose most recent run
+        -- lost items is not healthy, and is not failing either. Ranked here
+        -- because a run that DIED is the more urgent of the two - this one at
+        -- least wrote what it could - while both outrank a schedule that has
+        -- merely slipped.
+        --
+        -- Keyed on the LAST run only. Items refused three runs ago were retried
+        -- since, because a refused write records no hash; leaving the word on
+        -- would make it permanent and unactionable.
+        WHEN lr.Status = 5                         THEN N'items refused'
         WHEN c.ExpectedIntervalMinutes IS NOT NULL
              AND DATEDIFF(MINUTE, ls.CompletedUtc, SYSUTCDATETIME())
                  > c.ExpectedIntervalMinutes * 2   THEN N'late'

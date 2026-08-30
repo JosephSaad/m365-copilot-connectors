@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Shared client-credentials authentication for the SqlGraphPush diagnostic
     scripts. Dot-source it; it defines functions and does nothing on its own.
@@ -236,6 +236,14 @@ function Get-StoredClientSecret {
     if (-not $onWindows) { return $null }
 
     if (-not ('SqlConnectorCredMan' -as [type])) {
+        # NO -UsingNamespace HERE. Add-Type -MemberDefinition already emits
+        # "using System.Runtime.InteropServices;", so naming it again is a
+        # duplicate using directive - CS0105. Windows PowerShell 5.1 compiles
+        # with warnings-as-errors and Roslyn raises it as an error outright, so
+        # this fails on both: the type is never defined, CredReadW is never
+        # reachable, and the function falls through to prompting - the one
+        # outcome it exists to prevent, since a prompt tests the secret somebody
+        # typed rather than the one the tool reads at startup.
         Add-Type -Namespace '' -Name 'SqlConnectorCredMan' -MemberDefinition @'
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
 public struct CREDENTIAL
@@ -259,7 +267,7 @@ public static extern bool CredReadW(string target, uint type, uint flags, out In
 
 [DllImport("advapi32.dll")]
 public static extern void CredFree(IntPtr buffer);
-'@ -UsingNamespace 'System.Runtime.InteropServices'
+'@
     }
 
     $handle = [IntPtr]::Zero

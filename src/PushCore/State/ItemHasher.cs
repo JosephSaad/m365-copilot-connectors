@@ -57,6 +57,32 @@ public static class ItemHasher
     /// </remarks>
     public const int HashBytes = 32;
 
+    /// <summary>The version of the hash framing this build produces.</summary>
+    /// <remarks>
+    /// INCREMENT THIS whenever a change here would make an unchanged item hash
+    /// differently: a new field, a different separator, another normalisation
+    /// rule, a change to how a type is rendered. It is not a version of this
+    /// file - editing a comment does not move it - it is a version of the
+    /// ANSWER, and the test is whether an item that did not change would still
+    /// produce the same bytes.
+    ///
+    /// Forgetting is the expensive mistake and it is silent. Every stored hash
+    /// stops matching at once, so the next run rewrites the entire corpus and
+    /// reports complete success: no error, no bad item, just a day of write
+    /// quota and a slow night that nothing connects to a code change. Moving
+    /// this number makes the same event announce itself, escalate to a full
+    /// crawl on purpose, and appear in the log as a migration.
+    ///
+    /// Recorded per connection rather than per item, in crawl.Connection - see
+    /// sql/28 for why, and for what that trades away.
+    ///
+    /// 1: the original framing, including the v1.3.1 fix that stopped an
+    ///    Unspecified DateTime being shifted by the host's offset. That fix
+    ///    changed the answer and predates this constant, which is why the
+    ///    history starts here rather than at 2.
+    /// </remarks>
+    public const int HashVersion = 1;
+
     /// <summary>Hashes everything about an item except its grants.</summary>
     /// <param name="itemId">The external item ID.</param>
     /// <param name="itemType">The item's declared type.</param>

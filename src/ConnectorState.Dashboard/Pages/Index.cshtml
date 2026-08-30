@@ -41,9 +41,17 @@
             <div class="tile-sub">@windowLabel</div>
         </div>
         <div class="tile">
+            @* Written and Unchanged are sums across every run in the window; Live
+               items beside them is a count of rows in crawl.Item. Naming the run
+               count is what keeps a reader from comparing the two: an item skipped
+               in three runs is counted three times here, so this figure passing the
+               corpus size is normal and not a fault. *@
             <div class="tile-label">Unchanged</div>
             <div class="tile-figure">@Format.Count(tiles.ItemsUnchangedInWindow)</div>
-            <div class="tile-sub">already current, not re-sent</div>
+            <div class="tile-sub">
+                already current, not re-sent, over @Format.Count(tiles.RunsInWindow)
+                run@(tiles.RunsInWindow == 1 ? string.Empty : "s")
+            </div>
         </div>
         <div class="tile">
             <div class="tile-label">Unchanged share</div>
@@ -69,7 +77,16 @@
             <div class="tile-figure @(tiles.ThrottleWaitsInWindow > 0 ? "is-warn" : null)">
                 @Format.Count(tiles.ThrottleWaitsInWindow)
             </div>
-            <div class="tile-sub">429 and 5xx backoffs</div>
+            @* 429 ONLY, and the label used to say "429 and 5xx backoffs". It
+               does not count 5xx: both write paths increment this on 429 and
+               record a crawl.ThrottleEvent for every retryable status, so a run
+               that backed off a 504 shows 0 here with the event on record. This
+               rig has exactly that - a 504 stored against run 1 under a tile
+               reading zero - and "no throttling happened" is the wrong thing for
+               an operator to conclude from it. *@
+            <div class="tile-sub">
+                429s only &middot; <a href="/Runs">all backoffs per run</a>
+            </div>
         </div>
         <div class="tile">
             <div class="tile-label">Needs attention</div>

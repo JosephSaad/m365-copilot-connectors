@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Proves the Cloudera cluster is reachable AS THE SERVICE IDENTITY before the
     first crawl: Kerberos, HttpFS, Ranger and, when asked, the Hive ODBC driver.

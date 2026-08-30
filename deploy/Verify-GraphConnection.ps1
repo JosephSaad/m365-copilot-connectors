@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Verifies the Copilot connection exists, its schema is registered, and items
     were actually ingested — using only operations the Graph API documents.

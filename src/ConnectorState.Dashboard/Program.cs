@@ -50,6 +50,7 @@
 // query is written. The pages say so where somebody would otherwise expect it.
 // ---------------------------------------------------------------------------
 
+using ConnectorState.Dashboard;
 using ConnectorState.Dashboard.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Server.IISIntegration;
@@ -65,15 +66,24 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 // not have to be revisited if the site is moved between them.
 builder.Services.AddAuthentication(IISDefaults.AuthenticationScheme);
 
+// Who may read crawl state, over and above being authenticated. Left empty the
+// site behaves as it always has: any authenticated user. Set to one or more
+// group names and membership is required as well.
+//
+// It is a list of names rather than a single one because a reader group and an
+// operations group are the normal shape, and because the alternative - one group
+// with everybody nested inside it - is a directory change rather than a
+// configuration change, and needs somebody else's approval on the day.
+string[] readerGroups = builder.Configuration
+    .GetSection(ReaderPolicy.ConfigurationPath)
+    .Get<string[]>() ?? Array.Empty<string>();
+
+// The rule itself is in ReaderPolicy, so it can be tested. Its negative case -
+// somebody outside every configured group being refused - is the half that
+// matters and the half a running site cannot show you without a second person.
 builder.Services.AddAuthorization(options =>
 {
-    // A FALLBACK policy rather than an attribute per page. An attribute is
-    // something a new page can forget; a fallback applies to every endpoint that
-    // does not opt out, so adding a page cannot accidentally add an anonymous
-    // one.
-    options.FallbackPolicy = new AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser()
-        .Build();
+    options.FallbackPolicy = ReaderPolicy.Build(readerGroups);
 });
 
 builder.Services.AddRazorPages();
@@ -90,6 +100,14 @@ builder.Services
     .Validate(
         options => options.CommandTimeoutSeconds > 0 && options.ConnectTimeoutSeconds > 0,
         "CrawlState timeouts must be greater than zero.")
+
+    // Zero is off; anything else has to be long enough to read the page. A
+    // negative or one-second value renders a meta refresh the browser obeys
+    // immediately, which is a site nobody can use and an unbounded query load
+    // on the state database.
+    .Validate(
+        options => options.AutoRefreshSeconds == 0 || options.AutoRefreshSeconds >= 10,
+        "CrawlState:AutoRefreshSeconds must be 0 to disable, or at least 10 seconds.")
 
     // Fail at startup, not on the first page load. A dashboard that starts and
     // then 500s is a dashboard somebody has to open to discover is misconfigured.

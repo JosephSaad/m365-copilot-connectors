@@ -52,6 +52,21 @@ public sealed class NullCrawlStateStore : ICrawlStateStore
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Always false. Without a store there are no hashes on record, so there is
+    /// no framing to have changed and nothing to migrate - every item is written
+    /// on every run already, which is the outcome a version change forces
+    /// anyway.
+    /// </remarks>
+    public Task<bool> CheckHashVersionAsync(
+        string connectionId,
+        int hashVersion,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult(false);
+    }
+
+    /// <inheritdoc/>
     public Task<IReadOnlyDictionary<string, CrawlItemState>> GetItemStatesAsync(
         IReadOnlyCollection<string> itemIds, CancellationToken cancellationToken)
     {
