@@ -621,10 +621,38 @@ jobs:
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path staged | Out-Null
           $sql = Get-Content sql/20-crawl-state-database.sql -Raw
-          $sql = $sql -replace '(?ms)^\s*ON PRIMARY.*?(?=^\s*(GO|ALTER|--))', ''
-          $sql = $sql -replace '(?ms)^\s*LOG ON.*?(?=^\s*(GO|ALTER|--))', ''
+
+          # ONE DETERMINISTIC REPLACEMENT OF THE WHOLE STATEMENT, and the
+          # previous two-regex version is why this comment is long.
+          #
+          # It stripped from "ON PRIMARY" to the next line beginning GO, ALTER
+          # or "--". The nearest such line is the GO *after* the guard's END, so
+          # the strip ate the END as well and produced
+          #
+          #     IF DB_ID(N'ConnectorState') IS NULL
+          #     BEGIN
+          #         CREATE DATABASE [ConnectorState]
+          #     GO
+          #
+          # - an unterminated BEGIN. sqlcmd answered "Msg 102 ... Incorrect
+          # syntax near 'ConnectorState'", the database was never created, and
+          # all eleven scripts after it failed with "Cannot open database". This
+          # job had been red on every run for weeks and the visible errors were
+          # eleven login failures pointing at nothing.
+          #
+          # Matching the statement from CREATE DATABASE to its own terminating
+          # semicolon cannot eat a neighbour, whatever gets added around it.
+          $sql = [regex]::Replace(
+            $sql,
+            '(?ms)(CREATE\s+DATABASE\s+\[\w+\])\s*ON\s+PRIMARY\s*\(.*?\)\s*LOG\s+ON\s*\(.*?\)\s*;',
+            '$1;')
+
+          if ($sql -match 'D:\\SQL') {
+            throw 'Staging sql/20 left a D: path behind. The CREATE DATABASE statement did not match the pattern above, so this run would fail on a runner that has no D: drive.'
+          }
+
           Set-Content -Path staged/20-crawl-state-database.sql -Value $sql -Encoding UTF8
-          Write-Host 'Staged sql/20 without the D: file clauses.'
+          Write-Host 'Staged sql/20 with the instance default file locations.'
 
       # THE ORDER BELOW IS THE ONE IN docs/CRAWL-STATE-DEPLOYMENT.md, AND IT HAS
       # TO BE. This step used to run 21, 22, 23, 24, 28 and stop, which is not
@@ -660,7 +688,18 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $server = '(localdb)\MSSQLLocalDB'
+
           sqlcmd -S $server -i staged/20-crawl-state-database.sql -b
+          if ($LASTEXITCODE -ne 0) { throw "sql/20 failed with exit $LASTEXITCODE. Nothing after it can work: every later script opens the database this one creates." }
+
+          # Asserted rather than assumed. sqlcmd printed a syntax error here for
+          # weeks and the loop below carried on regardless, so the visible
+          # failure was eleven "Cannot open database" lines that read like a
+          # permissions problem and pointed nowhere near the real fault.
+          $exists = sqlcmd -S $server -h -1 -W -b -Q "SET NOCOUNT ON; SELECT CASE WHEN DB_ID('ConnectorState') IS NULL THEN 'no' ELSE 'yes' END;" |
+                      Where-Object { $_ -match '^(yes|no)$' } | Select-Object -First 1
+          if ($exists -ne 'yes') { throw 'sql/20 reported success but ConnectorState does not exist. Look at the staging step above, not at permissions.' }
+
           foreach ($f in @(
               'sql/21-crawl-state-tables.sql',
               'sql/22-crawl-state-views.sql',
@@ -675,6 +714,11 @@ jobs:
               'sql/43-crawl-state-run-lock.sql')) {
             Write-Host "== $f =="
             sqlcmd -S $server -d ConnectorState -i $f -b
+
+            # Stop at the first failure. The set is ordered and every script
+            # assumes the one before it, so carrying on turns one real error
+            # into a screenful of consequences and buries the cause.
+            if ($LASTEXITCODE -ne 0) { throw "$f failed with exit $LASTEXITCODE." }
           }
 
       # Step 14 of the documented order, and the one that would have caught the
@@ -791,14 +835,29 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $server = '(localdb)\MSSQLLocalDB'
           sqlcmd -S $server -i staged/20-crawl-state-database.sql -b
+          if ($LASTEXITCODE -ne 0) { throw "sql/20 is not re-runnable: exit $LASTEXITCODE on the second pass." }
+
+          # The SAME list the first pass ran. A second pass over a subset proves
+          # only that the subset is idempotent, and the scripts most likely to
+          # not be - the ones that ALTER a constraint or recreate a table type -
+          # are exactly the ones a short list leaves out.
           foreach ($f in @(
               'sql/21-crawl-state-tables.sql',
               'sql/22-crawl-state-views.sql',
               'sql/23-crawl-state-procedures.sql',
-              'sql/24-crawl-state-reporting.sql')) {
+              'sql/40-crawl-state-per-type-duplicates.sql',
+              'sql/24-crawl-state-reporting.sql',
+              'sql/28-crawl-state-hash-version.sql',
+              'sql/29-crawl-state-partial-status.sql',
+              'sql/33-crawl-state-negative-ttl.sql',
+              'sql/34-crawl-state-live-item-ids.sql',
+              'sql/41-crawl-state-compare-and-see.sql',
+              'sql/43-crawl-state-run-lock.sql')) {
             sqlcmd -S $server -d ConnectorState -i $f -b
+            if ($LASTEXITCODE -ne 0) { throw "$f is not re-runnable: exit $LASTEXITCODE on the second pass." }
           }
           foreach ($f in @('sql/12-timesheet-views.sql', 'sql/26-timesheet-incremental.sql')) {
             sqlcmd -S $server -d Ops -i $f -b
+            if ($LASTEXITCODE -ne 0) { throw "$f is not re-runnable: exit $LASTEXITCODE on the second pass." }
           }
           Write-Host 'Second pass completed without error.'
