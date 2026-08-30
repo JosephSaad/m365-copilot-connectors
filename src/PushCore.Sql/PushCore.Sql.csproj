@@ -28,11 +28,12 @@
 
   <ItemGroup>
     <!--
-      The only package this project adds over PushCore's set. Its version is the
-      one Connector.Security pins, and it stays that way: two versions of
-      SqlClient in one output directory is a load conflict, not a merge.
+      The only package this project adds over PushCore's set. Its version is
+      decided once, in Directory.Packages.props, for every project that names
+      it: two versions of SqlClient in one output directory is a load conflict,
+      not a merge.
     -->
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
   </ItemGroup>
 
   <ItemGroup>

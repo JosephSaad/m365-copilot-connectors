@@ -16,6 +16,11 @@
   flipped and a global.json pins the SDK — one line of difference, so the two
   lines cannot drift apart in anything but that one decision. CI builds and
   tests net9.0 from main as well, so a change here cannot quietly break it.
+
+  Package versions are NOT here. They are in Directory.Packages.props beside
+  this file, which the SDK imports for the same tree and for the same reason:
+  one decision, made once, rather than the same decision repeated in eleven
+  project files. Nothing in this file needs to change when a package moves.
 -->
 <Project>
 
