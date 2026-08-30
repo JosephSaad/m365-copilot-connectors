@@ -5,48 +5,36 @@ description: Every feature in the direct-push path, what is built and what is no
 
 # Go-live readiness
 
-Current release: **v1.4.0**. This document is the state of the direct-push path
+Current release: **v1.5.0**. This document is the state of the direct-push path
 as a whole — what exists, what does not, and what has to happen before it is a
 supported service rather than a release that builds.
 
 It is deliberately blunt about the gap between *built* and *verified*, because
-that gap is the whole risk right now: 17 features are implemented, 3 more are
-part-built, 432 tests pass, **five of the six blockers are closed with the sixth
-part-done**, and **ten of the eleven pre-go-live recommendations are done** — the
-eleventh being the one nobody but the customer can close. **Nine of the eleven live tests now pass**; the two that do not need a machine this one is not — domain principals, and a D: volume. Of the seventeen shipped features, twelve are verified against a live tenant, two partly, and three have never been exercised at all. Every blocker that ran
-found something. Blocker 1 found two defects in
-`sql/26`, one of them silent. Blockers 2 and 5 found the shared ACL that wrote
-441 of 1,118 items and refused the other 677. None was findable by reading the
-code; all are fixed. The full lifecycle now has evidence behind it — write,
-skip-unchanged, delete confirmed gone from the index, and every dashboard page
-rendering it under Windows authentication. What remains is the three caveats on
-row 1. The backoff has now answered a real 429, which no fixture of 1,118 items
-could ever have made it do: a 100-fold corpus made the tenant push back, and the
-first throttled run in this project's history lost 191 items on the spot, to a defect nothing smaller could reach. Those 191 are back: run 21 read all 111,900 rows, rewrote exactly those items in 41 seconds, refused none, and Graph now returns all 191 with their ACLs intact. A run that completes with refusals is no longer filed as a success. The failure views have now been seen — a deliberate
-refusal put the connection into `failing`, raised the attention banner and left
-three failed runs in the history, and a clean run put it back. Every go-live
-blocker below is a verification task. None of them is construction.
+that gap is where this project keeps finding defects. 17 features are
+implemented, 432 tests pass, **five of the six blockers are closed and the sixth
+is down to two caveats no machine outside the customer's can close**, ten of the
+eleven pre-go-live recommendations are done — the eleventh being a number only
+the customer can choose — **nine of the eleven live tests pass**, and **section
+4's backlog is 20 of 21 done**, the twenty-first having been built, measured and
+deliberately declined.
 
-**A deployment defect worth naming separately**, because nothing in the code
-review or the test suite could have reached it. SQL Server stores
-`QUOTED_IDENTIFIER` *with each module*, as it stood in the session that created
-it, and replays that stored value on every execution whatever the caller sets.
-sqlcmd connects with it off; SSMS connects with it on. `crawl.Item` carries a
-filtered index, so every procedure deployed from a command line was refused at
-execution — `uspBeginRun` threw error 1934 and no crawl could open a run. The
-scripts had only ever been deployed from a query window, so the documented
-command-line path had never once produced a working database. All six
-module-creating scripts now set the option, and `sql/30` fails a deployment that
-produces a module without it.
+**Every task that ran found something.** Blocker 1 found two defects in `sql/26`,
+one of them silent. Blockers 2 and 5 found a shared ACL that wrote 441 of 1,118
+items and refused the other 677. A 100-fold corpus made the tenant push back for
+the first time, and the first throttled run in this project's history lost 191
+items on the spot to a defect nothing smaller could reach — those 191 are back,
+and a run that completes with refusals is no longer filed as a success. Deploying
+the scripts from a command line found that the documented command-line path had
+never once produced a working database. Exercising the least-privilege model
+found a procedure the push identity could not execute. None of these was findable
+by reading the code; all are fixed.
 
-The same shape turned up once more in `deploy/GraphPushAuth.ps1`. Its Credential
-Manager reader passed `-UsingNamespace` to `Add-Type` for a namespace `Add-Type`
-already supplies — a duplicate using directive, which Windows PowerShell 5.1
-treats as warning-as-error and Roslyn rejects outright. It failed on every
-supported shell, so `Get-StoredClientSecret` had always fallen through to
-prompting, and every pre-flight that claimed to test the stored secret was
-testing whichever one the operator typed. That is the failure its own
-documentation says it exists to catch.
+**What is left is not construction.** Two things need a machine this one is not:
+a domain where the `CONTOSO\` service accounts exist, and a host with the `D:`
+volumes `sql/20` names. One row needs a proxy to forward through rather than
+merely be pointed at. One number needs re-accepting rather than engineering —
+see the ⚠️ below, because incremental reads have changed what it means. And one
+threshold is a fact about the customer's source that nobody here can supply.
 
 **What this document does not cover.** Every task here is engineering: run it,
 watch it, prove it. None of it establishes who owns the connection, who is woken
@@ -103,25 +91,35 @@ dropped. A column of identical hashes across 1,119 items does prove it: the
 shared-object regression is exactly what would make them diverge. Worth knowing
 that the check exists and where it lives, because it is not in the test suite.
 
-And the sweep runs on a **full** crawl only — but not for the reason this
-paragraph gave before L10 was run. It said that turning `Settings:Incremental`
-on would make deletions arrive weekly, at `Settings:FullEveryHours`. It does not,
-today: setting it changes nothing at all. No shipped connector implements the
-`ChangeMarker` tier, so `PushItem.LastModifiedUtc` is never set and no checkpoint
-is ever saved, and `uspBeginRun` escalates *every* incremental request with no
-checkpoint straight back to full. Two runs with the flag on both recorded
-`Mode = 1`, and `crawl.Checkpoint` is still empty.
+And the sweep runs on a **full** crawl only. This paragraph has now been wrong
+twice in opposite directions, which is worth keeping rather than tidying away.
 
-So the sweep currently fires on every run, and the ACL staleness bound
-[`PRODUCTION-ONBOARDING.md`](PRODUCTION-ONBOARDING.md) row 1.1 asks somebody to
-accept is better than the 168 hours that row quotes. It becomes exactly 168 the
-day a connector reads the marker, and that is the day to revisit the number
-rather than now.
+It first said that turning `Settings:Incremental` on would make deletions arrive
+weekly, at `Settings:FullEveryHours`. L10 showed that setting it changed nothing
+at all: no shipped connector implemented the `ChangeMarker` tier, so
+`PushItem.LastModifiedUtc` was never set, no checkpoint was ever saved, and
+`uspBeginRun` escalated every incremental request straight back to full. Two runs
+with the flag on both recorded `Mode = 1` and `crawl.Checkpoint` stayed empty.
 
+**Both of those are now out of date.** The hierarchy connector reads the marker,
+`crawl.Checkpoint` holds a row, and an incremental run genuinely reads only what
+moved — 111,900 rows down to 0 on an unchanged corpus. So the original sentence
+has become true: with `Settings:Incremental` on, the sweep fires when the
+escalation does, which is `FullEveryHours` or a hash-version change.
+
+⚠️ **That makes the ACL staleness bound due for the revisit this paragraph
+promised.** [`PRODUCTION-ONBOARDING.md`](PRODUCTION-ONBOARDING.md) row 1.1 asks
+somebody to accept a bound, and the note beside it said it "becomes exactly 168
+the day a connector reads the marker, and that is the day to revisit the number
+rather than now". That day has arrived. On a connection running incrementally,
+an ACL change is picked up when the item's own timestamp moves — which an ACL
+change in the *directory* does not do — so the real bound is the full-crawl
+cadence, not the run cadence. Nobody has re-accepted the number against that
+reading, and it is a decision rather than an engineering task.
 | # | Feature | What it means | Status |
 |---|---|---|---|
-| 1 | **SQL scripts executed** | Run `sql/20`–`25` against a real instance and read the verification block each one prints. A syntax error in a `CREATE OR ALTER` batch would leave a procedure absent and only fail later, at the `GRANT`. **Partially done.** `sql/02`, `10`–`13`, `20`–`26` have now been run once against a scratch SQL Server 2025 instance, and `ConnectorState` built out — 8 tables, 6 views, 19 write and 7 reporting procedures. It paid for itself immediately: `sql/26` carried two defects, one of them silent, both fixed in `eb94ab1`. It stays open on three counts. `sql/20` ran from an edited copy, not the repo file, its `D:` paths being placeholders. `sql/01`, `13` and `25` created no principals at all — their `CONTOSO\` logins cannot exist on that machine, and local accounts stood in, so the least-privilege model is deployed but has never been exercised by the accounts it is written for. And the run is reported rather than witnessed. Re-run it where the accounts are real | ⚠️ |
-| 2 | **Live tenant pilot run** | One full crawl of the timesheet fixture against a real connection. Validates the retry removal, `$batch`, hashing and the state store in a single pass, and produces the first attribution table anyone has seen. **Done**, and it validated three of the four: `$batch` (row 5), hashing and the state store (row 3). Attribution tables exist — the first measurements of this pipeline that are not a guess. One item failed in run 1 and *run 2 rewrote it without any source change*, because the store had never recorded a confirmation for it. That is the "record the hash only after Graph confirms" rule working, observed rather than argued. **The retry removal remains unproven**: `throttleWaits=0` across every run, so the engine-owned backoff has still never answered a real 429 | ✅ |
+| 1 | **SQL scripts executed** | Run the state-store scripts against a real instance and read the verification block each one prints. A syntax error in a `CREATE OR ALTER` batch would leave a procedure absent and only fail later, at the `GRANT`. **Substantially done, and it keeps paying.** `sql/02`, `10`–`14`, `20`–`35` and `40`–`42` have now been run against a real instance, most of them repeatedly, with their verification blocks read. Four defects came out of running them that no amount of reading would have found: two in `sql/26`, one silent; the `QUOTED_IDENTIFIER` trap that meant the **documented command-line deployment path had never once produced a working database**; and a missing grant — see below. **One of the three original caveats is now closed.** The least-privilege model had been "deployed but never exercised": `sql/42` exercises it without needing a domain, by impersonating the roles with `EXECUTE AS` and asking `HAS_PERMS_BY_NAME`, and it found `uspListLiveItemIds` **denied to `crawl_writer`** on its first run, because `sql/25` grants by name and knows nothing of procedures added after it. Every crawl here connects as a sysadmin, so nothing else could have noticed. All 20 procedures, 6 table types and 4 denials now verify, and `crawl_reader` is genuinely exercised — the dashboard app-pool identity is a member and renders under it. **Two caveats remain, and neither is closeable on this machine.** `sql/20` still runs from an edited copy because its `D:` paths are placeholders and there is no `D:` volume. And no `CONTOSO\` login exists or can: the roles are proven, the *accounts* are not | ⚠️ |
+| 2 | **Live tenant pilot run** | One full crawl of the timesheet fixture against a real connection. Validates the retry removal, `$batch`, hashing and the state store in a single pass, and produces the first attribution table anyone has seen. **Done**, and it validated three of the four: `$batch` (row 5), hashing and the state store (row 3). Attribution tables exist — the first measurements of this pipeline that are not a guess. One item failed in run 1 and *run 2 rewrote it without any source change*, because the store had never recorded a confirmation for it. That is the "record the hash only after Graph confirms" rule working, observed rather than argued. **The retry removal is now proven, and proving it cost 191 items.** A 100-fold corpus made the tenant push back for the first time in this project's history: 191 sub-requests took a 429 with `Retry-After: 10`, and the engine-owned backoff honoured every one exactly as written. The retry itself then refused all 191 with `400 NullOrEmptyValue` — a defect in serialization, not in the backoff — since fixed, and those 191 have been re-crawled into the index | ✅ |
 | 3 | **Second-run validation** | Re-run immediately and check `UnchangedPercent` in `crawl.vwRunHistory` climbs. Stuck near zero means item IDs are not deterministic and the corpus is being rewritten every run — see [`SOURCE-CONTRACT.md`](SOURCE-CONTRACT.md). **Done, and it climbed to 99.9%.** Run 2 read 1,118 and wrote 1; run 3, after one time entry was inserted, read 1,119 and wrote 3. The item IDs are deterministic and the corpus is not being rewritten. The 3 is the part worth reading twice: the inserted entry, its parent engagement and its grandparent customer, because the `sql/12` views roll `TotalHours` and `ChildCount` upward, so one insert genuinely changes three items. The engine knows nothing of the hierarchy — it hashed all 1,119 and found the three that differed. Wall clock fell 77s → 10s → 3s as the work shrank to what had actually changed | ✅ |
 | 4 | **Delete detection rehearsal** | Remove a fixture row, run a full crawl, watch the sweep remove it from the index. **Done, and verified on three surfaces with a control.** One time entry soft-deleted at the source, so it fell out of the views; run 4 read 1,118, logged "Delete sweep: 1 item(s) the source no longer returns", and reported `deleted=1`. After it: `crawl.Item` state 3 with `PendingSinceUtc` NULL, and the item **404 in the Graph index** — the proof that matters, since the other two are the connector agreeing with itself. The control item beside it was untouched, and the 2 rewrites were the parent engagement and grandparent customer, the rollups changing back exactly as they changed in run 3. The guard was never near firing: 1 of 1,119 is 0.09% against `MaxDeletePercent` 10 | ✅ |
 | 5 | **`$batch` live validation** | **Done.** The default write path has now spoken to Graph: 1,118 items in 56 batches, zero failures, at 8 writers and again at 16. It did not pass first time — the run it was meant to validate is the one that exposed the shared-ACL defect fixed in `44e464f`, writing 441 and refusing 677, which is the whole argument for this row existing. One clause of it is still untested: `Settings:Batch = false` is named here as the rehearsed fallback and has not actually been rehearsed. Also note `throttleWaits=0` throughout, so the backoff path is unexercised — 16 writers × 20 sub-requests is nominally far above the 25 concurrent operations per connection the clamp's own warning cites, and a quiet tenant is not evidence that a busy one will agree | ✅ |
@@ -197,13 +195,13 @@ The foundation. All of it rides on the verification above.
 | Delete detection | Inventory diff after a full crawl. The source is never asked whether a record was deleted and needs no soft-delete column | ✅ | **PASSED** — see blocker 4. The item left the index and Graph returned 404 for it |
 | Delete guard | Refuses a sweep after an incremental run outright, and one that would remove more than `Settings:MaxDeletePercent` of the live corpus | ✅ | **PASSED** — tripped deliberately at `MaxDeletePercent = 0`: exit 4, nothing marked pending, the store unchanged. "Refuses a sweep after an incremental run outright" is untested because no incremental run can occur — see L10 |
 | Checkpointing | Composite `(marker, id)` marker, forward-only, frozen for the rest of a run once anything is refused so it cannot pass a gap | ✅ | **PASSED — `crawl.Checkpoint` holds a row for the first time in this project's history.** It had been empty across every run because no shipped connector set `PushItem.LastModifiedUtc`; the hierarchy connector's incremental source now does. Current marker `(2026-08-30 14:36:47.583, time5003)` from run 47, `RunCount` 5,613. The forward-only rule was met head-on while staging the resume test: `uspSaveCheckpoint` **refuses a backwards move**, so rewinding for the test needed a direct `UPDATE`. The composite half is proven by a resume cut inside an 85-item tie group — 60 + 102 = 162 with **0 overlap**. One measured caveat: saves are per write chunk of 20, not per lookup window, so a bootstrap run makes ~5,595 checkpoint round trips and steady state makes about one | |
-| Duplicate detection | Per-run identifier set held on the reading thread, counted and logged | ✅ | **NOT EXERCISED** — `duplicates=0` on every run; no source has offered the same identifier twice |
+| Duplicate detection | Per-run identifier set held on the reading thread, counted and logged | ✅ | **PASSED.** A projection repeating three customers and two time entries was crawled: all five detected, warned individually by ID and row ordinal, and counted — `duplicates=5` at run level and `Customer 3 / Engagement 0 / TimeEntry 2` per kind. Deliberately not five of one kind, because a single-kind fixture cannot distinguish a correct implementation from one that files every duplicate under whichever type it saw first. It also exposed an arithmetic defect in the summary line, since fixed: `distinct items` was computed from writes rather than rows read and reported **-5** |
 | Run history | Per connection, per run, per item type, with the timing attribution and raw throttling events persisted | ✅ | **PASSED** — 21 runs with per-item-type breakdowns, phase-timing rows and the throttle events behind them. A run that completes with refusals is now recorded `partial` (status 5) rather than `succeeded`, and the connection reads `items refused` until a later run clears it — see `sql/29`. Run 20 is the one row in the history carrying it |
 | Dashboard | Seven read-only Razor Pages, every list paged in the database, two roles that share no permission | ✅ | **PASSED** — all seven pages against real data (blocker 6), and the authorisation rule proven live (L4). Since extended with a **machine-readable `/health` endpoint** and **viewer-timezone rendering**: timestamps are converted individually with `ConvertTimeFromUtc` (never one cached offset, which would render a DST-spanning run inconsistently) and the zone is **named on the page**, because "14:32" is ambiguous and dangerous on a page about run timing. The zone is genuinely detected from the browser, which cost one `'sha256-'` CSP source rather than `script-src 'self'` — one script body, not every file in `wwwroot`. The UTC switch is a plain link and works with scripting disabled |
 | Throttle telemetry | Every 429 and 5xx buffered with its real timestamp and flushed once at run close, never on the hot path | ✅ | **PASSED at scale** — 191 events buffered with their real timestamps, endpoint and attempt number, flushed once at run close. It also exposed a mislabelled tile: the figure counts 429s only while the label claimed 429 and 5xx, and this rig had a 504 on record under a tile reading zero |
 | Timing attribution | p50/p95/p99/max per phase with a verdict that states the precondition it rests on | ✅ | **PASSED** — p50/p95/p99/max per phase over 111,709 rows, with the verdict stating its precondition: "191 of 111709 row(s) (0.2%) slept at least once; backoff is 0.0% of per-row time" |
-| Safe degradation | No `Settings:StateConnectionString` gives exactly the pre-v1.3 behaviour. A connection string carrying a password is refused | ✅ | **PARTIAL** — runs before the store was configured wrote every item every time and deleted nothing, exactly as described. The other half, that a connection string carrying a password is refused, has not been tested |
-| Single controlled egress | `Settings:GraphProxy` forces all Graph traffic through one proxy | ✅ | **NOT EXERCISED** — `Settings:GraphProxy` has never been set. Carried forward as one of the six things this rig cannot prove |
+| Safe degradation | No `Settings:StateConnectionString` gives exactly the pre-v1.3 behaviour. A connection string carrying a password is refused | ✅ | **PASSED, both halves.** Runs before the store was configured wrote every item every time and deleted nothing, exactly as described. The password refusal is now a parsed check rather than a substring match, with 13 tests — and the parse matters in both directions: the old check produced **false positives** on `Server=pwd-sql01`, `Database=PasswordVault` and a quoted catalog containing the word, and **silently accepted** a malformed string that would have failed at the first connect instead. Not exercised against a live server, which needs a deployment that actually withholds the password |
+| Single controlled egress | `Settings:GraphProxy` forces all Graph traffic through one proxy | ✅ | **PARTIAL — the setting is proven to take effect; a working proxy is not.** Pointed at `http://127.0.0.1:9`, a port with nothing listening, the Graph call was refused **by that address**: *"No connection could be made because the target machine actively refused it. (127.0.0.1:9)"*. That rules out the failure mode worth ruling out — a setting that is read, validated and then never applied, which would send traffic straight to `graph.microsoft.com` while the configuration says otherwise and nothing in the log disagrees. What it does not prove is that a real proxy forwards, authenticates and returns correctly, which needs a proxy this rig does not have | |
 | Logging redaction | No item content or property values in logs; enforced by a tripwire test over every source file | ✅ | **PASSED at scale** — a 327 KB live log over ~16,000 written items searched for a real narrative fragment, a real customer note and any consultant email address: zero hits for all three |
 | Dry run | Schema and mapping proven with no writes and no state recorded | ✅ | **PASSED** — runs 8 and 18 recorded no item state and no checkpoint. Note the run row still reports `ItemsWritten`, being what it *would* have written; the dashboard excludes dry runs from every average for that reason |
 
@@ -284,7 +282,7 @@ Both looked like passes.
 
 | # | Test | Pass looks like | Why it cannot be done here | Live Test Status |
 |---|---|---|---|---|
-| L1 | Run `sql/25` where the `CONTOSO\` principals are real, then run a crawl as `crawl_writer` and open the dashboard as `crawl_reader` | The crawl writes and the dashboard reads, and *nothing else works*: `crawl_writer` must fail a direct `SELECT` on `crawl.Item`, and `crawl_reader` must fail every write procedure | Domain accounts. CI substitutes nothing and says so; a grant nobody has authenticated against is a claim, not a control | **BLOCKED** — the principals are domain accounts and cannot exist on this machine. Local ones stood in, so the roles exist and `sql/28` granted to `crawl_writer` successfully, but no grant here has been authenticated against by the account it is written for |
+| L1 | Run `sql/25` where the `CONTOSO\` principals are real, then run a crawl as `crawl_writer` and open the dashboard as `crawl_reader` | The crawl writes and the dashboard reads, and *nothing else works* | **STILL BLOCKED on the accounts — but the permission set is no longer untested.** No `CONTOSO\` login exists on this machine or can. What `sql/42` does instead is exercise the *model* without them: it creates two users `WITHOUT LOGIN`, adds them to the roles, and asks `HAS_PERMS_BY_NAME` under `EXECUTE AS` — no domain, no password, and it executes nothing, so it cannot mutate a row. **It found a real defect on its first run**: `uspListLiveItemIds` was denied to `crawl_writer`, because `sql/25` grants by name and knew nothing of a procedure added later. All 20 procedures, 6 table types and 4 denials now verify, and the reader half is genuinely live — the dashboard app-pool identity is a member of `crawl_reader` and renders under it. What remains untested is the thing only a domain can test: that the real service accounts map to these roles and that a crawl completes end to end as `crawl_writer` | |
 | L2 | Run `sql/20` **unedited** on an instance that has the `D:` volumes it names | It creates the database without the placeholder edit every run so far has made | The rig has no `D:`, so every execution to date used a modified copy | **BLOCKED** — no `D:` volume on this box, which is the whole point of the test |
 | L3 | Deploy `sql/27`, then `sp_start_job` it once | `run_status = 1`, and the step history names each connection it purged | LocalDB has no SQL Agent | **PASSED**, after a fix. `sp_add_job` was given a concatenated `@description` and T-SQL takes no expression as a procedure parameter, so the script would not run at all. Corrected, the job deployed, `sp_start_job` returned `run_status = 1`, and the step history read "Purging consultingwork" |
 
@@ -308,7 +306,7 @@ Both looked like passes.
 | # | Test | Pass looks like | Live Test Status |
 |---|---|---|---|
 | L9 | Set `IsDeleted = 0` on the tombstoned time entry and run a full crawl | The item returns and `crawl.Item` moves from state 3 back to live. Resurrection is what `@KeepTombstoneDays` exists for and it has never been exercised | **PASSED** — run 9 wrote exactly 3 items and `time6053` went State 3 to State 1 with `DeletedUtc` cleared. The corpus is 1,119 live and zero tombstoned. The 3 are the entry and its two rollup ancestors, the same lineage the insert and the delete produced, so resurrection costs what a change costs and not a rewrite |
-| L10 | Set `Settings:Incremental = true` and run twice inside `FullEveryHours` | **The pass condition as first written is unreachable, and that is the finding.** It expected an incremental read with no delete sweep. No shipped connector implements the `ChangeMarker` tier, so `PushItem.LastModifiedUtc` is never set, so no checkpoint is ever saved — and `uspBeginRun` escalates any incremental request with no checkpoint to full. Read this row instead as: the escalation guard fires, says why, and records the mode the run will actually read in | **PASSED, against the corrected condition** — runs 10 and 11 both requested Incremental and both recorded `Mode = 1`. `crawl.Checkpoint` is empty and stayed empty. The warning names the cause exactly: "an incremental read with no baseline to be a delta against reads from the beginning of time anyway, so the run is recorded as what it will actually do". Until a connector reads the marker, `Settings:Incremental` changes nothing but the log |
+| L10 | Set `Settings:Incremental = true` and run twice inside `FullEveryHours` | **Now PASSES, having first been unreachable — and both halves are worth keeping.** As first written it expected an incremental read with no delete sweep, and could not get one: no shipped connector implemented the `ChangeMarker` tier, so `PushItem.LastModifiedUtc` was never set, no checkpoint was ever saved, and `uspBeginRun` escalated every incremental request to Full. That was a real finding about the product rather than a broken test. The hierarchy connector now implements the tier: a full crawl followed by an incremental one reads **111,900 rows then 0**, three edits read exactly 3, and a customer rename reads exactly 69. `crawl.Checkpoint` holds a row for the first time. The escalation still fires when it should — a hash-version change or `FullEveryHours` elapsing — which is what keeps the delete sweep correct | |
 | L11 | Deploy `sql/28` to the live `ConnectorState`, then run the connector | No migration is reported, because the framing has not changed. Then set `ItemHasher.HashVersion` to 2 in a scratch build and confirm the next run escalates to full, says so, and reports it only once | **PASSED**, both halves and the rollback. `sql/28` deployed to the live database; the v1 connector then ran and reported nothing, with `HashVersion` staying 1. A scratch build at version 2 reported "The hash framing changed from version 1 to 2", escalated to Full, and its second run said nothing — reported once, as the store advances the version while answering. Running v1 again reported the **downgrade**, 2 to 1, and then fell silent, which is the rollback path behaving the same way in the other direction. Stored version is back at 1. One honest limit: only the constant was moved, not the framing, so the hashes still matched and both runs reported `unchanged=1119, written=0`. This proves the detection, the escalation and the report-once contract; it does not prove the rewrite, which needs a real change to the hasher |
 
 Two notes on the order. L1 first, because it is the only one still holding a

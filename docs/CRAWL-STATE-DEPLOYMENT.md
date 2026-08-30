@@ -107,8 +107,27 @@ rather than being deferred.**
 | 4 | `sql/23-crawl-state-procedures.sql` | Nineteen procedures — the write path | `db_owner` | `ConnectorState` |
 | 5 | `sql/24-crawl-state-reporting.sql` | Seven procedures — the dashboard's read path | `db_owner` | `ConnectorState` |
 | 6 | `sql/25-crawl-state-least-privilege.sql` | Two logins, two users, two roles, the grants and the denials | `securityadmin` **and** `db_owner` — see below | `master`, then `ConnectorState` |
-| 7 | `sql/30-verify-set-options.sql` | Nothing — it checks what the six above created | any reader | `ConnectorState`, and every other database holding modules |
+| 7 | `sql/28-crawl-state-hash-version.sql` | The hash-version column and the check that escalates a run | `db_owner` | `ConnectorState` |
+| 8 | `sql/29-crawl-state-partial-status.sql` | Run status 5, `partial`, and reclassifies existing rows | `db_owner` | `ConnectorState` |
+| 9 | `sql/33-crawl-state-negative-ttl.sql` | The two principal TTL columns and the clamp in `uspCachePrincipal` | `db_owner` | `ConnectorState` |
+| 10 | `sql/34-crawl-state-live-item-ids.sql` | `uspListLiveItemIds`, read-only, for the dry-run delete preview | `db_owner` | `ConnectorState` |
+| 11 | `sql/40-crawl-state-per-type-duplicates.sql` | `ItemsDuplicate`, and **recreates a table type** — see below | `db_owner` | `ConnectorState` |
+| 12 | `sql/41-crawl-state-compare-and-see.sql` | `uspCompareAndSee`, the one-call compare | `db_owner` | `ConnectorState` |
+| 13 | `sql/30-verify-set-options.sql` | Nothing — it checks what everything above created | any reader | `ConnectorState`, and every other database holding modules |
 
+**`sql/40` recreates a table type, which destroys two grants.**
+`crawl.ItemTypeCountList` cannot be altered — only dropped — and it cannot be
+dropped while `uspRecordRunItemTypes` references it, so the script drops the
+procedure, drops and recreates the type, recreates the procedure, and re-grants
+`EXECUTE` to `crawl_writer` on **both**. The type's grant is the one that is easy
+to overlook, because a table type carrying a permission at all is unusual, and
+without it the push identity is refused at the *end* of every run — after the
+crawl has already done all its work. The script verifies both grants and says so.
+
+**Run `sql/30` last, and run it in `Ops` too.** It is cheap, it is read-only, and
+it catches the failure mode that costs the most to diagnose: a module created
+from a client whose `QUOTED_IDENTIFIER` was off, which deploys cleanly and is
+refused at execution days later.
 **`sql/25` needs rights in two places, and its own header understates one of
 them.** The first half runs in `master` and issues `CREATE LOGIN`, which needs
 `ALTER ANY LOGIN` — held by `securityadmin` and `sysadmin` and by nothing at
@@ -122,6 +141,22 @@ usually does exist already, because it is the identity that reads `Ops` — the
 **`sql/26` is not part of this sequence.** It changes the source database, needs
 SQL Server 2022, and can be run before, after or never. [Section
 10](#10-sql26-making-the-timesheet-source-readable-incrementally) covers it.
+
+**Four other scripts run against the SOURCE database, not `ConnectorState`.**
+`sql/12` (the item views) and `sql/26` (the cascading timestamp) are the two the
+connector reads through. `sql/31` and `sql/32` add the trigger health check and
+its SQL Agent job, and are only worth deploying where `sql/26` is — a health
+check for triggers that do not exist reports nothing useful. `sql/35` verifies
+that the incremental view and the full view return the same items and is
+read-only, so it is safe to run at any time and is the thing to run first when an
+incremental crawl reads a number nobody expected.
+
+⚠️ **Do not re-run `sql/26` wholesale against a populated source.** Its backfill
+disables all three triggers and rewrites `EffectiveLastModified` on every row the
+triggers have legitimately moved since the last backfill — 74,034 rows on the
+reference corpus. That opens a window in which the source accepts writes while
+the column stops moving, and invents an enormous delta for the next incremental
+crawl. Deploy the section you changed.
 
 **Re-running.** `sql/21` is guarded object by object and will not alter a table
 that already exists; a schema change ships as its own numbered migration rather

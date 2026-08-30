@@ -76,6 +76,30 @@ PRINT 'crawl.uspListLiveItemIds created or altered.';
 GO
 
 -- ---------------------------------------------------------------------------
+-- The grant, which this script did not have and should have from the start.
+--
+-- sql/25 grants EXECUTE by NAME, so a procedure added after it was written gets
+-- nothing at all. Under least privilege the dry-run delete preview was therefore
+-- refused - and nothing noticed, because every crawl on the reference rig
+-- connects as a sysadmin and no account has ever run as crawl_writer.
+--
+-- Found by impersonating the role with EXECUTE AS and asking
+-- HAS_PERMS_BY_NAME, which is a check that needs no domain, no account and no
+-- password, and which every new procedure in this schema should now face.
+-- ---------------------------------------------------------------------------
+
+IF DATABASE_PRINCIPAL_ID(N'crawl_writer') IS NOT NULL
+BEGIN
+    GRANT EXECUTE ON OBJECT::[crawl].[uspListLiveItemIds] TO [crawl_writer];
+    PRINT 'Granted EXECUTE on uspListLiveItemIds to crawl_writer.';
+END
+ELSE
+BEGIN
+    PRINT 'Role crawl_writer does not exist, so nothing to grant. Run sql/25 if you expected it.';
+END
+GO
+
+-- ---------------------------------------------------------------------------
 -- Verification. The count must match vwItemInventory's live count for the same
 -- connection; if it does not, one of the two is filtering on something the
 -- other is not, and the preview would understate or overstate a deletion.
