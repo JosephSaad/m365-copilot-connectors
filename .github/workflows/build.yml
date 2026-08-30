@@ -795,13 +795,39 @@ jobs:
 
           # A CREATE OR ALTER batch that failed to parse leaves a procedure
           # absent and is otherwise silent until the first EXEC.
+          # THESE NUMBERS ARE FOR THE FULL DOCUMENTED SET, not the five scripts
+          # this job used to run. sql/33 adds crawl.vwPrincipalCacheTtl, which is
+          # why views is 7 and not the 6 sql/22 creates - the old 6 was correct
+          # for a build that stopped at sql/28 and became wrong the moment the
+          # job started running the order an operator actually follows.
+          #
+          # Exact for tables and views, a floor for procedures: a later migration
+          # adding a procedure is routine, while one adding a table or a view is
+          # a schema change that should have to come past this line.
           $tables = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.tables WHERE SCHEMA_NAME(schema_id) = 'crawl';"
           $views  = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.views WHERE SCHEMA_NAME(schema_id) = 'crawl';"
           $procs  = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.procedures WHERE SCHEMA_NAME(schema_id) = 'crawl';"
           Write-Host "crawl schema: $tables tables, $views views, $procs procedures"
           if ($tables -ne 8) { $failures += "expected 8 crawl tables, found $tables" }
-          if ($views -ne 6) { $failures += "expected 6 crawl views, found $views" }
-          if ($procs -lt 26) { $failures += "expected at least 26 crawl procedures, found $procs" }
+          if ($views -ne 7) { $failures += "expected 7 crawl views, found $views" }
+          if ($procs -lt 30) { $failures += "expected at least 30 crawl procedures, found $procs" }
+
+          # The table types, which nothing checked before and sql/40 is the
+          # reason to start. It cannot ALTER crawl.ItemTypeCountList - a table
+          # type can only be dropped - so it drops the procedure that references
+          # it, drops and recreates the type, and puts both back. A half-applied
+          # sql/40 leaves the type missing and every write path that passes one
+          # fails at run time rather than here.
+          $types = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.table_types WHERE SCHEMA_NAME(schema_id) = 'crawl';"
+          Write-Host "crawl table types: $types (expected 6)"
+          if ($types -ne 6) { $failures += "expected 6 crawl table types, found $types" }
+
+          # sql/29's migration, and the reason this job now runs it: the CHECK
+          # constraint has to admit 5 (partial) or a connector that finishes with
+          # refused items cannot record what it did.
+          $five = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_Run_Status' AND definition LIKE '%5%';"
+          Write-Host "CK_Run_Status admits status 5: $five (expected 1)"
+          if ($five -ne 1) { $failures += 'sql/29 did not widen CK_Run_Status to admit status 5 (partial)' }
 
           # sql/28's migration. The column has to exist and carry a default, or
           # a connector on a database that skipped it would compare against a
