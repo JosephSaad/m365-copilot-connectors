@@ -328,6 +328,35 @@ public static class PushHost
             // structured log message makes it unreadable in both places.
             Log.Information("Where the time went:{NewLine}{Attribution}", Environment.NewLine, summary.Timing.Report());
 
+            // A RUN THAT LOST ITEMS IS NOT A CLEAN RUN, and this used to return 0
+            // regardless. Exit 4 is documented as "ingestion failed", and the
+            // genesis prompt spells it out further as "Graph rejected an item" -
+            // so returning 0 after Graph rejected some was never a policy choice,
+            // it was the code disagreeing with its own contract.
+            //
+            // It mattered: a throttled run refused 191 items, logged them at
+            // Information among fourteen other counters, exited 0 and recorded
+            // itself as succeeded. Every signal an operator has said the run was
+            // fine while 191 rows were absent from the index - and absent
+            // silently, because a failed write records no hash, so nothing about
+            // the corpus looks wrong afterwards either.
+            //
+            // Deliberately not a new exit code. PRODUCTION-ONBOARDING 5.1 asks
+            // for codes that route to different people, and this routes to the
+            // same person as any other ingestion failure: whoever owns the data
+            // path. Inventing a fifth code would split one audience in two.
+            if (summary.Failed > 0)
+            {
+                Log.Error(
+                    "{Failed} item(s) were refused and are NOT in the index. The run is otherwise complete: " +
+                    "{Written} item(s) were written and their hashes recorded, so a later run will retry only " +
+                    "the refused ones. Exit code 4.",
+                    summary.Failed,
+                    summary.Total);
+
+                return 4;
+            }
+
             return 0;
         }
         catch (AuthenticationFailedException ex)

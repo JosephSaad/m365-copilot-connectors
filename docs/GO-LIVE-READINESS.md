@@ -13,15 +13,16 @@ It is deliberately blunt about the gap between *built* and *verified*, because
 that gap is the whole risk right now: 17 features are implemented, 3 more are
 part-built, 326 tests pass, **five of the six blockers are closed with the sixth
 part-done**, and **ten of the eleven pre-go-live recommendations are done** — the
-eleventh being the one nobody but the customer can close. Of the eleven live tests, eight pass; two need a machine this one is not (domain principals, a D: volume) and one needs a tenant busy enough to refuse a request. Every blocker that ran
+eleventh being the one nobody but the customer can close. **Nine of the eleven live tests now pass**; the two that do not need a machine this one is not — domain principals, and a D: volume. Of the seventeen shipped features, twelve are verified against a live tenant, two partly, and three have never been exercised at all. Every blocker that ran
 found something. Blocker 1 found two defects in
 `sql/26`, one of them silent. Blockers 2 and 5 found the shared ACL that wrote
 441 of 1,118 items and refused the other 677. None was findable by reading the
 code; all are fixed. The full lifecycle now has evidence behind it — write,
 skip-unchanged, delete confirmed gone from the index, and every dashboard page
 rendering it under Windows authentication. What remains is the three caveats on
-row 1, and the one part no quiet tenant can prove: the engine's backoff has still
-never answered a real 429. The failure views have now been seen — a deliberate
+row 1. The backoff has now answered a real 429, which no fixture of 1,118 items
+could ever have made it do: a 100-fold corpus made the tenant push back, and the
+first throttled run in this project's history lost 191 items on the spot, to a defect nothing smaller could reach. The failure views have now been seen — a deliberate
 refusal put the connection into `failing`, raised the attention banner and left
 three failed runs in the history, and a clean run put it back. Every go-live
 blocker below is a verification task. None of them is construction.
@@ -165,25 +166,25 @@ six carry forward to the customer environment.
 
 The foundation. All of it rides on the verification above.
 
-| Feature | Description | Status |
-|---|---|---|
-| Push engine | Connection and schema registration, foreign-connection guard, truncation, ACL resolution, upsert writes, documented exit codes | ✅ |
-| Retry and throttling | Engine-owned backoff honouring `Retry-After`; the SDK's hidden retry handler is removed and its absence pinned by a test | ✅ |
-| Concurrent writers | `Settings:Writers`, default 4, clamped to 16 because Graph allows 25 concurrent operations per connection. Forced to 1 for any source that keeps a position | ✅ |
-| `$batch` writing | Twenty per request, capped by accumulated content bytes, with per-item outcomes so one refusal does not abandon the other nineteen | ✅ |
-| Change detection | Content and ACL hashed separately and both compared; an unchanged item is skipped but still marked seen | ✅ |
-| Delete detection | Inventory diff after a full crawl. The source is never asked whether a record was deleted and needs no soft-delete column | ✅ |
-| Delete guard | Refuses a sweep after an incremental run outright, and one that would remove more than `Settings:MaxDeletePercent` of the live corpus | ✅ |
-| Checkpointing | Composite `(marker, id)` marker, forward-only, frozen for the rest of a run once anything is refused so it cannot pass a gap | ✅ |
-| Duplicate detection | Per-run identifier set held on the reading thread, counted and logged | ✅ |
-| Run history | Per connection, per run, per item type, with the timing attribution and raw throttling events persisted | ✅ |
-| Dashboard | Seven read-only Razor Pages, every list paged in the database, two roles that share no permission | ✅ |
-| Throttle telemetry | Every 429 and 5xx buffered with its real timestamp and flushed once at run close, never on the hot path | ✅ |
-| Timing attribution | p50/p95/p99/max per phase with a verdict that states the precondition it rests on | ✅ |
-| Safe degradation | No `Settings:StateConnectionString` gives exactly the pre-v1.3 behaviour. A connection string carrying a password is refused | ✅ |
-| Single controlled egress | `Settings:GraphProxy` forces all Graph traffic through one proxy | ✅ |
-| Logging redaction | No item content or property values in logs; enforced by a tripwire test over every source file | ✅ |
-| Dry run | Schema and mapping proven with no writes and no state recorded | ✅ |
+| Feature | Description | Status | Live Test Status |
+|---|---|---|---|
+| Push engine | Connection and schema registration, foreign-connection guard, truncation, ACL resolution, upsert writes, documented exit codes | ✅ | **PARTIAL** — registration, schema, ACL resolution and upsert writes all exercised across 20 runs and 110,590 items; exit 0 and exit 4 both observed. Two clauses untested: no item has ever exceeded `MaxContentBytes`, so truncation has never fired, and the foreign-connection guard has never been offered a foreign connection |
+| Retry and throttling | Engine-owned backoff honouring `Retry-After`; the SDK's hidden retry handler is removed and its absence pinned by a test | ✅ | **PASSED, and it found a defect.** The 100-fold run was the first ever throttled: 191 sub-requests took a 429 with `Retry-After: 10`, and the engine backed off and retried each. That retry then refused all 191 with `400 NullOrEmptyValue` — a retried item was being re-serialized from the same instance and losing its ACL. Fixed in `af3dc6e`; the backoff itself behaved exactly as written |
+| Concurrent writers | `Settings:Writers`, default 4, clamped to 16 because Graph allows 25 concurrent operations per connection. Forced to 1 for any source that keeps a position | ✅ | **PASSED** — `Writers=99` logged "was 99; using 16", and the run used 16. "Forced to 1 for any source that keeps a position" is untested, no shipped source keeping one |
+| `$batch` writing | Twenty per request, capped by accumulated content bytes, with per-item outcomes so one refusal does not abandon the other nineteen | ✅ | **PASSED** — 5,608 batches of 20 across 111,709 rows, with per-item outcomes proven the hard way: 191 refused individually while the rest of their batches landed. The 4 MiB byte cap has never been approached; the largest item is 808 bytes |
+| Change detection | Content and ACL hashed separately and both compared; an unchanged item is skipped but still marked seen | ✅ | **PASSED at both scales** — 1,117 of 1,118 skipped on a second run, and at 100-fold the 1,119 pre-existing items were re-read, re-hashed and skipped with **zero** rewrites while 110,590 new ones were written |
+| Delete detection | Inventory diff after a full crawl. The source is never asked whether a record was deleted and needs no soft-delete column | ✅ | **PASSED** — see blocker 4. The item left the index and Graph returned 404 for it |
+| Delete guard | Refuses a sweep after an incremental run outright, and one that would remove more than `Settings:MaxDeletePercent` of the live corpus | ✅ | **PASSED** — tripped deliberately at `MaxDeletePercent = 0`: exit 4, nothing marked pending, the store unchanged. "Refuses a sweep after an incremental run outright" is untested because no incremental run can occur — see L10 |
+| Checkpointing | Composite `(marker, id)` marker, forward-only, frozen for the rest of a run once anything is refused so it cannot pass a gap | ✅ | **NOT EXERCISED** — `crawl.Checkpoint` is empty after 20 runs and has never held a row. No shipped connector sets `PushItem.LastModifiedUtc`, so no marker is ever saved. Same root cause as L10 and the `sql/26` incompatibility |
+| Duplicate detection | Per-run identifier set held on the reading thread, counted and logged | ✅ | **NOT EXERCISED** — `duplicates=0` on every run; no source has offered the same identifier twice |
+| Run history | Per connection, per run, per item type, with the timing attribution and raw throttling events persisted | ✅ | **PASSED** — 20 runs with per-item-type breakdowns, 119 phase-timing rows and the throttle events behind them |
+| Dashboard | Seven read-only Razor Pages, every list paged in the database, two roles that share no permission | ✅ | **PASSED** — all seven pages against real data (blocker 6), and the authorisation rule proven live (L4) |
+| Throttle telemetry | Every 429 and 5xx buffered with its real timestamp and flushed once at run close, never on the hot path | ✅ | **PASSED at scale** — 191 events buffered with their real timestamps, endpoint and attempt number, flushed once at run close. It also exposed a mislabelled tile: the figure counts 429s only while the label claimed 429 and 5xx, and this rig had a 504 on record under a tile reading zero |
+| Timing attribution | p50/p95/p99/max per phase with a verdict that states the precondition it rests on | ✅ | **PASSED** — p50/p95/p99/max per phase over 111,709 rows, with the verdict stating its precondition: "191 of 111709 row(s) (0.2%) slept at least once; backoff is 0.0% of per-row time" |
+| Safe degradation | No `Settings:StateConnectionString` gives exactly the pre-v1.3 behaviour. A connection string carrying a password is refused | ✅ | **PARTIAL** — runs before the store was configured wrote every item every time and deleted nothing, exactly as described. The other half, that a connection string carrying a password is refused, has not been tested |
+| Single controlled egress | `Settings:GraphProxy` forces all Graph traffic through one proxy | ✅ | **NOT EXERCISED** — `Settings:GraphProxy` has never been set. Carried forward as one of the six things this rig cannot prove |
+| Logging redaction | No item content or property values in logs; enforced by a tripwire test over every source file | ✅ | **PASSED at scale** — a 327 KB live log over ~16,000 written items searched for a real narrative fragment, a real customer note and any consultant email address: zero hits for all three |
+| Dry run | Schema and mapping proven with no writes and no state recorded | ✅ | **PASSED** — runs 8 and 18 recorded no item state and no checkpoint. Note the run row still reports `ItemsWritten`, being what it *would* have written; the dashboard excludes dry runs from every average for that reason |
 
 ---
 
@@ -278,7 +279,7 @@ Both looked like passes.
 
 | # | Test | Pass looks like | Live Test Status |
 |---|---|---|---|
-| L7 | Provoke throttling — a corpus large enough, or a tenant busy enough, to return a real `429` | `throttleWaits > 0`, the run still completes, and the backoff honours `Retry-After`. **Unproven today**: every run has seen `throttleWaits=0`, so the engine's own retry path has never executed against a real refusal | **NOT RUN** — and the one test here that cannot be scheduled. Every run so far has seen `throttleWaits=0` |
+| L7 | Provoke throttling — a corpus large enough, or a tenant busy enough, to return a real `429` | `throttleWaits > 0`, the run still completes, and the backoff honours `Retry-After` | **PASSED, and it earned more than any other test here.** `sql/14` scaled the fixture 100-fold; the run wrote 110,590 items in 60m33s at ~1,826/min over 5,608 batches. 191 sub-requests took a `429` with `Retry-After: 10`, arriving in three short clusters rather than steadily — minutes 0, 12 and 19 of sixty, the other fifty-seven clean — and the backoff honoured every one. **The retry then refused all 191 with `400 NullOrEmptyValue`**: a retried item was re-serialized from the same instance and lost its ACL, so every throttled item was absent from the index under a run reporting success. Fixed in `af3dc6e`, reproduced in a test for the first time, and the harness that could not express it corrected. No faster machine would have found this — only more rows |
 | L8 | Fail a run deliberately — `MaxDeletePercent = 0` with one row missing trips `THROW 50007` | The Runs page shows a failed run, the connection health badge flips, and the Overview shows "needs attention" | **PASSED**, all three. One time entry soft-deleted with the guard at 0: run 12 exited 4 and the failure was the most recent run, which is what the earlier attempt lacked. `/Runs` rendered a `failed` pill, the health pill flipped to `failing` with `vwConnectionHealth` reporting `Health=failing, LastRunStatus=failed`, and the Overview carried `banner banner-bad` reading "1 connection is failing or late", with tiles `Failed runs 3 of 11` and `Needs attention 1`. It also gave the `%%` fix its first live proof: the guard message arrived intact — "It would remove 1 of 1119 live items (0.09%), above the 0.00% guard" — where it used to arrive empty. The fixture and the guard were then restored and run 13 returned the connection to healthy, so the failed runs remain in history and the rig does not |
 
 ### Worth doing while the fixture is in the right state

@@ -92,7 +92,7 @@ namespace SqlTicketsConnector.Tests
             }
         }
 
-        private static void MarkDirty(object? model)
+        private static void MarkDirty(object model)
         {
             if (model is IBackedModel { BackingStore: not null } backed)
             {
