@@ -111,10 +111,21 @@ public sealed class HdfsDocumentsConnector : IPushConnector
             ? new GraphServiceClient(context.Credential, ["https://graph.microsoft.com/.default"])
             : null;
 
+        // The store the host opened for THIS run, so a directory lookup survives
+        // the run that paid for it - see CdpCrawlState.cs for why it arrives this
+        // way rather than on the context. Without Settings:StateConnectionString
+        // this is the null store, and the resolver then behaves exactly as it did
+        // before the cache existed: in memory, once per run.
+        //
+        // It matters most here of the three. A filesystem crawl asks about the
+        // same handful of cluster groups once per FILE, and this connector is the
+        // one pointed at millions of them.
         var principals = new PrincipalResolver(
             PrincipalResolver.ParseMap(context.Options.Setting("EntraGroupMap")),
             directory,
-            context.Log);
+            context.Log,
+            CdpCrawlState.Current,
+            CdpCrawlState.PrincipalCacheTtl(context.Options));
 
         return new HdfsPushSource(
             settings,
