@@ -82,14 +82,36 @@ if ($mine -contains $NonMemberSid) {
     throw "This account IS in $NonMemberSid ($(Name-Of $NonMemberSid)), so it cannot be the non-member case. Pass -NonMemberSid with a group you are not in."
 }
 
-$original = (Get-Content $config -Raw | ConvertFrom-Json).CrawlState.ReaderGroups
-Write-Host "Deployed ReaderGroups before this run: [$($original -join ', ')]"
+# ABSENT AND EMPTY ARE DIFFERENT, and the difference broke the first version of
+# this script. A deployed appsettings.json published before ReaderGroups existed
+# has no such property, and PowerShell will not create one by assignment -
+# `$json.CrawlState.ReaderGroups = ...` throws "the property cannot be found".
+# Worse, reading it back gives $null, whose .Count is 0, so a check for "is it
+# empty" cannot tell the two apart and reports a reassuring zero either way.
+$crawlState = (Get-Content $config -Raw | ConvertFrom-Json).CrawlState
+$hadProperty = [bool]($crawlState.PSObject.Properties | Where-Object Name -eq 'ReaderGroups')
+$original = if ($hadProperty) { $crawlState.ReaderGroups } else { $null }
+
+Write-Host $(if ($hadProperty) {
+    "Deployed ReaderGroups before this run: [$($original -join ', ')]"
+} else {
+    'Deployed configuration has no ReaderGroups property; it will be added and removed again.'
+})
 Write-Host "Testing as $(([Security.Principal.WindowsIdentity]::GetCurrent()).Name)"
 Write-Host ''
 
-function Set-ReaderGroups([string[]]$groups) {
+# $null removes the property; an array sets it. Add-Member -Force rather than
+# assignment, so this works whether or not the deployed file already has the key.
+function Set-ReaderGroups($groups) {
     $json = Get-Content $config -Raw | ConvertFrom-Json
-    $json.CrawlState.ReaderGroups = @($groups)
+
+    if ($null -eq $groups) {
+        $json.CrawlState.PSObject.Properties.Remove('ReaderGroups')
+    }
+    else {
+        $json.CrawlState | Add-Member -NotePropertyName 'ReaderGroups' -NotePropertyValue @($groups) -Force
+    }
+
     $json | ConvertTo-Json -Depth 20 | Set-Content -Path $config -Encoding UTF8
 
     # The policy is built once at startup, so a configuration reload is not
@@ -145,10 +167,25 @@ try {
     }
 }
 finally {
+    # THE RESTORE MUST NOT THROW. When the first version failed, this block
+    # failed the same way a line later and the message a reader saw was the
+    # restore's, not the one that actually stopped the run - the second error
+    # standing in front of the first.
     Write-Host ''
-    Write-Host 'Restoring the original ReaderGroups.'
-    Set-ReaderGroups @($original)
-    Write-Host "  restored to [$($original -join ', ')], pool restarted"
+    Write-Host 'Restoring the deployed configuration.'
+
+    try {
+        Set-ReaderGroups $original
+        Write-Host $(if ($hadProperty) {
+            "  restored to [$($original -join ', ')], pool restarted"
+        } else {
+            '  ReaderGroups removed again, pool restarted'
+        })
+    }
+    catch {
+        Write-Host "  RESTORE FAILED: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  Put $config back by hand before leaving the site in this state." -ForegroundColor Red
+    }
 }
 
 Write-Host ''
