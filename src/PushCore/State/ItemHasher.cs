@@ -80,6 +80,29 @@ public static class ItemHasher
     ///    Unspecified DateTime being shifted by the host's offset. That fix
     ///    changed the answer and predates this constant, which is why the
     ///    history starts here rather than at 2.
+    ///
+    /// A REFUSAL IS NOT A DIFFERENT ANSWER. The strict fallback in
+    /// <see cref="Render"/> deliberately did NOT move this number, and the
+    /// reasoning is the test stated above rather than a preference: would an
+    /// item that did not change still produce the same bytes? It would. Every
+    /// branch renders exactly what it rendered before - the same branches, the
+    /// same separators, the same invariant formats - and the only thing that
+    /// changed is that a value reaching NO branch now throws instead of being
+    /// handed to Convert.ToString. Nothing that hashed to X yesterday hashes to
+    /// anything else today, so every hash on record is still the right answer.
+    ///
+    /// Grep the shipped connectors for what they put in PushItem.Properties and
+    /// the set is closed: string, double, bool, long and List&lt;string&gt;
+    /// through AddIfPresent, plus string by direct assignment. All five reach a
+    /// branch, so none of them could have reached the old fallback and none of
+    /// them can reach the new refusal. The change is unobservable to every
+    /// deployed corpus.
+    ///
+    /// Moving it anyway would not have been the safe choice. It would have cost
+    /// every deployed connection one deliberate full rewrite - announced,
+    /// escalated and logged as a migration, exactly as sql/28 intends - to
+    /// arrive at the state it was already in, and it would have taught the next
+    /// reader that this number moves for edits rather than for answers.
     /// </remarks>
     public const int HashVersion = 1;
 
@@ -116,7 +139,7 @@ public static class ItemHasher
         foreach (string name in properties.Keys.OrderBy(key => key, StringComparer.Ordinal))
         {
             AddField(sha, name);
-            AddField(sha, Render(properties[name]));
+            AddField(sha, Render(name, properties[name]));
         }
 
         AddField(sha, content);
@@ -172,23 +195,75 @@ public static class ItemHasher
     }
 
     /// <summary>Renders a property value the same way on every host.</summary>
+    /// <param name="name">The schema property name. Used only to name the refusal below.</param>
     /// <param name="value">The value as the connector supplied it.</param>
     /// <returns>An invariant string.</returns>
+    /// <exception cref="NotSupportedException">
+    /// The value is null, or its type reaches none of the branches here.
+    /// </exception>
     /// <remarks>
-    /// The branches cover PushItem.AddIfPresent's overloads - string, double,
-    /// bool, long and IReadOnlyList&lt;string&gt; - plus int, DateTime and
-    /// DateTimeOffset, which reach Properties only when a connector assigns the
-    /// dictionary directly rather than going through AddIfPresent. The fallback is deliberately
-    /// ToString-with-invariant rather than JSON: a type that reaches this
-    /// without a branch is a type nobody has thought about, and a stable-looking
-    /// hash over it would hide that rather than surface it.
+    /// THE BRANCH LIST IS THE WHOLE SUPPORTED SET. They cover
+    /// PushItem.AddIfPresent's overloads - string, double, bool, long and
+    /// IReadOnlyList&lt;string&gt; - plus int, DateTime and DateTimeOffset, which
+    /// reach Properties only when a connector assigns the dictionary directly
+    /// rather than going through AddIfPresent. Anything else is refused.
     ///
-    /// The string-collection branch does NOT sort. A collection's order is
-    /// content: the connector chose it, Graph stores it, and two orders of the
-    /// same tags are two different stored values.
+    /// WHY THE Convert.ToString FALLBACK HAD TO GO, and it is not tidiness. It
+    /// did not fail on a type nobody had thought about; it SUCCEEDED, quietly,
+    /// with whatever ToString happened to return - and for every array and every
+    /// collection that is the type name. Measured rather than assumed: an
+    /// int[] holding {1,2,3} and an int[] holding {4,5,6} both render as
+    /// "System.Int32[]", so they hash IDENTICALLY. byte[], List&lt;int&gt; and
+    /// Dictionary&lt;,&gt; behave the same way.
+    ///
+    /// That is precisely the failure this file's header calls the expensive one:
+    /// a hash that stays the same when the item DID change. The item is written
+    /// once, and then every subsequent run compares two equal hashes, skips it,
+    /// and reports success - so it is stale in the index for ever with nothing
+    /// reporting it. A refusal costs a failed run that names the property. The
+    /// two are not close.
+    ///
+    /// The types that DO stringify legibly are no safer for it. decimal, Guid,
+    /// TimeSpan and an enum all render something plausible, but nothing here has
+    /// decided what their stable form is - 12.34m and 12.340m are one number and
+    /// two hashes, and TimeSpan's default format is not the round-trip one. A
+    /// connector that needs one of them indexed adds a branch and moves
+    /// HashVersion, which is a decision somebody makes on purpose.
+    ///
+    /// NULL IS REFUSED BY NAME rather than rendered as an empty string, and no
+    /// item loses a hash it had earned: Graph rejects a null property value
+    /// outright, so such an item was hashed here and then refused at the write.
+    /// AddIfPresent already omits absent values, so a null in the dictionary
+    /// means a connector assigned one directly and meant nothing by it.
+    ///
+    /// THE MESSAGE NAMES THE PROPERTY AND THE TYPE, because "which one" is the
+    /// operator's next question and a bare type name does not answer it across a
+    /// forty-property schema. It does NOT name the value: that is row content,
+    /// and it does not go into an exception any more than it goes into a log.
+    /// PushEngine.Prepare wraps this with the row ordinal and the ID of the item
+    /// before it, which locate the row in the source without quoting it.
+    ///
+    /// The string-collection branch does NOT sort, and joins on 0x1F, the ASCII
+    /// unit separator, rather than on nothing. The order is content: the
+    /// connector chose it, Graph stores it, and two orders of the same tags are
+    /// two different stored values. The separator keeps the elements unambiguous
+    /// for the same reason AddField length-prefixes every field - without it the
+    /// collections {"ab","c"} and {"a","bc"} are one hash. It is a control
+    /// character and therefore invisible in the source line below; it is load
+    /// bearing, and changing it would invalidate every stored hash at once.
     /// </remarks>
-    private static string Render(object value)
+    private static string Render(string name, object? value)
     {
+        if (value is null)
+        {
+            throw new NotSupportedException(
+                $"The property '{name}' holds null, which the item hasher will not render. Omit the " +
+                "property instead of sending null: Graph rejects a null value rather than ignoring it, " +
+                "so this item would have been hashed here and then refused at the write. " +
+                "PushItem.AddIfPresent already skips absent values, so reaching this means a connector " +
+                "assigned the dictionary directly. The value is deliberately not quoted here.");
+        }
+
         return value switch
         {
             string text => text,
@@ -210,7 +285,16 @@ public static class ItemHasher
             DateTimeOffset when2 => when2.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
             IReadOnlyList<string> list => string.Join("", list),
             IEnumerable<string> list => string.Join("", list),
-            _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty,
+            _ => throw new NotSupportedException(
+                $"The property '{name}' has type {value.GetType().FullName}, which the item hasher does " +
+                "not recognise. It is refused rather than converted to a string, because ToString on an " +
+                "array or a collection returns the TYPE NAME: two different values would then hash alike, " +
+                "the item would be written once and skipped by every run afterwards, and the index would " +
+                "be permanently stale with every run reporting success. Map the property to one of " +
+                "string, bool, double, long, int, DateTime, DateTimeOffset or a string collection - or, " +
+                "if this type genuinely belongs in the index, add a branch to ItemHasher.Render and " +
+                "increment ItemHasher.HashVersion, which turns the resulting full rewrite into an " +
+                "announced migration. The value is deliberately not quoted here."),
         };
     }
 
