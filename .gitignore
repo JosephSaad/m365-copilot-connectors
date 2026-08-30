@@ -36,3 +36,7 @@ Logs/
 # beside it, and it is binary noise that looks like a real document.
 ~$*
 .DS_Store
+
+# Subagent worktrees. Each is its own checkout of this repository; committing
+# one embeds a git repository inside this one, which a clone cannot follow.
+.claude/worktrees/
