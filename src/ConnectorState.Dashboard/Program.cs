@@ -48,10 +48,20 @@
 // item ID, a type, two hashes and a byte count - see the header of sql/22 - so
 // no page here can show a document body, a field value or a title, however the
 // query is written. The pages say so where somebody would otherwise expect it.
+//
+// THERE IS ONE ENDPOINT THAT IS NOT A PAGE: GET /health, in Monitoring/. It is
+// JSON for a monitoring system rather than HTML for a person, and it is gated by
+// the same policy as everything else - it asks for that policy BY NAME, which is
+// why the policy is registered under a name below as well as installed as the
+// fallback. The reasoning for gating it at all, rather than leaving a monitoring
+// endpoint anonymous, is in the header of HealthEndpoint.cs; the short version
+// is that its body names customer connections, so an anonymous /health is an
+// anonymous page with the connection inventory on it.
 // ---------------------------------------------------------------------------
 
 using ConnectorState.Dashboard;
 using ConnectorState.Dashboard.Data;
+using ConnectorState.Dashboard.Monitoring;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Server.IISIntegration;
 
@@ -81,9 +91,23 @@ string[] readerGroups = builder.Configuration
 // The rule itself is in ReaderPolicy, so it can be tested. Its negative case -
 // somebody outside every configured group being refused - is the half that
 // matters and the half a running site cannot show you without a second person.
+AuthorizationPolicy readerPolicy = ReaderPolicy.Build(readerGroups);
+
 builder.Services.AddAuthorization(options =>
 {
-    options.FallbackPolicy = ReaderPolicy.Build(readerGroups);
+    // The fallback covers every endpoint that does not state a requirement of
+    // its own, which is all seven pages: adding a page cannot accidentally add
+    // an anonymous one.
+    options.FallbackPolicy = readerPolicy;
+
+    // The SAME OBJECT, under a name, for the one endpoint that does state its
+    // own requirement - GET /health. Registered from the variable rather than
+    // by calling ReaderPolicy.Build a second time, because two policies built
+    // separately from the same configuration are two things somebody can later
+    // edit separately, and the one that gets missed is whichever is not on the
+    // screen. This way the endpoint and the pages are not merely consistent;
+    // they are the same rule.
+    options.AddPolicy(ReaderPolicy.PolicyName, readerPolicy);
 });
 
 builder.Services.AddRazorPages();
@@ -155,5 +179,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapRazorPages();
+
+// Mapped after the pages and outside them. It is not a Razor Page with a JSON
+// content type bolted on: a page carries a view, a layout and an antiforgery
+// pipeline it would have no use for, and every one of those is a thing that can
+// start returning HTML to something that only parses JSON.
+app.MapConnectionHealth();
 
 app.Run();

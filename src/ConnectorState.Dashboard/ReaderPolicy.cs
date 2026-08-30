@@ -24,6 +24,24 @@ public static class ReaderPolicy
     /// <summary>The configuration path holding the permitted group names.</summary>
     public const string ConfigurationPath = "CrawlState:ReaderGroups";
 
+    /// <summary>The name this policy is also registered under, for endpoints that must ask for it.</summary>
+    /// <remarks>
+    /// The pages need no name: they have no authorization metadata, so they fall
+    /// to the fallback policy. An endpoint that states its own requirement does
+    /// need one, and the name has to lead back to THIS object rather than to a
+    /// second policy built from the same configuration - two policies built
+    /// separately are two things that can be edited separately.
+    ///
+    /// It exists because the alternative is worse in a way that is invisible.
+    /// `.RequireAuthorization()` with no argument does not mean "the policy this
+    /// site uses"; it means the DEFAULT policy, which is RequireAuthenticatedUser
+    /// alone. An endpoint written that way is open to every authenticated user in
+    /// the domain while CrawlState:ReaderGroups is configured and every page
+    /// enforces it - the failure this class's header describes, arriving through
+    /// the one line somebody would add to be explicit.
+    /// </remarks>
+    public const string PolicyName = "CrawlStateReader";
+
     /// <summary>
     /// Builds the fallback policy: authenticated always, and in one of the
     /// named groups when any are configured.
