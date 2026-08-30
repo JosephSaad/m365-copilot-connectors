@@ -10,13 +10,30 @@
 
       Base
           Everything 'dotnet build' and 'dotnet test' of the solution need,
-          across every project. Always downloaded. This branch's list is
-          larger than main's: net9.0 needs System.Text.Json,
-          System.IO.Pipelines and their neighbours as packages, where net10.0
-          has them in the shared framework. The count is whatever the list
-          below actually holds - a number in this sentence went stale twice,
-          once on each line, and Test-OfflinePackageList.ps1 is the thing that
-          actually checks.
+          across every project. Always downloaded.
+
+          THIS LIST IS CURRENTLY CORRECT FOR NEITHER TARGET, and saying so is
+          more useful than the sentence that used to be here. That sentence
+          claimed this branch's list was larger than main's because net9.0
+          needs System.Text.Json, System.IO.Pipelines and their neighbours as
+          packages where net10.0 has them in the shared framework. The premise
+          is right and the claim is false: the two branches' base lists are
+          byte-identical, checked by diffing them.
+
+          What is actually here is a net9-SHAPED list at net10 VERSIONS. The
+          twelve framework-adjacent ids are present, which net9.0 needs and
+          net10.0 does not - so on the .NET 10 SDK only 62 of the 74 resolve
+          and Test-OfflinePackageList.ps1 -Configuration Base fails. But they
+          are pinned at 10.0.3 and 4.5.3, where a net9.0 restore under the
+          .NET 9 SDK resolves 6.0.1, 4.7.2 and 4.5.4 - so the versions are
+          wrong for the target that needs the ids at all.
+
+          DO NOT RUN -Update TO SILENCE IT. From a .NET 10 machine that
+          deletes exactly the twelve entries net9.0 depends on, and nothing in
+          CI would catch it: the Base check only runs on the net10 job. The
+          fix is for the list to represent both SDKs - either two lists, or
+          one union with the versions each target actually resolves - and that
+          is a decision rather than a regeneration.
 
       Runtime packs (4 packages, about 92 MB)
           Only for 'Build.ps1 -SelfContained', which is how the release package
