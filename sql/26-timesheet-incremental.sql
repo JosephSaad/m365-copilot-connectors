@@ -330,7 +330,7 @@ GO
 
    ONE PERFORMANCE CAVEAT, STATED SO IT IS NOT DISCOVERED. Each branch joins a
    sql/12 view back to its base table on a CONSTRUCTED key -
-   N'cust-' + CAST(CustomerId AS NVARCHAR(32)) = v.ItemId - because those views
+   N'cust' + CAST(CustomerId AS NVARCHAR(32)) = v.ItemId - because those views
    project the composed ItemId and not the numeric key it was built from. That
    comparison is not sargable, so the join itself costs a scan per branch. The
    incremental predicate can still seek IX_*_Effective, which is where the
@@ -354,7 +354,7 @@ SELECT  ItemId,
         ItemType,
         EffectiveLastModified,
         Title,
-        Body,
+        Content,
         CustomerName,
         EngagementName,
         ConsultantName,
@@ -367,30 +367,30 @@ FROM
     SELECT  v.ItemId,
             v.ItemType,
             c.EffectiveLastModified,
-            v.Title, v.Body, v.CustomerName, v.EngagementName,
+            v.Title, v.Content, v.CustomerName, v.EngagementName,
             v.ConsultantName, v.Hours, v.Billable, v.WorkDate, v.Url
     FROM    dbo.vwCustomerItems AS v
-    INNER JOIN dbo.Customers    AS c ON N'cust-' + CAST(c.CustomerId AS NVARCHAR(32)) = v.ItemId
+    INNER JOIN dbo.Customers    AS c ON N'cust' + CAST(c.CustomerId AS NVARCHAR(32)) = v.ItemId
 
     UNION ALL
 
     SELECT  v.ItemId,
             v.ItemType,
             e.EffectiveLastModified,
-            v.Title, v.Body, v.CustomerName, v.EngagementName,
+            v.Title, v.Content, v.CustomerName, v.EngagementName,
             v.ConsultantName, v.Hours, v.Billable, v.WorkDate, v.Url
     FROM    dbo.vwEngagementItems AS v
-    INNER JOIN dbo.Engagements    AS e ON N'eng-' + CAST(e.EngagementId AS NVARCHAR(32)) = v.ItemId
+    INNER JOIN dbo.Engagements    AS e ON N'eng' + CAST(e.EngagementId AS NVARCHAR(32)) = v.ItemId
 
     UNION ALL
 
     SELECT  v.ItemId,
             v.ItemType,
             te.EffectiveLastModified,
-            v.Title, v.Body, v.CustomerName, v.EngagementName,
+            v.Title, v.Content, v.CustomerName, v.EngagementName,
             v.ConsultantName, v.Hours, v.Billable, v.WorkDate, v.Url
     FROM    dbo.vwTimeEntryItems AS v
-    INNER JOIN dbo.TimeEntries   AS te ON N'te-' + CAST(te.TimeEntryId AS NVARCHAR(32)) = v.ItemId
+    INNER JOIN dbo.TimeEntries   AS te ON N'time' + CAST(te.TimeEntryId AS NVARCHAR(32)) = v.ItemId
 ) AS unioned;
 GO
 
@@ -480,4 +480,23 @@ SELECT  ItemType, COUNT(*) AS items, MIN(EffectiveLastModified) AS oldest,
         MAX(EffectiveLastModified) AS newest
 FROM    dbo.vwExternalItemsIncremental
 GROUP BY ItemType;
+
+-- The same counts as a verdict, because the query above cannot fail - it can
+-- only be misread. Each branch of the view is an INNER JOIN onto a CONSTRUCTED
+-- ItemId, so a prefix that does not match what the sql/12 views emit returns
+-- NO ROWS rather than raising anything. An empty result set above and a
+-- correct one differ by a glance; these differ by a word.
+--
+-- Expected at the shipped fixture: 12 customers, 62 engagements and 1,044 of
+-- the 1,052 time entries - sql/11 soft-deletes 8 on purpose, and the IsDeleted
+-- filters carried over from sql/12 remove them. Total 1,118.
+SELECT  CASE WHEN COUNT(*) = 1118
+             THEN N'PASS'
+             ELSE N'FAIL - expected 1118, see the per-type counts above'
+        END                                                     AS verdict,
+        COUNT(*)                                                AS items,
+        SUM(CASE WHEN ItemType = N'Customer'   THEN 1 ELSE 0 END) AS customers,
+        SUM(CASE WHEN ItemType = N'Engagement' THEN 1 ELSE 0 END) AS engagements,
+        SUM(CASE WHEN ItemType = N'TimeEntry'  THEN 1 ELSE 0 END) AS time_entries
+FROM    dbo.vwExternalItemsIncremental;
 GO

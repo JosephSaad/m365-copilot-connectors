@@ -85,6 +85,8 @@ if (Test-Path $ConfigPath) {
     if ($MaxContentBytes -le 0 -and $config.DataSource.MaxContentBytes) {
         $MaxContentBytes = [int]$config.DataSource.MaxContentBytes
     }
+    $environment = $config.Environment
+    $extraOptions = $config.DataSource.ExtraConnectionOptions
     Write-Host "Defaults from $ConfigPath"
 }
 if ($MaxContentBytes -le 0) { $MaxContentBytes = 3670016 }
@@ -98,7 +100,54 @@ Write-Host "Running as $([Security.Principal.WindowsIdentity]::GetCurrent().Name
 
 # The builder is never printed and never logged: with SqlLogin it holds the
 # password. Everything user-visible below names the server, not the string.
+#
+# It is seeded from DataSource:ExtraConnectionOptions first, exactly as
+# SqlConnectionStringFactory.Build does, so the probe negotiates the connection
+# the connector will actually negotiate. Seeding first also means the explicit
+# assignments below win, which is the factory's order and not an accident: the
+# server, catalogue, timeout and Encrypt are the probe's to decide.
+#
+# The same four rejections the factory applies through InspectExtraOptions are
+# applied here, and for the same reason in each case. A probe that accepted an
+# extras fragment the connector refuses would report a healthy source that the
+# connector then cannot reach.
+#
+# -eq on strings is case-insensitive in PowerShell, matching the factory's
+# OrdinalIgnoreCase comparison. An unset Environment is not Production, which is
+# also what IsProduction returns for a null.
+$isProduction = $environment -eq 'Production'
+
 $builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder
+
+if ($extraOptions) {
+    $extras = $null
+    try {
+        $extras = New-Object System.Data.SqlClient.SqlConnectionStringBuilder $extraOptions
+    }
+    catch {
+        throw "DataSource:ExtraConnectionOptions is not a valid connection string fragment: $($_.Exception.Message)"
+    }
+
+    # ShouldSerialize, not ContainsKey: the builder answers ContainsKey for every
+    # keyword SqlClient knows, supplied or not.
+    if ($extras.ShouldSerialize('Password')) {
+        throw 'DataSource:ExtraConnectionOptions must not contain a password. Passwords are resolved from Key Vault at runtime.'
+    }
+    if ($extras.ShouldSerialize('User ID')) {
+        throw 'DataSource:ExtraConnectionOptions must not contain a user ID. Set DataSource:SqlUserId and use SqlAuthMode=SqlLogin instead.'
+    }
+    if ($extras.TrustServerCertificate -and $isProduction) {
+        throw 'DataSource:ExtraConnectionOptions sets TrustServerCertificate=true, which is rejected when Environment is Production. Install a server certificate that chains to a trusted root instead.'
+    }
+
+    $builder = $extras
+    Note "Seeded from DataSource:ExtraConnectionOptions (Environment: $(if ($environment) { $environment } else { 'unset' }))"
+
+    if ($extras.TrustServerCertificate) {
+        Warn 'TrustServerCertificate=true is in effect. The server certificate is not being validated, and this configuration is rejected outright when Environment is Production.'
+    }
+}
+
 $builder['Data Source'] = $Server
 $builder['Initial Catalog'] = $Database
 $builder['Connect Timeout'] = $TimeoutSeconds
@@ -118,9 +167,15 @@ else {
     Note 'Windows integrated authentication (the shipped configuration)'
 }
 
-# Encrypt=true matches SqlConnectionStringFactory exactly. TrustServerCertificate
-# is deliberately absent: the connector rejects it outright in Production, so a
-# probe that set it would pass where the connector fails.
+# Encrypt=true matches SqlConnectionStringFactory exactly, and is assigned after
+# the extras so a fragment carrying Encrypt=false cannot turn encryption off -
+# "encryption is not negotiable" is the factory's rule, and it is this line here.
+#
+# TrustServerCertificate is not set by this script and never defaulted on. It
+# arrives only from DataSource:ExtraConnectionOptions, and only outside
+# Production, which is precisely the connector's own behaviour. The strictness
+# that matters is preserved: in Production both the factory and this probe
+# refuse the value rather than quietly validating nothing.
 
 $connection = New-Object System.Data.SqlClient.SqlConnection $builder.ConnectionString
 if ($Credential) {
