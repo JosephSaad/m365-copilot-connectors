@@ -41,9 +41,17 @@
             <div class="tile-sub">@windowLabel</div>
         </div>
         <div class="tile">
+            @* Written and Unchanged are sums across every run in the window; Live
+               items beside them is a count of rows in crawl.Item. Naming the run
+               count is what keeps a reader from comparing the two: an item skipped
+               in three runs is counted three times here, so this figure passing the
+               corpus size is normal and not a fault. *@
             <div class="tile-label">Unchanged</div>
             <div class="tile-figure">@Format.Count(tiles.ItemsUnchangedInWindow)</div>
-            <div class="tile-sub">already current, not re-sent</div>
+            <div class="tile-sub">
+                already current, not re-sent, over @Format.Count(tiles.RunsInWindow)
+                run@(tiles.RunsInWindow == 1 ? string.Empty : "s")
+            </div>
         </div>
         <div class="tile">
             <div class="tile-label">Unchanged share</div>

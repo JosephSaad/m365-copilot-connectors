@@ -35,6 +35,7 @@ using PushCore.State;
 using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 using Serilog;
+using Serilog.Context;
 
 /// <summary>Runs one connector against one connection.</summary>
 public sealed class PushEngine
@@ -193,6 +194,20 @@ public sealed class PushEngine
         // But the RUN is opened before the source, because the source may want
         // to know where to resume from and that answer lives in the store.
         CrawlRunStart run = await this.OpenRunAsync(context, cancellationToken);
+
+        // Every event from here to the end of the run carries the run identifier,
+        // so a log file and a dashboard row can be lined up by reading rather than
+        // by matching timestamps - which is guesswork the moment two connectors
+        // share a host, and worse when the question is being asked about an
+        // incident that happened yesterday.
+        //
+        // RunTag is pre-formatted rather than raw, because a run identifier is
+        // only useful when there is one: without a state store the id is 0, and a
+        // log full of "run 0" reads as a real run rather than as no bookkeeping at
+        // all. In that case the tag is empty and the file looks exactly as it did.
+        using IDisposable? runTag = LogContext.PushProperty(
+            "RunTag",
+            this.store.IsEnabled ? $"run {run.RunId} " : string.Empty);
 
         await using IPushSource source = this.connector.CreateSource(context);
 

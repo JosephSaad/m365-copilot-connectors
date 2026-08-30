@@ -389,10 +389,18 @@ public static class PushHost
     /// <returns>The configured logger.</returns>
     public static Serilog.Core.Logger CreateLogger(string executable)
     {
+        // The file template carries RunId and the console one does not. The file
+        // is what gets read beside a dashboard row hours later, where "which run
+        // was this?" is the whole question; the console is watched live by
+        // somebody who already knows. {RunId} renders empty outside a run and as
+        // a bare number inside one, so the prefix is written to disappear rather
+        // than leave a dangling bracket on startup lines.
         return ConfigurePushPipeline(new LoggerConfiguration())
             .WriteTo.Console(outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
             .WriteTo.File(
                 Path.Combine(AppContext.BaseDirectory, "Logs", executable + ".log"),
+                outputTemplate:
+                    "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {RunTag}{Message:lj}{NewLine}{Exception}",
                 fileSizeLimitBytes: 10L * 1024 * 1024,
                 rollOnFileSizeLimit: true,
                 retainedFileCountLimit: 30,
@@ -412,6 +420,12 @@ public static class PushHost
         return configuration
             .MinimumLevel.Information()
             .Enrich.With(new ScrubbingEnricher())
+
+            // Carries RunId, pushed by PushEngine for the life of a run, onto
+            // every event raised inside it - including the batch writer's, which
+            // logs through its own ILogger and would not inherit a ForContext on
+            // the engine's. Without this the enrichment silently does nothing.
+            .Enrich.FromLogContext()
 
             // The engine logs item IDs and counts, never objects - but that is a
             // convention, and conventions drift. These registrations make the

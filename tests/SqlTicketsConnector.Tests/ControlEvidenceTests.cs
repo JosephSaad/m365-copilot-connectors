@@ -43,6 +43,30 @@ namespace SqlTicketsConnector.Tests
             new[] { "SqlTicketsConnector.Tests.PushSourceTests", "A_dry_run_writes_nothing_and_commits_nothing" },
             new[] { "SqlTicketsConnector.Tests.PushSourceTests", "An_item_the_source_could_grant_to_nobody_is_skipped_rather_than_written" },
 
+            // Crawl state. Three invariants whose failure is silent, which is why
+            // they are pinned here rather than left to the suite's good intentions.
+            //
+            // Hash determinism decides whether an item is written at all. A hash
+            // that varies for an unchanged item costs a wasted write and is
+            // noticed; one that varies by HOST - which is what the Unspecified
+            // DateTime defect did - has two connectors each rewriting the other's
+            // entire corpus, every run, with every run reporting success.
+            new[] { "SqlTicketsConnector.Tests.ItemHasherTests", "The_same_item_hashes_the_same_way_twice" },
+            new[] { "SqlTicketsConnector.Tests.ItemHasherTests", "An_unspecified_datetime_is_taken_as_utc_rather_than_shifted" },
+            new[] { "SqlTicketsConnector.Tests.ItemHasherTests", "The_hash_does_not_depend_on_the_current_culture" },
+
+            // Ordered commit. The marker may only advance over an unbroken prefix,
+            // and must freeze for the rest of the run once anything is refused.
+            // Stepping over a gap loses the rows in it permanently: they are not
+            // retried, because the marker says they were done.
+            new[] { "SqlTicketsConnector.Tests.PushBatchingTests", "The_commit_prefix_stops_at_the_refused_item_and_never_steps_over_the_gap" },
+            new[] { "SqlTicketsConnector.Tests.PushBatchingTests", "Once_a_run_has_left_a_gap_the_marker_never_moves_again" },
+
+            // The retry handler. The SDK's own handler retries inside the call the
+            // engine is timing, so its absence is what makes the write attribution
+            // mean anything - and it returns by default on any SDK upgrade.
+            new[] { "SqlTicketsConnector.Tests.PushConcurrencyTests", "The_graph_pipeline_carries_no_retry_handler_of_its_own" },
+
             // The CDP connector's refusals. Every one of these is a case where
             // indexing would publish data whose access rules the index cannot
             // reproduce, so they are refusals rather than best efforts.

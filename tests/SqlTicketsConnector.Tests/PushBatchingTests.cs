@@ -24,28 +24,32 @@
 // The commit-prefix test is the one that guards the other half of that: a
 // watermark that stepped over a refused item would never revisit it either.
 //
-// TWO DEFECTS IN PushEngine.FlushChunkAsync ARE KNOWN AND ARE NOT FIXED HERE,
-// because they are in source this file is not allowed to change. Both are
-// reported separately and both are visible in what these tests observe:
+// TWO DEFECTS IN PushEngine.FlushChunkAsync WERE OPEN WHEN THIS FILE WAS
+// WRITTEN AND ARE NOW FIXED, in 7fc7135. The history is worth keeping, because
+// both were found by these tests and neither would have surfaced from reading
+// the engine:
 //
-//   1. THE MARKER STILL STEPS OVER A GAP, one chunk later. The prefix stops at
-//      the refusal inside its own chunk, but the run does not stop, and the very
-//      next chunk commits in full and saves its checkpoint. A run of forty with
-//      item 5 refused commits a1-a4 and then a21-a40, so the marker ends past
-//      the gap and no incremental run ever returns for a5.
+//   1. THE MARKER STEPPED OVER A GAP, one chunk later. The prefix stopped at the
+//      refusal inside its own chunk, but the run did not stop, and the next chunk
+//      committed in full and saved its checkpoint - so a run of forty with item 5
+//      refused ended with the marker past the gap and no incremental run ever
+//      returning for a5. Once_a_run_has_left_a_gap_the_marker_never_moves_again
+//      now asserts the fix: the marker freezes for the rest of the run.
 //
-//   2. THE RUN UNDER-REPORTS WHAT IT WROTE. Counting is done over the commit
-//      prefix rather than over what landed, so a chunk of twenty with item 5
-//      refused reports four written and one failed for nineteen items that are
-//      genuinely in the index. The assertion below marks that as the defect it
-//      is, so that fixing the engine fails this test rather than passing it
-//      silently.
+//   2. THE RUN UNDER-REPORTED WHAT IT WROTE, counting over the commit prefix
+//      rather than over what landed, so a chunk of twenty with item 5 refused
+//      reported four written for nineteen items genuinely in the index. The
+//      concurrency test at the foot of this file is where that is now pinned
+//      hardest: eighty items, two refused in different chunks, and the summary
+//      has to reconcile to exactly 78 written and 2 failed across eight writers
+//      that never see each other.
 // ---------------------------------------------------------------------------
 
 namespace SqlTicketsConnector.Tests
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Linq;
     using System.Threading.Tasks;
     using Microsoft.Graph.Models.ExternalConnectors;
@@ -366,6 +370,61 @@ namespace SqlTicketsConnector.Tests
             Assert.Equal(24, summary.Total);
         }
 
+        [Fact]
+        public async Task Several_writers_each_flushing_a_batch_lose_nothing_when_one_batch_is_refused()
+        {
+            // The interaction, rather than either half of it. Concurrency is
+            // covered, batching is covered, and until this test the combination
+            // was covered only by a live tenant - which is where it was found:
+            // the run that first exercised the default write path wrote 441 of
+            // 1,118 items and refused the rest.
+            //
+            // What makes the combination its own case is that a batch is the unit
+            // of a round trip while an item is the unit of an outcome, and with
+            // several writers in flight those two stop lining up. A refusal
+            // inside one writer's batch must not cost another writer's items,
+            // and the counts have to reconcile across writers that never see
+            // each other. Getting that wrong does not throw - it under-reports,
+            // which is the failure this whole file exists to catch.
+            var source = new FakePushSource(Items(80), requiresOrderedCommit: false);
+            (PushEngine engine, StubGraphAdapter adapter) = Engine(batch: true, writers: 8);
+
+            // Enough delay that the batches genuinely overlap rather than
+            // serialising by accident on a fast machine.
+            adapter.WriteDelay = TimeSpan.FromMilliseconds(40);
+
+            // Two refusals in different batches, so this is not a single-batch
+            // case wearing a concurrency hat. Ids are a01.. so a13 and a57 fall
+            // in the first and third chunks of twenty.
+            adapter.BatchStatusFor = id => id is "a13" or "a57" ? 400 : (int?)null;
+
+            PushSummary summary = await engine.PushItemsAsync(source);
+
+            Assert.True(
+                adapter.MaxConcurrentWrites > 1,
+                $"expected overlapping batches, saw at most {adapter.MaxConcurrentWrites} at once");
+
+            // The whole claim: 78 of 80 land, and the two that did not are the
+            // two that were refused. An engine that abandoned a batch on its
+            // first refusal would be short by up to nineteen more.
+            Assert.Equal(78, adapter.WrittenItemIds.Count);
+            Assert.DoesNotContain("a13", adapter.WrittenItemIds);
+            Assert.DoesNotContain("a57", adapter.WrittenItemIds);
+
+            // No item is written twice under concurrency - a duplicate here
+            // would mean two writers took the same chunk.
+            Assert.Equal(
+                adapter.WrittenItemIds.Count,
+                adapter.WrittenItemIds.Distinct().Count());
+
+            // And the summary reconciles across writers that never saw each
+            // other: every item is accounted for exactly once, as written or
+            // as failed.
+            Assert.Equal(2, summary.Failed);
+            Assert.Equal(78, summary.Total);
+            Assert.Equal(80, summary.Total + summary.Failed);
+        }
+
         private static StubGraphAdapter Adapter()
         {
             return new StubGraphAdapter(
@@ -374,7 +433,7 @@ namespace SqlTicketsConnector.Tests
         }
 
         private static (PushEngine Engine, StubGraphAdapter Adapter) Engine(
-            bool batch, bool dryRun = false)
+            bool batch, bool dryRun = false, int writers = 0)
         {
             StubGraphAdapter adapter = Adapter();
 
@@ -383,6 +442,13 @@ namespace SqlTicketsConnector.Tests
             // default would be testing the fixture.
             PushOptions options = TestData.ValidPushOptions(ConnectionId);
             options.Settings["Batch"] = batch ? "true" : "false";
+
+            // Left unset by default so every existing test in this file keeps the
+            // writer count it was written against.
+            if (writers > 0)
+            {
+                options.Settings["Writers"] = writers.ToString(CultureInfo.InvariantCulture);
+            }
 
             var engine = new PushEngine(
                 new SqlHierarchyPush.HierarchyPushConnector(),

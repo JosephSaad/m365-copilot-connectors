@@ -556,3 +556,167 @@ jobs:
                  --title "${GITHUB_REF_NAME}"
           gh release upload "${GITHUB_REF_NAME}" package/* offline/* --clobber --repo "${GITHUB_REPOSITORY}"
           echo "Attached the deployment package and the offline package set to ${GITHUB_REF_NAME}."
+
+  # =========================================================================
+  # The state database, executed rather than read.
+  #
+  # sql/20-25 are the only part of this repository no unit test can reach: they
+  # are a schema, and a schema is proven by a server parsing it. The whole set
+  # went unexecuted until a first deployment ran it by hand and found two
+  # defects in sql/26 - one a hard error, one silent - neither of which was
+  # visible from reading the file.
+  #
+  # This job is what stops that being a one-off. It builds the state database on
+  # the runner's LocalDB, in order, then builds the fixture and asserts against
+  # the numbers the scripts themselves state.
+  #
+  # WHAT IT CANNOT COVER, so a green tick is not read as more than it is:
+  # sql/25's grants need domain principals that cannot exist on a runner, so
+  # they are parsed and not applied. That leaves exactly the control a first
+  # deployment also could not exercise, and this job does not close it.
+  # =========================================================================
+  state-database:
+    name: State database on LocalDB (windows-latest)
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # LocalDB ships with the hosted Windows runner. Started explicitly rather
+      # than by autostart: on a cold runner the first connection otherwise pays
+      # the instance-creation time and times out.
+      - name: Start LocalDB
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          sqllocaldb create MSSQLLocalDB -s
+          sqllocaldb info MSSQLLocalDB
+          sqlcmd -S "(localdb)\MSSQLLocalDB" -Q "SELECT @@VERSION;" -b
+
+      # sql/20 hard-codes D: paths as placeholders that fail loudly by design.
+      # LocalDB has no D:, so the file clauses are stripped for this run and the
+      # instance defaults accepted - the same edit the deployment guide tells an
+      # operator to make, made in a copy so the tracked file keeps its loud
+      # placeholder.
+      - name: Stage sql/20 with the instance defaults
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path staged | Out-Null
+          $sql = Get-Content sql/20-crawl-state-database.sql -Raw
+          $sql = $sql -replace '(?ms)^\s*ON PRIMARY.*?(?=^\s*(GO|ALTER|--))', ''
+          $sql = $sql -replace '(?ms)^\s*LOG ON.*?(?=^\s*(GO|ALTER|--))', ''
+          Set-Content -Path staged/20-crawl-state-database.sql -Value $sql -Encoding UTF8
+          Write-Host 'Staged sql/20 without the D: file clauses.'
+
+      - name: Build ConnectorState (sql/20-24)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $server = '(localdb)\MSSQLLocalDB'
+          sqlcmd -S $server -i staged/20-crawl-state-database.sql -b
+          foreach ($f in @(
+              'sql/21-crawl-state-tables.sql',
+              'sql/22-crawl-state-views.sql',
+              'sql/23-crawl-state-procedures.sql',
+              'sql/24-crawl-state-reporting.sql')) {
+            Write-Host "== $f =="
+            sqlcmd -S $server -d ConnectorState -i $f -b
+          }
+
+      # Syntax only, and allowed to fail. Every principal in this file is a
+      # domain account, so the grants cannot be applied on a runner. Running it
+      # still catches a parse error, which is the failure mode sql/25 has that
+      # nothing else would find.
+      - name: Parse sql/25 without applying it
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          sqlcmd -S '(localdb)\MSSQLLocalDB' -d ConnectorState -i sql/25-crawl-state-least-privilege.sql -b
+
+      - name: Build the timesheet fixture (sql/10-13, 26)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $server = '(localdb)\MSSQLLocalDB'
+          sqlcmd -S $server -Q "IF DB_ID('Ops') IS NULL CREATE DATABASE [Ops];" -b
+          foreach ($f in @(
+              'sql/10-timesheet-source.sql',
+              'sql/11-timesheet-sample-data.sql',
+              'sql/12-timesheet-views.sql',
+              'sql/26-timesheet-incremental.sql')) {
+            Write-Host "== $f =="
+            sqlcmd -S $server -d Ops -i $f -b
+          }
+
+      # Every assertion is a number the scripts themselves state, so a failure
+      # is the SQL disagreeing with its own documentation rather than a
+      # threshold somebody picked for CI.
+      - name: Assert the fixture and the state schema
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $server = '(localdb)\MSSQLLocalDB'
+
+          function Get-Scalar($db, $query) {
+            $raw = sqlcmd -S $server -d $db -Q $query -h -1 -W -b
+            return [int](@($raw) | Where-Object { $_ -match '^[0-9]+$' } | Select-Object -First 1)
+          }
+
+          $failures = @()
+
+          # sql/11 seeds 12 customers, 62 engagements and 1,052 time entries, of
+          # which 8 are soft-deleted on purpose: 12 + 62 + 1044 = 1118.
+          $items = Get-Scalar 'Ops' 'SET NOCOUNT ON; SELECT COUNT(*) FROM dbo.vwExternalItems;'
+          Write-Host "vwExternalItems: $items (expected 1118)"
+          if ($items -ne 1118) { $failures += "vwExternalItems returned $items, expected 1118" }
+
+          # sql/26's view must agree. Zero is the signature of the constructed
+          # ItemId join defect: an INNER JOIN on a prefix the sql/12 views do not
+          # emit returns nothing rather than failing.
+          $incr = Get-Scalar 'Ops' 'SET NOCOUNT ON; SELECT COUNT(*) FROM dbo.vwExternalItemsIncremental;'
+          Write-Host "vwExternalItemsIncremental: $incr (expected 1118)"
+          if ($incr -ne 1118) { $failures += "vwExternalItemsIncremental returned $incr, expected 1118" }
+
+          $trg = Get-Scalar 'Ops' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.triggers WHERE name IN (N'trgCustomers_Effective', N'trgEngagements_Effective', N'trgTimeEntries_Effective') AND is_disabled = 0;"
+          Write-Host "enabled sql/26 triggers: $trg (expected 3)"
+          if ($trg -ne 3) { $failures += "expected 3 enabled triggers, found $trg" }
+
+          # A CREATE OR ALTER batch that failed to parse leaves a procedure
+          # absent and is otherwise silent until the first EXEC.
+          $tables = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.tables WHERE SCHEMA_NAME(schema_id) = 'crawl';"
+          $views  = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.views WHERE SCHEMA_NAME(schema_id) = 'crawl';"
+          $procs  = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.procedures WHERE SCHEMA_NAME(schema_id) = 'crawl';"
+          Write-Host "crawl schema: $tables tables, $views views, $procs procedures"
+          if ($tables -ne 8) { $failures += "expected 8 crawl tables, found $tables" }
+          if ($views -ne 6) { $failures += "expected 6 crawl views, found $views" }
+          if ($procs -lt 26) { $failures += "expected at least 26 crawl procedures, found $procs" }
+
+          if ($failures.Count -gt 0) {
+            $failures | ForEach-Object { Write-Host "::error::$_" }
+            exit 1
+          }
+
+          Write-Host 'All state database assertions passed.'
+
+      # Re-running must be safe: sql/21 never ALTERs an existing table and the
+      # rest are CREATE OR ALTER. An operator who runs the set twice - which is
+      # what a failed deployment leads to - must not get a different database.
+      - name: Re-run the set and assert it is idempotent
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $server = '(localdb)\MSSQLLocalDB'
+          sqlcmd -S $server -i staged/20-crawl-state-database.sql -b
+          foreach ($f in @(
+              'sql/21-crawl-state-tables.sql',
+              'sql/22-crawl-state-views.sql',
+              'sql/23-crawl-state-procedures.sql',
+              'sql/24-crawl-state-reporting.sql')) {
+            sqlcmd -S $server -d ConnectorState -i $f -b
+          }
+          foreach ($f in @('sql/12-timesheet-views.sql', 'sql/26-timesheet-incremental.sql')) {
+            sqlcmd -S $server -d Ops -i $f -b
+          }
+          Write-Host 'Second pass completed without error.'
