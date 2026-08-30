@@ -172,6 +172,38 @@
   </ItemGroup>
 
   <!--
+    The seven Microsoft.Extensions.* packages the OpenTelemetry SDK drags in.
+    Nothing in this repository calls them; they are pinned because they were
+    FLOATING, and floating in the one direction this file exists to stop.
+
+    OpenTelemetry asks for 9.0.0. On net10.0 something else in the graph lifted
+    them to 10.0.0; on net9.0 nothing did, so 9.0.0 stood. Same solution, same
+    commit, two target frameworks, two answers - which is two sets of nupkgs on
+    an air-gapped machine and two advisory trails the next time one of them is
+    named in a CVE. Exactly the failure the header of this file describes,
+    arriving through a transitive edge nobody had reason to look at.
+
+    It was invisible until the offline package list learned to check both target
+    frameworks; the net10.0 check alone had been passing on it for as long as
+    the exporter has existed.
+
+    10.0.3 rather than 10.0.0, so the whole Microsoft.Extensions family carries
+    one version: the .Abstractions, .Options and .Primitives packages beside
+    them already resolve at 10.0.3 through the Graph SDK. A version named here
+    is a floor, so this raises net9.0 to meet net10.0 rather than the reverse -
+    the safe direction, and the one that leaves a single set to download.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Configuration" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.3" />
+  </ItemGroup>
+
+  <!--
     Only referenced under -p:EnablePdfExtraction=true. PDF is the one common
     format with no answer in the base class library, and adding a parser is a
     dependency decision rather than a coding one: PdfPig is Apache-2.0, which

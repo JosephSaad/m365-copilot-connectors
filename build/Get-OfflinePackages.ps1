@@ -6,13 +6,24 @@
 .DESCRIPTION
     Run this on any machine with internet access, copy the output folder to the
     isolated build machine, and restore from it with --source. The list is
-    grouped into three sets, because you probably do not need all three:
+    grouped into four sets, because you probably do not need all four:
 
-      Base (74 packages, about 119 MB)
-          Everything 'dotnet build' and 'dotnet test' of the solution need,
-          across every project. Always downloaded. The count is what the list
-          below actually holds; the size is an older measurement and has not
-          been re-taken since.
+      Base (62 packages, about 112 MB)
+          Everything 'dotnet build' and 'dotnet test' of the solution need on
+          EITHER target framework. Always downloaded.
+
+      net9.0 supplement (6 packages, about 2 MB)
+          What net10.0's shared framework provides and net9.0's does not:
+          System.Text.Json, System.Memory and four neighbours. Downloaded
+          unless you pass -TargetFramework net10.0.
+
+          The variable is the TARGET FRAMEWORK, not the SDK. Restoring at
+          net9.0 produces byte-identical graphs under the .NET 9 SDK and the
+          .NET 10 SDK; what differs is what the framework being targeted
+          already carries. net10.0's graph is a strict subset of net9.0's, so
+          the union below is complete for both and 'both' is the default: six
+          spare nupkgs on the offline machine cost nothing, and six missing
+          ones cost a failed restore months later with no clue why.
 
       Runtime packs (4 packages, about 93 MB)
           Only for 'Build.ps1 -SelfContained', which is how the release package
@@ -61,11 +72,22 @@
 .EXAMPLE
     .\build\Get-OfflinePackages.ps1 -SkipRuntimePacks -SkipOtlp
     Just enough to build and test, without a self-contained publish.
+
+.EXAMPLE
+    .\build\Get-OfflinePackages.ps1 -TargetFramework net9.0
+    Staging for the release/net9 line. Same as the default here, since the
+    net9.0 graph is the superset; pass net10.0 to leave the supplement out.
 #>
 
 [CmdletBinding()]
 param(
     [string]$OutputDirectory = './offline-packages',
+
+    # Which target framework the offline machine will build. 'both' is the
+    # default and downloads the union, because a folder with six spare nupkgs in
+    # it restores perfectly well and a folder missing six does not.
+    [ValidateSet('both', 'net10.0', 'net9.0')]
+    [string]$TargetFramework = 'both',
 
     # Empty means "ask the SDK". See the note above about which machine's SDK.
     [string]$RuntimeVersion = '',
@@ -94,7 +116,6 @@ $packages = @(
     @{ Id = 'Grpc.Tools'; Version = '2.40.0' }
     @{ Id = 'Microsoft.Bcl.AsyncInterfaces'; Version = '10.0.3' }
     @{ Id = 'Microsoft.CodeCoverage'; Version = '18.9.0' }
-    @{ Id = 'Microsoft.CSharp'; Version = '4.5.0' }
     @{ Id = 'Microsoft.Data.SqlClient'; Version = '5.2.2' }
     @{ Id = 'Microsoft.Data.SqlClient.SNI.runtime'; Version = '5.2.0' }
     @{ Id = 'Microsoft.Extensions.Configuration.Abstractions'; Version = '10.0.3' }
@@ -124,8 +145,6 @@ $packages = @(
     @{ Id = 'Microsoft.Kiota.Serialization.Multipart'; Version = '1.21.1' }
     @{ Id = 'Microsoft.Kiota.Serialization.Text'; Version = '1.21.1' }
     @{ Id = 'Microsoft.NET.Test.Sdk'; Version = '18.9.0' }
-    @{ Id = 'Microsoft.NETCore.Platforms'; Version = '1.1.0' }
-    @{ Id = 'Microsoft.NETCore.Targets'; Version = '1.1.0' }
     @{ Id = 'Microsoft.SqlServer.Server'; Version = '1.0.0' }
     @{ Id = 'Microsoft.TestPlatform.ObjectModel'; Version = '18.9.0' }
     @{ Id = 'Microsoft.TestPlatform.TestHost'; Version = '18.9.0' }
@@ -137,20 +156,11 @@ $packages = @(
     @{ Id = 'System.ClientModel'; Version = '1.10.0' }
     @{ Id = 'System.Configuration.ConfigurationManager'; Version = '8.0.0' }
     @{ Id = 'System.Data.Odbc'; Version = '9.0.0' }
-    @{ Id = 'System.Diagnostics.DiagnosticSource'; Version = '10.0.3' }
     @{ Id = 'System.Diagnostics.EventLog'; Version = '8.0.0' }
     @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '8.15.0' }
-    @{ Id = 'System.IO.Pipelines'; Version = '10.0.3' }
-    @{ Id = 'System.Memory'; Version = '4.5.3' }
     @{ Id = 'System.Memory.Data'; Version = '10.0.3' }
-    @{ Id = 'System.Runtime'; Version = '4.3.0' }
     @{ Id = 'System.Runtime.Caching'; Version = '8.0.0' }
-    @{ Id = 'System.Security.Cryptography.Cng'; Version = '4.5.0' }
     @{ Id = 'System.Security.Cryptography.ProtectedData'; Version = '8.0.0' }
-    @{ Id = 'System.Text.Encoding'; Version = '4.3.0' }
-    @{ Id = 'System.Text.Encodings.Web'; Version = '10.0.3' }
-    @{ Id = 'System.Text.Json'; Version = '10.0.3' }
-    @{ Id = 'System.ValueTuple'; Version = '4.5.0' }
     @{ Id = 'xunit'; Version = '2.9.3' }
     @{ Id = 'xunit.abstractions'; Version = '2.0.3' }
     @{ Id = 'xunit.analyzers'; Version = '1.18.0' }
@@ -161,6 +171,46 @@ $packages = @(
     @{ Id = 'xunit.runner.visualstudio'; Version = '4.0.0' }
     # END BASE LIST
 )
+
+# --- net9.0 only: what the shared framework stops providing ----------------
+#
+# THE DIFFERENCE IS THE TARGET FRAMEWORK, NOT THE SDK, and that took measuring
+# to establish because the obvious guess is wrong. Restoring this solution at
+# net9.0 resolves the SAME 68 packages under the .NET 9 SDK (9.0.317) and the
+# .NET 10 SDK (10.0.400) - byte-identical graphs. What changes is which
+# assemblies the TARGET framework provides: net10.0's shared framework carries
+# these six, so the SDK prunes them as framework-provided, and net9.0's does
+# not, so they arrive as packages.
+#
+# A first attempt at this reasoned from a bare probe project instead, saw
+# System.Text.Json resolve at 4.7.2 under the .NET 9 SDK, and concluded the SDK
+# was the variable. It was not: the probe simply lacked this solution's central
+# transitive pinning, which floors these at the versions below. The graphs above
+# are the whole solution, restored four ways.
+#
+# So the base list is the intersection - what BOTH target frameworks need - and
+# this is the net9.0 supplement. net10.0's graph is a strict subset of net9.0's;
+# there is no package net10.0 needs that net9.0 does not.
+#
+# Regenerated the same way, from a net9.0 restore:
+#     dotnet restore SqlTicketsConnector.sln -p:ConnectorTargetFramework=net9.0
+#     pwsh build/Test-OfflinePackageList.ps1 -Configuration Base -Update
+# The check reads which framework was restored out of project.assets.json and
+# rewrites the matching block, so the two cannot be updated into each other.
+$net9Only = @(
+    # BEGIN NET9 LIST
+    @{ Id = 'System.Diagnostics.DiagnosticSource'; Version = '10.0.3' }
+    @{ Id = 'System.IO.Pipelines'; Version = '10.0.3' }
+    @{ Id = 'System.Memory'; Version = '4.5.3' }
+    @{ Id = 'System.Text.Encodings.Web'; Version = '10.0.3' }
+    @{ Id = 'System.Text.Json'; Version = '10.0.3' }
+    @{ Id = 'System.ValueTuple'; Version = '4.5.0' }
+    # END NET9 LIST
+)
+
+if ($TargetFramework -ne 'net10.0') {
+    $packages += $net9Only
+}
 
 # --- Runtime packs: only for a self-contained publish ----------------------
 if (-not $SkipRuntimePacks) {
@@ -216,13 +266,16 @@ if (-not $SkipRuntimePacks) {
 # which is why adding it did not disturb the Google.Protobuf pinning that the
 # sink forces.
 #
-# The seven Microsoft.Extensions.* entries are deliberately NOT pinned in
-# Directory.Packages.props. They arrive only under this flag, nothing in the
-# base build references them, and seven entries the default configuration never
-# uses would be seven more things to keep true. They are transcribed here
-# instead, which is the file whose job is to be a transcript - and CI compares
-# it against the real graph, so a floor that moves shows up as a failed check
-# rather than as a folder of nupkgs that does not restore.
+# The seven Microsoft.Extensions.* entries ARE pinned in
+# Directory.Packages.props, and the reason is worth reading before anyone
+# unpins them to tidy up. Left unpinned they resolved at 9.0.0 on net9.0 and
+# 10.0.0 on net10.0 - one solution, one commit, two answers - so this block
+# would have needed fourteen entries rather than seven, and an air-gapped
+# machine building both targets would have needed both copies of each.
+#
+# Nobody had seen it because nothing compared the two target frameworks until
+# the base list learned to. It had been true for as long as the exporter had
+# existed.
 if (-not $SkipOtlp) {
     $packages += @(
         @{ Id = 'Google.Protobuf'; Version = '3.35.1' }
@@ -236,13 +289,13 @@ if (-not $SkipOtlp) {
         @{ Id = 'OpenTelemetry.Api.ProviderBuilderExtensions'; Version = '1.18.0' }
         @{ Id = 'OpenTelemetry.Exporter.OpenTelemetryProtocol'; Version = '1.18.0' }
 
-        @{ Id = 'Microsoft.Extensions.Configuration'; Version = '10.0.0' }
-        @{ Id = 'Microsoft.Extensions.Configuration.Binder'; Version = '10.0.0' }
-        @{ Id = 'Microsoft.Extensions.Configuration.EnvironmentVariables'; Version = '10.0.0' }
-        @{ Id = 'Microsoft.Extensions.DependencyInjection'; Version = '10.0.0' }
-        @{ Id = 'Microsoft.Extensions.Logging'; Version = '10.0.0' }
-        @{ Id = 'Microsoft.Extensions.Logging.Configuration'; Version = '10.0.0' }
-        @{ Id = 'Microsoft.Extensions.Options.ConfigurationExtensions'; Version = '10.0.0' }
+        @{ Id = 'Microsoft.Extensions.Configuration'; Version = '10.0.3' }
+        @{ Id = 'Microsoft.Extensions.Configuration.Binder'; Version = '10.0.3' }
+        @{ Id = 'Microsoft.Extensions.Configuration.EnvironmentVariables'; Version = '10.0.3' }
+        @{ Id = 'Microsoft.Extensions.DependencyInjection'; Version = '10.0.3' }
+        @{ Id = 'Microsoft.Extensions.Logging'; Version = '10.0.3' }
+        @{ Id = 'Microsoft.Extensions.Logging.Configuration'; Version = '10.0.3' }
+        @{ Id = 'Microsoft.Extensions.Options.ConfigurationExtensions'; Version = '10.0.3' }
     )
 }
 
