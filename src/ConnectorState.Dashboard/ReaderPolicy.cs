@@ -39,13 +39,23 @@ public static class ReaderPolicy
     /// that does not opt out, so adding a page cannot accidentally add an
     /// anonymous one.
     ///
-    /// RequireRole against a Windows identity tests group membership: the
-    /// negotiate handshake puts one role claim on the principal per group in the
-    /// user's token, so a group name is matched the same way a role is. Nested
-    /// groups therefore work, and only because the token already flattened them
-    /// - this is not walking the directory, and a group the token did not carry
-    /// is a group this check cannot see. That is the documented reason a user
-    /// added to a group has to sign in again.
+    /// RequireRole against a Windows identity tests group membership through the
+    /// token, which already carries one role claim per group. Nested groups
+    /// therefore work, and only because the token flattened them - this is not
+    /// walking the directory, and a group the token did not carry is a group
+    /// this check cannot see. That is why a user added to a group has to sign in
+    /// again.
+    ///
+    /// WHETHER A GROUP NAME OR ITS SID BELONGS IN CONFIGURATION IS NOT SETTLED
+    /// HERE. A Windows identity's RoleClaimType is `groupsid` and the claim
+    /// VALUES are SIDs - `S-1-5-32-545`, not `BUILTIN\Users`. Names still work
+    /// if the request principal is a WindowsPrincipal, whose IsInRole resolves a
+    /// name to a SID before comparing; they do not if it arrives as a plain
+    /// ClaimsPrincipal, which compares claim values literally. Which one IIS
+    /// hands over is a property of the host, so no test in this repository can
+    /// answer it - see live test L4 in GO-LIVE-READINESS, which exists to.
+    ///
+    /// Until it is answered, a SID is the spelling that works either way.
     ///
     /// BLANK ENTRIES ARE DROPPED, and that is not tidying. A JSON array with a
     /// stray empty string - the shape a half-finished edit leaves behind -
