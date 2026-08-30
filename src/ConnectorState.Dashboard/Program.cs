@@ -48,10 +48,30 @@
 // item ID, a type, two hashes and a byte count - see the header of sql/22 - so
 // no page here can show a document body, a field value or a title, however the
 // query is written. The pages say so where somebody would otherwise expect it.
+//
+// THERE IS ONE ENDPOINT THAT IS NOT A PAGE: GET /health, in Monitoring/. It is
+// JSON for a monitoring system rather than HTML for a person, and it is gated by
+// the same policy as everything else - it asks for that policy BY NAME, which is
+// why the policy is registered under a name below as well as installed as the
+// fallback. The reasoning for gating it at all, rather than leaving a monitoring
+// endpoint anonymous, is in the header of HealthEndpoint.cs; the short version
+// is that its body names customer connections, so an anonymous /health is an
+// anonymous page with the connection inventory on it.
+//
+// THERE IS NOW ONE SCRIPT ON THIS SITE, AND THE POLICY BELOW PERMITS EXACTLY IT.
+// It reads the browser's time zone into a cookie so the pages can render times
+// in the viewer's zone instead of making everybody convert from UTC in their
+// head. It is allowed by a SHA-256 of its own bytes rather than by script-src
+// 'self', so adding a second script - a file in wwwroot, another inline block,
+// an event-handler attribute - is still refused by the browser. See
+// TimeZoneProbeScript.cs for why a script was the only way to answer the
+// question at all, and DisplayZone.cs for what the pages do when it never runs.
 // ---------------------------------------------------------------------------
 
 using ConnectorState.Dashboard;
 using ConnectorState.Dashboard.Data;
+using ConnectorState.Dashboard.Monitoring;
+using ConnectorState.Dashboard.Presentation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Server.IISIntegration;
 
@@ -81,9 +101,23 @@ string[] readerGroups = builder.Configuration
 // The rule itself is in ReaderPolicy, so it can be tested. Its negative case -
 // somebody outside every configured group being refused - is the half that
 // matters and the half a running site cannot show you without a second person.
+AuthorizationPolicy readerPolicy = ReaderPolicy.Build(readerGroups);
+
 builder.Services.AddAuthorization(options =>
 {
-    options.FallbackPolicy = ReaderPolicy.Build(readerGroups);
+    // The fallback covers every endpoint that does not state a requirement of
+    // its own, which is all seven pages: adding a page cannot accidentally add
+    // an anonymous one.
+    options.FallbackPolicy = readerPolicy;
+
+    // The SAME OBJECT, under a name, for the one endpoint that does state its
+    // own requirement - GET /health. Registered from the variable rather than
+    // by calling ReaderPolicy.Build a second time, because two policies built
+    // separately from the same configuration are two things somebody can later
+    // edit separately, and the one that gets missed is whichever is not on the
+    // screen. This way the endpoint and the pages are not merely consistent;
+    // they are the same rule.
+    options.AddPolicy(ReaderPolicy.PolicyName, readerPolicy);
 });
 
 builder.Services.AddRazorPages();
@@ -126,18 +160,34 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
 }
 
+// Built once, outside the request, because the script-src source is a SHA-256
+// of the probe script's bytes and there is no reason to hash it per request.
+//
+// WHAT THIS POLICY NOW PERMITS THAT IT DID NOT. It gained exactly one source:
+// script-src 'sha256-...', which allows an inline script whose content hashes to
+// that value and nothing else. It did NOT gain 'self' - a second script file
+// dropped into wwwroot is still refused - and it did not gain 'unsafe-inline',
+// so an onclick attribute or a second inline block is still refused too. The
+// property this file used to claim, that there is no script on any page here, is
+// now narrower and still enforced by the browser rather than by review: there is
+// ONE script here, its text is in TimeZoneProbeScript.cs, and anything else is
+// blocked. The reason it exists at all is in that file's header; the short
+// version is that a browser's time zone reaches the server no other way, and the
+// alternative was to render the SERVER's zone and label it as the viewer's.
+//
+// Everything else is unchanged: default-src stays 'none', so a page here still
+// cannot fetch, connect, frame, or load a font or a worker from anywhere.
+string contentSecurityPolicy =
+    "default-src 'none'; " +
+    "script-src " + TimeZoneProbeScript.ContentSecurityPolicySource + "; " +
+    "style-src 'self'; img-src 'self' data:; " +
+    "form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+
 app.Use(async (context, next) =>
 {
     IHeaderDictionary headers = context.Response.Headers;
 
-    // The page loads one stylesheet from its own origin and nothing else. There
-    // is no script on any page here, so 'none' is a statement of fact rather
-    // than a restriction, and it is the control that keeps it that way: the day
-    // somebody adds an inline handler, it stops working immediately instead of
-    // quietly widening what this page can do.
-    headers["Content-Security-Policy"] =
-        "default-src 'none'; style-src 'self'; img-src 'self' data:; " +
-        "form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+    headers["Content-Security-Policy"] = contentSecurityPolicy;
     headers["X-Content-Type-Options"] = "nosniff";
     headers["Referrer-Policy"] = "same-origin";
 
@@ -147,6 +197,12 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// Records an explicit "show me UTC" or "show me my zone" from the query string
+// as a cookie, before anything renders. The reading of that preference is
+// DisplayZoneRequest.For, which the pages call; this only has to run early
+// enough to get a Set-Cookie onto the response.
+app.UseDisplayZone();
+
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
@@ -155,5 +211,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapRazorPages();
+
+// Mapped after the pages and outside them. It is not a Razor Page with a JSON
+// content type bolted on: a page carries a view, a layout and an antiforgery
+// pipeline it would have no use for, and every one of those is a thing that can
+// start returning HTML to something that only parses JSON.
+app.MapConnectionHealth();
 
 app.Run();
