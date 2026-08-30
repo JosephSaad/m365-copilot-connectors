@@ -133,7 +133,7 @@ Cheap to do now, materially more expensive afterwards. None blocks a pilot.
 
 | Feature | Description | Status |
 |---|---|---|
-| Incremental reads, connector side | The engine plumbs the resume marker and the change-detection tier, but no connector reads the marker yet, so `sql/26` is unreachable from the shipped binaries. Unnecessary at pilot scale; the lever that matters at production scale | ⚠️ |
+| Incremental reads, connector side | The engine plumbs the resume marker and the change-detection tier, but no connector reads the marker yet. `sql/26` is not merely unreached by the shipped binaries — it is **incompatible with them**: `HierarchyPushConnector` emits an explicit 30-column `SELECT` and `vwExternalItemsIncremental` projects 12, so pointing `Source:ItemView` at it fails on 19 invalid column names, `LastModified` among them — the view names that column `EffectiveLastModified`. Column parity alone would not finish it: the query orders by item type then id, not the ascending `(marker, id)` a `ChangeMarker` source owes [`SOURCE-CONTRACT.md`](SOURCE-CONTRACT.md). Unnecessary at pilot scale; the lever that matters at production scale | ⚠️ |
 | Hierarchy-aware timestamp deployed | `sql/26` alters the source tables and installs cascading triggers. Needs the source team's agreement; differencing works without it | ⚠️ |
 | Identity cache wired | The principal cache table and store methods exist, but nothing calls them — the CDP resolver still resolves in memory each run | ⚠️ |
 | Single flush procedure | Fold the per-chunk round trips into one server-side compare. The next throughput lever after batching | ❌ |
