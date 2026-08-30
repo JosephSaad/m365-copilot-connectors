@@ -79,23 +79,40 @@ while (-not (Get-Service W3SVC -ErrorAction SilentlyContinue)) {
     Start-Sleep -Seconds 5
 }
 
-$ancm = 'C:\Windows\System32\inetsrv\aspnetcorev2.dll'
-$bundle = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
-                        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall' `
-                        -ErrorAction SilentlyContinue |
-    ForEach-Object { $_.GetValue('DisplayName') } |
-    Where-Object { $_ -like '*ASP.NET Core*Hosting Bundle*' }
+# WHERE ANCM ACTUALLY LIVES. This looked only in System32\inetsrv, which is the
+# V1 location and is empty on every current install - so the script threw on a
+# machine whose module was present and whose site was serving 200. The module
+# is under Program Files; only a shim was ever placed in inetsrv, and modern
+# bundles do not place one at all.
+$ancmPaths = @(
+    'C:\Program Files\IIS\Asp.Net Core Module\V2\aspnetcorev2.dll'
+    'C:\Windows\System32\inetsrv\aspnetcorev2.dll'
+)
 
-if (Test-Path $ancm) {
-    Write-Host '  ANCM already present'
-}
-elseif ($bundle) {
-    # Installed, but without the IIS half - the exact state a bundle-before-IIS
-    # ordering leaves behind. Repair adds the module now that IIS exists.
-    Write-Host '  bundle installed but ANCM missing; repairing'
-    winget repair --id Microsoft.DotNet.HostingBundle.9 -e --accept-source-agreements
+function Find-Ancm { $script:ancmPaths | Where-Object { Test-Path $_ } | Select-Object -First 1 }
+
+$found = Find-Ancm
+
+if ($found) {
+    Write-Host "  ANCM present     $found"
 }
 else {
+    $bundle = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+                            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall' `
+                            -ErrorAction SilentlyContinue |
+        ForEach-Object { $_.GetValue('DisplayName') } |
+        Where-Object { $_ -like '*ASP.NET Core*Hosting Bundle*' }
+
+    if ($bundle) {
+        # `winget repair` is NOT supported for this package - it answers "the
+        # repair command for this package cannot be found" - so do not pretend
+        # it is. This is the bundle-installed-before-IIS state, and the fix is
+        # the vendor installer's own repair, run by a person.
+        throw ("An ASP.NET Core Hosting Bundle is installed ($bundle) but the module is not. " +
+               'That is what installing the bundle before IIS leaves behind. Repair it from ' +
+               'Settings > Apps, or download the bundle installer and choose Repair, then re-run this script.')
+    }
+
     winget install --id Microsoft.DotNet.HostingBundle.9 -e `
         --accept-package-agreements --accept-source-agreements --disable-interactivity
 }
@@ -103,8 +120,35 @@ else {
 net stop was /y | Out-Null
 net start w3svc | Out-Null
 
-if (-not (Test-Path $ancm)) {
-    throw "ANCM still not registered at $ancm. Reboot and re-run: the IIS features may need a restart to complete."
+if (-not (Find-Ancm)) {
+    throw ("ANCM not found in any of: $($ancmPaths -join ', '). " +
+           'Reboot and re-run: the IIS features may need a restart to complete.')
+}
+
+# THE BUNDLE VERSION AND THE APP'S TARGET HAVE TO AGREE, and they silently did
+# not the first time this ran: the site had bundle 9 while the publish had moved
+# to net10.0. ANCM itself is version-agnostic - it launches the runtime - so the
+# failure is not here but at the first request, as a 500.30 the operator then has
+# to work backwards from.
+$runtimeConfig = Join-Path $SourcePath 'ConnectorState.Dashboard.runtimeconfig.json'
+
+if (Test-Path $runtimeConfig) {
+    $needs = (Get-Content $runtimeConfig -Raw | ConvertFrom-Json).runtimeOptions.frameworks |
+        Where-Object { $_.name -eq 'Microsoft.AspNetCore.App' } |
+        Select-Object -ExpandProperty version -First 1
+
+    if ($needs) {
+        $major = ($needs -split '\.')[0]
+        $have = (& dotnet --list-runtimes) -match "^Microsoft\.AspNetCore\.App $major\."
+
+        if (-not $have) {
+            throw ("The published app needs Microsoft.AspNetCore.App $needs and no $major.x runtime is " +
+                   'installed. Install the matching ASP.NET Core Hosting Bundle, or republish for a ' +
+                   'framework this host has.')
+        }
+
+        Write-Host "  runtime present  Microsoft.AspNetCore.App $major.x for a $needs app"
+    }
 }
 
 # -------------------------------------------------------------------------
