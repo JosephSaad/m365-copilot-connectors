@@ -79,13 +79,20 @@ dropped. A column of identical hashes across 1,119 items does prove it: the
 shared-object regression is exactly what would make them diverge. Worth knowing
 that the check exists and where it lives, because it is not in the test suite.
 
-And the sweep runs on a **full** crawl only. All four runs were full because
-`Settings:Incremental` was never set. Turn it on and the sweep does not stop
-firing, but it stops firing *every run*: `uspBeginRun` escalates to full once the
-last full success ages past `Settings:FullEveryHours`, 168 by default, so
-deletions arrive weekly rather than per run. That is the same number
+And the sweep runs on a **full** crawl only — but not for the reason this
+paragraph gave before L10 was run. It said that turning `Settings:Incremental`
+on would make deletions arrive weekly, at `Settings:FullEveryHours`. It does not,
+today: setting it changes nothing at all. No shipped connector implements the
+`ChangeMarker` tier, so `PushItem.LastModifiedUtc` is never set and no checkpoint
+is ever saved, and `uspBeginRun` escalates *every* incremental request with no
+checkpoint straight back to full. Two runs with the flag on both recorded
+`Mode = 1`, and `crawl.Checkpoint` is still empty.
+
+So the sweep currently fires on every run, and the ACL staleness bound
 [`PRODUCTION-ONBOARDING.md`](PRODUCTION-ONBOARDING.md) row 1.1 asks somebody to
-accept in writing, and this is what it buys.
+accept is better than the 168 hours that row quotes. It becomes exactly 168 the
+day a connector reads the marker, and that is the day to revisit the number
+rather than now.
 
 | # | Feature | What it means | Status |
 |---|---|---|---|
@@ -276,8 +283,8 @@ Both looked like passes.
 
 | # | Test | Pass looks like | Live Test Status |
 |---|---|---|---|
-| L9 | Set `IsDeleted = 0` on the tombstoned time entry and run a full crawl | The item returns and `crawl.Item` moves from state 3 back to live. Resurrection is what `@KeepTombstoneDays` exists for and it has never been exercised | **NOT RUN** |
-| L10 | Set `Settings:Incremental = true` and run twice inside `FullEveryHours` | The second run reads incrementally and performs **no** delete sweep, logging "Incremental run; no delete sweep". Every run so far has been full, so the mode gate has only ever been observed in one direction | **NOT RUN** — every run to date has been full, so the mode gate has only ever been observed in one direction |
+| L9 | Set `IsDeleted = 0` on the tombstoned time entry and run a full crawl | The item returns and `crawl.Item` moves from state 3 back to live. Resurrection is what `@KeepTombstoneDays` exists for and it has never been exercised | **PASSED** — run 9 wrote exactly 3 items and `time6053` went State 3 to State 1 with `DeletedUtc` cleared. The corpus is 1,119 live and zero tombstoned. The 3 are the entry and its two rollup ancestors, the same lineage the insert and the delete produced, so resurrection costs what a change costs and not a rewrite |
+| L10 | Set `Settings:Incremental = true` and run twice inside `FullEveryHours` | **The pass condition as first written is unreachable, and that is the finding.** It expected an incremental read with no delete sweep. No shipped connector implements the `ChangeMarker` tier, so `PushItem.LastModifiedUtc` is never set, so no checkpoint is ever saved — and `uspBeginRun` escalates any incremental request with no checkpoint to full. Read this row instead as: the escalation guard fires, says why, and records the mode the run will actually read in | **PASSED, against the corrected condition** — runs 10 and 11 both requested Incremental and both recorded `Mode = 1`. `crawl.Checkpoint` is empty and stayed empty. The warning names the cause exactly: "an incremental read with no baseline to be a delta against reads from the beginning of time anyway, so the run is recorded as what it will actually do". Until a connector reads the marker, `Settings:Incremental` changes nothing but the log |
 | L11 | Deploy `sql/28` to the live `ConnectorState`, then run the connector | No migration is reported, because the framing has not changed. Then set `ItemHasher.HashVersion` to 2 in a scratch build and confirm the next run escalates to full, says so, and reports it only once | **PARTIAL** — `sql/28` is deployed to the live `ConnectorState`, the connector ran against it and reported no migration, and `HashVersion` stayed 1, which is the first half. The report-once contract was proven directly against the procedure: same version 0, upgrade 1, asked again 0, downgrade 1. What has not been done is driving the escalation through a connector built at version 2 |
 
 Two notes on the order. L1 first, because it is the only one still holding a
