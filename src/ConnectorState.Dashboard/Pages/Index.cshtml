@@ -77,7 +77,16 @@
             <div class="tile-figure @(tiles.ThrottleWaitsInWindow > 0 ? "is-warn" : null)">
                 @Format.Count(tiles.ThrottleWaitsInWindow)
             </div>
-            <div class="tile-sub">429 and 5xx backoffs</div>
+            @* 429 ONLY, and the label used to say "429 and 5xx backoffs". It
+               does not count 5xx: both write paths increment this on 429 and
+               record a crawl.ThrottleEvent for every retryable status, so a run
+               that backed off a 504 shows 0 here with the event on record. This
+               rig has exactly that - a 504 stored against run 1 under a tile
+               reading zero - and "no throttling happened" is the wrong thing for
+               an operator to conclude from it. *@
+            <div class="tile-sub">
+                429s only &middot; <a href="/Runs">all backoffs per run</a>
+            </div>
         </div>
         <div class="tile">
             <div class="tile-label">Needs attention</div>
