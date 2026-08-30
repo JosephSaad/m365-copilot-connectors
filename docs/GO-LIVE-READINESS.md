@@ -20,9 +20,11 @@ found something. Blocker 1 found two defects in
 code; all are fixed. The full lifecycle now has evidence behind it — write,
 skip-unchanged, delete confirmed gone from the index, and every dashboard page
 rendering it under Windows authentication. What remains is the three caveats on
-row 1, and the parts no quiet tenant can prove: the engine's backoff has still
-never answered a real 429, and no page has yet rendered a failed run. Every
-go-live blocker below is a verification task. None of them is construction.
+row 1, and the one part no quiet tenant can prove: the engine's backoff has still
+never answered a real 429. The failure views have now been seen — a deliberate
+refusal put the connection into `failing`, raised the attention banner and left
+three failed runs in the history, and a clean run put it back. Every go-live
+blocker below is a verification task. None of them is construction.
 
 **What this document does not cover.** Every task here is engineering: run it,
 watch it, prove it. None of it establishes who owns the connection, who is woken
@@ -277,7 +279,7 @@ Both looked like passes.
 | # | Test | Pass looks like | Live Test Status |
 |---|---|---|---|
 | L7 | Provoke throttling — a corpus large enough, or a tenant busy enough, to return a real `429` | `throttleWaits > 0`, the run still completes, and the backoff honours `Retry-After`. **Unproven today**: every run has seen `throttleWaits=0`, so the engine's own retry path has never executed against a real refusal | **NOT RUN** — and the one test here that cannot be scheduled. Every run so far has seen `throttleWaits=0` |
-| L8 | Fail a run deliberately — `MaxDeletePercent = 0` with one row missing trips `THROW 50007` | The Runs page shows a failed run, the connection health badge flips, and the Overview shows "needs attention". No page has rendered any of those three | **PARTIAL** — the guard was tripped and runs 5 and 6 failed with `THROW 50007`, and `/Runs` now renders two `failed` pills. The other two thirds are unproven: the connection reads **healthy** and no attention banner appears, because run 7 succeeded afterwards and health is measured against the last *successful* run. Seeing the badge flip needs a failure that is still the most recent run |
+| L8 | Fail a run deliberately — `MaxDeletePercent = 0` with one row missing trips `THROW 50007` | The Runs page shows a failed run, the connection health badge flips, and the Overview shows "needs attention" | **PASSED**, all three. One time entry soft-deleted with the guard at 0: run 12 exited 4 and the failure was the most recent run, which is what the earlier attempt lacked. `/Runs` rendered a `failed` pill, the health pill flipped to `failing` with `vwConnectionHealth` reporting `Health=failing, LastRunStatus=failed`, and the Overview carried `banner banner-bad` reading "1 connection is failing or late", with tiles `Failed runs 3 of 11` and `Needs attention 1`. It also gave the `%%` fix its first live proof: the guard message arrived intact — "It would remove 1 of 1119 live items (0.09%), above the 0.00% guard" — where it used to arrive empty. The fixture and the guard were then restored and run 13 returned the connection to healthy, so the failed runs remain in history and the rig does not |
 
 ### Worth doing while the fixture is in the right state
 
