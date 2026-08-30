@@ -215,8 +215,17 @@ Write-Host '== Staging source ==' -ForegroundColor Cyan
 # offline-packages\ folder — roughly 215 MB that would otherwise ride along.
 # bin\ and obj\ in particular must never travel, both for size and because they
 # hold artefacts from whichever machine last built.
+#
+# .claude\ is excluded for the same reason and was missed until a package was
+# opened and counted. It holds git worktrees, and a worktree is a complete second
+# checkout of this repository: a package built on a machine with five of them
+# carried 1,679 extra entries and 24 MB of somebody's in-progress branches into
+# a zip meant for a customer's connector host. Worse than the size is what those
+# copies may contain, since a worktree holds whatever was being worked on rather
+# than what was released. A clean CI checkout has no .claude\worktrees and so
+# never showed it.
 $sourceRoot = Join-Path $OutputRoot 'source'
-$excludedDirectories = @('bin', 'obj', 'artifacts', '.git', '.vs', 'packages', 'offline-packages', '.localtests')
+$excludedDirectories = @('bin', 'obj', 'artifacts', '.git', '.vs', 'packages', 'offline-packages', '.localtests', '.claude')
 
 $sourceItems = Get-ChildItem -Path $PSScriptRoot -Recurse -File | Where-Object {
     $relative = $_.FullName.Substring($PSScriptRoot.Length).TrimStart('\')
