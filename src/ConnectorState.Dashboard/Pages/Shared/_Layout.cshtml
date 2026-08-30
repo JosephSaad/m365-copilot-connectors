@@ -4,7 +4,17 @@
 @{
     string path = this.Context.Request.Path.Value ?? "/";
 
-    int refreshSeconds = CrawlStateSettings.Value.AutoRefreshSeconds;
+    // A page may opt out by setting ViewData["AutoRefresh"] = false. It is the
+    // page that knows whether it can still change: a finished run's detail is
+    // fixed for ever, and reloading it every two minutes is a query a second
+    // against the state database to redraw the same numbers.
+    //
+    // Opt-OUT rather than opt-in, so a page added later refreshes by default.
+    // The failure of the other arrangement is silent - a new page that simply
+    // never updates, on a wall display, showing figures somebody trusts.
+    bool wantsRefresh = ViewData["AutoRefresh"] as bool? ?? true;
+
+    int refreshSeconds = wantsRefresh ? CrawlStateSettings.Value.AutoRefreshSeconds : 0;
 
     bool IsCurrent(string prefix) =>
         prefix == "/"

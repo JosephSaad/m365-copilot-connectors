@@ -3,6 +3,14 @@
 @{
     ViewData["Title"] = $"Run {Model.Run.RunId}";
     RunHistoryRow run = Model.Run;
+
+    // Only a RUNNING run can still change. A run that succeeded, failed or was
+    // reaped as abandoned is a closed record, and reloading it on a timer asks
+    // the state database to redraw identical numbers for as long as the tab is
+    // open. This is the page most likely to be left open on a second monitor
+    // during a long crawl, which is exactly when that adds up.
+    bool stillRunning = string.Equals(run.Status, "running", StringComparison.OrdinalIgnoreCase);
+    ViewData["AutoRefresh"] = stillRunning;
 }
 
 <p class="crumb">
@@ -16,6 +24,23 @@
     @if (run.IsDryRun)
     {
         <span class="tag">dry run — nothing was written</span>
+    }
+    @if (stillRunning)
+    {
+        @* THE COUNTERS BELOW READ ZERO UNTIL THIS RUN CLOSES, and that is worth
+           saying rather than leaving a reader to infer it from a page of
+           zeroes. uspCompleteRun writes the totals, the per-type breakdown and
+           the timing in one go at the end; nothing is recorded per item, on
+           purpose, because that would be a round trip on the hot path.
+
+           So a run in progress has an identity and little else here. The
+           Overview's live-item count does move, being a count of rows in
+           crawl.Item rather than a total on the run, which is where to watch
+           a long crawl from. *@
+        <span class="tag">
+            in progress — the totals below are written when the run closes and read zero until then;
+            <a href="/">the Overview</a> tracks a live crawl
+        </span>
     }
 </p>
 
