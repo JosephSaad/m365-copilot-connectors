@@ -73,6 +73,7 @@ using Microsoft.Graph;
 using Microsoft.Graph.Models.ExternalConnectors;
 using Microsoft.Graph.Models.ODataErrors;
 using Microsoft.Kiota.Abstractions;
+using Microsoft.Kiota.Abstractions.Store;
 using PushCore.State;
 using Serilog;
 using System.Globalization;
@@ -414,6 +415,44 @@ public sealed class GraphBatchWriter
     /// is taken anyway when the chunk is empty, so one oversized row degrades to
     /// a batch of one instead of wedging the pass.
     /// </remarks>
+    /// <summary>
+    /// Marks an item and its children dirty again, so the next serialization
+    /// writes them in full rather than writing only what changed since the last.
+    /// </summary>
+    /// <param name="item">The item about to be serialized, possibly not for the first time.</param>
+    /// <remarks>
+    /// Setting InitializationCompleted to false flips every value in the store
+    /// back to changed. It recurses into nested backed models on its own, but a
+    /// LIST of them is not itself a backed model - so the ACL entries, which are
+    /// exactly what Graph refused, have to be walked by hand. Content and
+    /// Properties are reset for the same reason and not because either has been
+    /// seen to drop.
+    /// </remarks>
+    private static void ResetForSerialization(ExternalItem item)
+    {
+        MarkDirty(item);
+        MarkDirty(item.Content);
+        MarkDirty(item.Properties);
+
+        if (item.Acl is not null)
+        {
+            foreach (Acl acl in item.Acl)
+            {
+                MarkDirty(acl);
+            }
+        }
+    }
+
+    /// <summary>Flips one backed model's values back to changed.</summary>
+    /// <param name="model">Anything; ignored unless it is a backed model with a store.</param>
+    private static void MarkDirty(object? model)
+    {
+        if (model is IBackedModel { BackingStore: not null } backed)
+        {
+            backed.BackingStore.InitializationCompleted = false;
+        }
+    }
+
     private List<PreparedRequest> NextChunk(List<TrackedItem> pending, ref int offset)
     {
         var chunk = new List<PreparedRequest>(MaxRequestsPerBatch);
@@ -422,6 +461,26 @@ public sealed class GraphBatchWriter
         while (offset < pending.Count && chunk.Count < MaxRequestsPerBatch)
         {
             TrackedItem item = pending[offset];
+
+            // SERIALIZING THE SAME ExternalItem TWICE DROPS ITS ACL, and the
+            // second time is not hypothetical: a throttled item is retried from
+            // this same instance, and the byte ceiling above can rebuild one
+            // inside a single attempt.
+            //
+            // The Graph SDK models are backed models. A backing store marks its
+            // values clean once they have been written, so the next
+            // serialization emits only what changed since - which, for an object
+            // nobody has touched, is nothing. Graph then answers
+            // 400 NullOrEmptyValue, "'Acl' is null or empty", and the item is
+            // refused terminally and lost from the index.
+            //
+            // Found on the first run that was ever throttled: 191 items took a
+            // 429, all 191 came back 400 on the retry, and the run reported
+            // success. Before that every item in this project's history had been
+            // serialized exactly once, so the defect had no way to appear -
+            // 44e464f fixed the sibling case, one ACL shared ACROSS items, and
+            // could not have caught one item serialized across attempts.
+            ResetForSerialization(item.Item);
 
             RequestInformation request = this.graph.External
                 .Connections[this.connectionId]

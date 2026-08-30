@@ -264,6 +264,22 @@ namespace SqlTicketsConnector.Tests
             // throttled run look nineteen twentieths healthier than it is.
             Assert.Equal(1, summary.ThrottleWaits);
 
+            // AND THE RETRY CARRIED THE ITEM'S GRANTS. This test asserted that
+            // a7 "landed" and never looked at what landed, which is how a
+            // retried item lost its ACL for the life of the project without a
+            // red test: the stub accepts any body, so an item stripped of its
+            // grants is indistinguishable from a correct one by arrival alone.
+            //
+            // Graph is not so forgiving - it answers 400 NullOrEmptyValue,
+            // "'Acl' is null or empty" - and on the first run that was ever
+            // throttled, all 191 throttled items came back exactly that, under a
+            // run that reported success. The body is the assertion that would
+            // have caught it.
+            string retried = adapter.WrittenBodies[adapter.WrittenItemIds.IndexOf("a7")];
+
+            Assert.Contains("\"acl\"", retried, StringComparison.Ordinal);
+            Assert.Contains(TestData.GroupObjectId, retried, StringComparison.Ordinal);
+
             // And the run still finished, so the marker is honest all the way to
             // the end rather than stopping short of a row that did land.
             Assert.Equal(Ids(20), source.Committed.ToArray());

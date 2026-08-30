@@ -11,7 +11,7 @@ supported service rather than a release that builds.
 
 It is deliberately blunt about the gap between *built* and *verified*, because
 that gap is the whole risk right now: 17 features are implemented, 3 more are
-part-built, 324 tests pass, **five of the six blockers are closed with the sixth
+part-built, 326 tests pass, **five of the six blockers are closed with the sixth
 part-done**, and **ten of the eleven pre-go-live recommendations are done** — the
 eleventh being the one nobody but the customer can close. Of the eleven live tests, eight pass; two need a machine this one is not (domain principals, a D: volume) and one needs a tenant busy enough to refuse a request. Every blocker that ran
 found something. Blocker 1 found two defects in
@@ -109,7 +109,7 @@ rather than now.
 
 A single Windows 11 box hosting both the code and SQL Server clears every one of
 them, and is a better rig than a Mac: it builds the gRPC connector project
-(`Grpc.Tools` ships an x64 `protoc`, so all 324 tests run rather than 239), and
+(`Grpc.Tools` ships an x64 `protoc`, so all 326 tests run rather than 239), and
 it is closer to the production Windows Server than anything that has touched
 this code.
 
