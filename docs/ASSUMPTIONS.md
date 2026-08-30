@@ -75,6 +75,15 @@ Each of these is also recorded in `docs/SECURITY.md` §4.
    3.35.1, because the sink requires 3.26.1 or later and the two constraints
    cannot both hold. The generator is unchanged, so the contract types are
    identical; CI builds both configurations.
+
+   The same switch now also carries the OpenTelemetry SDK and its OTLP exporter,
+   which send **traces and metrics** from the push tools — a different signal
+   from a different assembly, sharing one flag. The push tools' own
+   **instrumentation** is unconditional and costs no package:
+   `System.Diagnostics.DiagnosticSource` is in the shared framework on both
+   target frameworks, so the default dependency graph and the offline restore
+   list are unchanged by it. `Otlp:Enabled` is the runtime flag; see
+   `docs/TELEMETRY.md`.
 5. **Configuration keys added beyond the brief's schema**, all optional with
    defaults: `Auth:CertificateSubject` (required for locate-by-subject rotation),
    `Connector:TlsCertificateThumbprint`, `DataSource:ItemUrlTemplate`,

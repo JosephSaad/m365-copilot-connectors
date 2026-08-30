@@ -283,7 +283,9 @@ To produce the transfer package:
 ```powershell
 .\Build.ps1
 .\Build.ps1 -SelfContained          # server has no .NET 10 runtime
-.\Build.ps1 -EnableOtlpExporter     # include the optional OpenTelemetry sink
+.\Build.ps1 -EnableOtlpExporter     # include the OTLP exporters: traces and
+                                    # metrics from the push tools, log records
+                                    # from the agent-hosted connector
 ```
 
 `Build.ps1` runs four gates before it publishes anything — the secret hygiene
@@ -401,13 +403,30 @@ dotnet build   .\SqlTicketsConnector.sln -c Release --no-restore
 dotnet test    .\SqlTicketsConnector.sln -c Release --no-build
 ```
 
-77 packages, 215 MB, in three sets:
+94 packages, about 218 MB, in three sets:
 
 | Set | Packages | Size | Needed for |
 |---|---:|---:|---|
-| Base | 68 | 119 MB | any build or test run |
+| Base | 74 | ~119 MB | any build or test run |
 | Runtime packs | 4 | 93 MB | `Build.ps1 -SelfContained`. `-SkipRuntimePacks` |
-| OpenTelemetry | 5 | 3 MB | `Build.ps1 -EnableOtlpExporter`. `-SkipOtlp` |
+| OpenTelemetry | 16 | 6 MB | `Build.ps1 -EnableOtlpExporter`. `-SkipOtlp` |
+
+The OpenTelemetry set covers two exporters that share one flag: the Serilog sink
+that sends **log records** from the agent-hosted connector, and the OpenTelemetry
+SDK that sends **traces and metrics** from every push tool. The gRPC packages in
+it belong to the Serilog sink alone — OpenTelemetry 1.18.0 speaks both OTLP
+protocols over `HttpClient` and adds no gRPC stack of its own. See
+[TELEMETRY.md](docs/TELEMETRY.md).
+
+> **The Base set is currently under review and its check fails.** On the .NET 10
+> SDK, 62 packages resolve against the 74 listed: the SDK prunes twelve entries
+> as framework-provided that the .NET 9 SDK — which the `release/net9` line and
+> the net9 CI job use — still resolves as real packages. Regenerating the list
+> with `-Update` from a .NET 10 machine would delete exactly those twelve and
+> silently break an air-gapped `net9.0` restore, and nothing in CI would catch it
+> because the Base check only runs on the net10 job. The list needs to represent
+> both SDKs; until it does, do not run `-Update` on Base. The Otlp and
+> RuntimePacks checks pass.
 
 The runtime packs are the bundled .NET runtime. Two of the four are requested
 only from some build hosts — a Windows SDK asks for the WindowsDesktop pack and

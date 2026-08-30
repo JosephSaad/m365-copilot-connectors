@@ -87,6 +87,24 @@ public sealed class AtlasCatalogueConnector : IPushConnector
             PushSchema.Prop("classifications", PropertyType.StringCollection, queryable: true, retrievable: true, refinable: true),
             PushSchema.Prop("glossaryTerms", PropertyType.StringCollection, queryable: true, retrievable: true, refinable: true),
 
+            // The label the engine derives from those raw tags, when a
+            // Sensitivity mapping is configured. Registered unconditionally and
+            // written only when the mapping is on, because a registered schema
+            // is append-only: a property added later cannot be PATCHed onto a
+            // connection that has reached Ready, so the alternative to
+            // registering it now is deleting the connection and every item in it
+            // the day somebody wants the mapping.
+            //
+            // String, not StringCollection: one item has ONE label. Several
+            // classifications collapse to the most restrictive one, and that is
+            // the whole reason the mapping is an ordered list.
+            PushSchema.Prop(
+                SensitivityOptions.DefaultProperty,
+                PropertyType.String,
+                queryable: true,
+                retrievable: true,
+                refinable: true),
+
             PushSchema.Prop("upstream", PropertyType.String, queryable: true, retrievable: true),
             PushSchema.Prop("downstream", PropertyType.String, queryable: true, retrievable: true),
             PushSchema.Prop("columnCount", PropertyType.Int64, queryable: true, retrievable: true),

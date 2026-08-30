@@ -38,6 +38,7 @@ public sealed class PushSummary
     private int truncated;
     private int throttleWaits;
     private int skipped;
+    private int refusedByLabel;
     private int duplicates;
     private int total;
     private int unchanged;
@@ -54,6 +55,26 @@ public sealed class PushSummary
 
     /// <summary>Gets the number of rows the connector chose to skip.</summary>
     public int Skipped => Volatile.Read(ref this.skipped);
+
+    /// <summary>
+    /// Gets the number of items a sensitivity policy declined to index. A SUBSET
+    /// of <see cref="Skipped"/>, not a number beside it.
+    /// </summary>
+    /// <remarks>
+    /// COUNTED TWICE ON PURPOSE, and the reason is arithmetic rather than taste.
+    /// Rows read is reconciled as Total + Unchanged + Skipped, in PushHost and
+    /// again in the run row; a refusal that were counted only here would make
+    /// that identity stop holding and rows-read would silently under-report.
+    /// So a refusal is a skip, and this says how many of the skips it was.
+    ///
+    /// Deliberately NOT persisted to the crawl state store. Adding a column
+    /// there means a change to the sql/40 table type, the SqlMetaData ordinals
+    /// and the dashboard models - a schema migration on a live database - to
+    /// carry a number that the log line, the run's own metric
+    /// (crawl.items.refused_by_label) and a per-item Warning already carry.
+    /// Evidence of the control working does not have to live in the run row.
+    /// </remarks>
+    public int RefusedByLabel => Volatile.Read(ref this.refusedByLabel);
 
     /// <summary>
     /// Gets the number of rows whose item ID repeated an earlier row's. The later
@@ -196,6 +217,18 @@ public sealed class PushSummary
     {
         this.Tally(itemType, tally => tally.Skipped++);
         Interlocked.Increment(ref this.skipped);
+    }
+
+    /// <summary>Records one item a sensitivity policy declined to index.</summary>
+    /// <param name="itemType">The item's declared type.</param>
+    /// <remarks>
+    /// Counts a skip as well, which is what keeps rows read reconcilable; see
+    /// <see cref="RefusedByLabel"/>.
+    /// </remarks>
+    internal void CountRefusedByLabel(string itemType)
+    {
+        this.CountSkipped(itemType);
+        Interlocked.Increment(ref this.refusedByLabel);
     }
 
     /// <summary>Records one written item.</summary>

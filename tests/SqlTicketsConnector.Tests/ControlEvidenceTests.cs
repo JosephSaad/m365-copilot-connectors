@@ -43,6 +43,28 @@ namespace SqlTicketsConnector.Tests
             new[] { "SqlTicketsConnector.Tests.PushSourceTests", "A_dry_run_writes_nothing_and_commits_nothing" },
             new[] { "SqlTicketsConnector.Tests.PushSourceTests", "An_item_the_source_could_grant_to_nobody_is_skipped_rather_than_written" },
 
+            // The sensitivity policy, control ACL-5. Its correct operation looks
+            // exactly like its total absence - the item is not in the index
+            // either way - so nothing about a healthy corpus would reveal that
+            // one of these had been deleted.
+            //
+            // The watermark half of the first one is the load-bearing half: an
+            // item refused but still committed would move the marker past a row
+            // the index does not have, which is the failure this whole
+            // repository is arranged to prevent.
+            new[] { "SqlTicketsConnector.Tests.SensitivityLabelTests", "A_refused_item_reaches_neither_the_index_nor_the_watermark" },
+            new[] { "SqlTicketsConnector.Tests.SensitivityLabelTests", "Enforce_refuses_to_start_until_both_fallbacks_are_decided" },
+            new[] { "SqlTicketsConnector.Tests.SensitivityLabelTests", "A_dry_run_refuses_the_same_items_it_would_refuse_for_real" },
+
+            // Telemetry redaction, control LOG-13. LOG-3 keeps row content out of
+            // the log file; this keeps it out of the span, which travels further
+            // and is audited less.
+            new[] { "SqlTicketsConnector.Tests.PushTelemetryTests", "A_failed_run_records_the_exception_type_and_never_its_message" },
+
+            // Control LOG-14. Telemetry that silently fails to leave the host is
+            // worse than none, because somebody builds an alert on its absence.
+            new[] { "SqlTicketsConnector.Tests.OtlpExporterTests", "A_run_delivers_its_traces_and_metrics_before_the_process_exits" },
+
             // Crawl state. Three invariants whose failure is silent, which is why
             // they are pinned here rather than left to the suite's good intentions.
             //

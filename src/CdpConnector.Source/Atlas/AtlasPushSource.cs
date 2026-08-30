@@ -386,6 +386,21 @@ public sealed class AtlasPushSource : IPushSource
             ItemType = "catalogue",
             Acl = grants,
             Content = Describe(entity, kind, columns),
+
+            // Handed to the engine RAW, in Atlas's own vocabulary, and not
+            // interpreted here. What a tag means - whether it is a label, and
+            // whether an entity carrying it may be indexed at all - is a policy
+            // decision that has to hold for every source, so it lives in
+            // SensitivityPolicy and is configured once. This source's job ends
+            // at saying what Atlas said.
+            //
+            // Note what is NOT in this list, because it bounds what any policy
+            // built on it can claim: column-level tags. AtlasClient reads a
+            // table's columns as display names only, and CdpSettings refuses
+            // hive_column outright, so a PII tag applied to one column of a
+            // table is invisible here. Atlas deployments commonly tag exactly
+            // that way.
+            Classifications = entity.Classifications.ToList(),
         };
 
         item.AddIfPresent("title", entity.Name.Length > 0 ? entity.Name : entity.QualifiedName);

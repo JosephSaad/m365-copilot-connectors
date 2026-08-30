@@ -66,6 +66,20 @@ public sealed class PushItem
     /// </summary>
     public DateTime? LastModifiedUtc { get; set; }
 
+    /// <summary>
+    /// Gets or sets the source's own sensitivity tags for this row, in the
+    /// source's vocabulary, or null when it has none.
+    ///
+    /// These are NOT published as they stand. The engine maps them to a label
+    /// through the Sensitivity section and publishes that; see
+    /// <see cref="SensitivityPolicy"/> for why the mapping is the engine's job
+    /// and not the connector's. A source that has no notion of classification
+    /// leaves this null and nothing changes for it.
+    ///
+    /// Case is not significant, and a tag repeated in this list is harmless.
+    /// </summary>
+    public IReadOnlyList<string>? Classifications { get; set; }
+
     /// <summary>Adds a property when the value is present, and skips it when not.</summary>
     /// <param name="name">Schema property name.</param>
     /// <param name="value">Value, ignored when null or empty.</param>

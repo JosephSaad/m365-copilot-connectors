@@ -215,7 +215,8 @@ unnoticed presents as `AuthenticationIssue` on every crawl.
 | File | `C:\Connectors\SqlTickets\Logs\ConnectorLog.log` | `Logging:MinimumLevel`, default `Information` | Everything. Rolls at 10 MB, 30 files kept. |
 | Windows event log | Application log, source `SqlTicketsConnector` | `Warning` and above | SIEM alerting, no file parsing needed. |
 | Console | — | Development only | Not present under the service. |
-| OTLP | `Logging:Otlp:Endpoint` | As configured | Off by default, and excluded from the default build. See `docs/SECURITY.md` §3. |
+| OTLP logs | `Logging:Otlp:Endpoint` | As configured | **Agent-hosted connector only.** Off by default, and excluded from the default build. See `docs/SECURITY.md` §3. |
+| OTLP traces and metrics | `Otlp:Endpoint` in the push connector's appsettings | As configured | **Push tools only** — a different signal from a different section, sharing the same build switch. One span per run with a child per phase, plus eleven instruments. Off by default; the instrumentation itself is always compiled in and costs nothing unobserved. See `docs/TELEMETRY.md`. |
 
 Raise verbosity temporarily by setting `Logging:MinimumLevel` to `Debug` (adds
 one line per item, **item ID only**) or `Verbose` (adds every `HealthCheck`

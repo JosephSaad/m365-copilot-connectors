@@ -248,6 +248,19 @@ public static class PushHost
             options.Graph.ConnectionId,
             options.SourcePath);
 
+        // A `using var` declaration, not a try/finally, and that is the whole
+        // point: the compiler generates the finally, so EVERY exit below this
+        // line flushes - the five returns for a bad credential or a refused
+        // token, the exit-5 lease refusal, an unhandled throw, and the ordinary
+        // exit 0. A run's counters are recorded seconds before the process ends,
+        // so a path that returned without flushing would lose the only
+        // measurement that run ever took.
+        //
+        // Declared AFTER the logger deliberately. Disposal runs in reverse
+        // order, so this flushes first and anything it has to say about a failed
+        // flush still reaches a live sink.
+        using PushTelemetryExporter telemetry = PushTelemetryExporter.Create(options.Otlp, executable, Log.Logger);
+
         // Declared ahead of the try so the cancellation catch below can tell a
         // genuine Ctrl+C from an HttpClient timeout wearing the same exception.
         using var cancellation = new CancellationTokenSource();
@@ -349,6 +362,26 @@ public static class PushHost
                 summary.Duplicates,
                 summary.ThrottleWaits);
 
+            if (summary.RefusedByLabel > 0)
+            {
+                // A separate line, and only when it happened. Folding it into
+                // the counter list above would have it read as another kind of
+                // skip; it is the one skip reason that is a security control,
+                // and the person who has to evidence that control should not
+                // have to find it among fourteen other numbers.
+                //
+                // NOT an error, and NOT a non-zero exit. Exit 4 exists for items
+                // that are absent from the index by accident. These are absent
+                // on purpose, and paging somebody nightly for a policy working
+                // correctly is how the policy gets switched off.
+                Log.Warning(
+                    "{Refused} of the {Skipped} skipped item(s) were refused by the sensitivity policy and are " +
+                    "NOT in the index. That is this control working, not a failure; the run exits normally. " +
+                    "Each refusal is logged above with the item ID and the reason.",
+                    summary.RefusedByLabel,
+                    summary.Skipped);
+            }
+
             // Separate statement, and deliberately not interpolated into the line
             // above: this is a block a person reads, and folding a table into a
             // structured log message makes it unreadable in both places.
@@ -444,6 +477,14 @@ public static class PushHost
         finally
         {
             secretCache?.Dispose();
+
+            // BEFORE Log.CloseAndFlush, and that ordering is the whole reason
+            // this line exists at all - the `using var` above would dispose it
+            // anyway, but only after this finally, by which time the logger is
+            // shut and a warning about undelivered telemetry would go nowhere.
+            // Dispose is idempotent, so the later one is a no-op.
+            telemetry.Dispose();
+
             Log.CloseAndFlush();
         }
     }

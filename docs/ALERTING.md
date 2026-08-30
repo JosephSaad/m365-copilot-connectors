@@ -497,3 +497,32 @@ is worse than one that admits its edges:
   would report only as whatever damage resulted.
 - **It cannot detect its own non-execution.** [Section 6](#6-what-watches-the-watchdog),
   and it is the reason that section exists.
+
+### The OTLP metrics are a second surface, not a replacement for this one
+
+Every run now emits traces and metrics — see [TELEMETRY.md](TELEMETRY.md) — and
+it is tempting to move alerting onto them. Two of the gaps above genuinely close
+if you do: `crawl.items.written` falling to zero against a stable
+`crawl.items.unchanged` is the "pushing wrong data" signal this watch cannot
+produce, and `crawl.run.duration` trending is the capacity warning nothing here
+gives.
+
+But the metrics share this watch's central blind spot and make it worse. **A
+connector that is not running emits nothing**, and an absent series looks exactly
+like a healthy quiet one to most backends. That is precisely the failure this
+whole document argues is a security incident rather than an outage. An
+alert-on-absence rule in the APM has to be written deliberately, tested by
+stopping the connector, and it will fire on a collector outage too.
+
+Two more, worth knowing before wiring a dashboard:
+
+- **`crawl.items.refused_by_label` is a subset of `crawl.items.skipped`.** Adding
+  them double counts. A refusal is also **not** an alertable condition on its own
+  — it is the sensitivity control working, and paging on it nightly is how the
+  control gets switched off. Alert on a *change* in the ratio, which means
+  somebody retagged something.
+- **Telemetry can fail to leave the host.** The exporter logs a Warning when a
+  flush does not complete, but that warning goes to the log file, not to the APM
+  that just failed to receive anything. Keep the freshness watch in this document
+  as the thing that answers "did it run", and use the metrics for "what did it
+  do".
