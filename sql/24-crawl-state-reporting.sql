@@ -119,9 +119,22 @@ BEGIN
 
     -- 2. Per-connection health, which is small enough to never need paging.
     SELECT * FROM [crawl].[vwConnectionHealth] ORDER BY
-        CASE Health WHEN N'failing' THEN 1 WHEN N'late' THEN 2 WHEN N'deletes pending' THEN 3
-                    WHEN N'never run' THEN 4 WHEN N'running' THEN 5 WHEN N'healthy' THEN 6
-                    ELSE 7 END,
+        -- WORST FIRST: the front page's only triage. Every word
+        -- vwConnectionHealth can return must be listed. Anything unlisted falls
+        -- to the ELSE and sorts BELOW healthy, which is where a new health word
+        -- does real damage - the page keeps working, says nothing, and buries
+        -- the connection the word was added to surface. sql/29 added
+        -- 'items refused' to the view and the pill colours and missed this CASE,
+        -- so a connection that had just lost items sorted beneath every healthy
+        -- one. A health word means editing sql/22, StateCodes.Tone AND here.
+        CASE Health WHEN N'failing'         THEN 1
+                    WHEN N'items refused'   THEN 2
+                    WHEN N'late'            THEN 3
+                    WHEN N'deletes pending' THEN 4
+                    WHEN N'never run'       THEN 5
+                    WHEN N'running'         THEN 6
+                    WHEN N'healthy'         THEN 7
+                    ELSE 8 END,
         DisplayName;
 
     -- 3. The trend series, one row per connection per day.
