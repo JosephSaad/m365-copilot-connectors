@@ -120,10 +120,16 @@ public sealed class AtlasCatalogueConnector : IPushConnector
             ? new GraphServiceClient(context.Credential, ["https://graph.microsoft.com/.default"])
             : null;
 
+        // The run's crawl state store, which is where a resolved cluster group is
+        // remembered between runs. CdpCrawlState.cs says why it is published
+        // rather than read off the context; the null store - no
+        // Settings:StateConnectionString - keeps the pre-existing behaviour.
         var principals = new PrincipalResolver(
             PrincipalResolver.ParseMap(context.Options.Setting("EntraGroupMap")),
             directory,
-            context.Log);
+            context.Log,
+            CdpCrawlState.Current,
+            CdpCrawlState.PrincipalCacheTtl(context.Options));
 
         return new AtlasPushSource(
             settings,

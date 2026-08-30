@@ -15,11 +15,18 @@
 // refusing this identity, 4 ingestion.
 // ---------------------------------------------------------------------------
 
+using CdpGraphPush;
 using PushCore;
-using PushCore.State;
 
 // The factory rather than the store: PushCore cannot reference SqlClient,
 // so the executable is where the two halves meet. Without a
 // Settings:StateConnectionString this returns null and the tool behaves
 // exactly as it did before crawl state existed.
-return await PushHost.RunAsync(args, CrawlStateWiring.FromSettings);
+//
+// CdpCrawlState.FromSettings is CrawlStateWiring.FromSettings with one line
+// added - it publishes the store it just built so this executable's connectors
+// can hand it to their PrincipalResolver, which caches directory lookups in
+// crawl.PrincipalMap. The host's own use of the return value is unchanged, and
+// so is the no-store case: see CdpCrawlState.cs for why the store cannot simply
+// be read off PushSourceContext.
+return await PushHost.RunAsync(args, CdpCrawlState.FromSettings);
