@@ -348,8 +348,40 @@ GO
 /* ---------------------------------------------------------------------------
    5. The view the connector reads.
 
-   Same shape as dbo.vwExternalItems in sql/12, with EffectiveLastModified
-   added. The connector selects from this one when Settings:Incremental is on.
+   dbo.vwExternalItems, plus EffectiveLastModified. The connector selects from
+   this one when Settings:Incremental is on.
+
+   COLUMN PARITY, AND WHY IT IS NOT OPTIONAL. This view used to project twelve
+   columns while HierarchyPushConnector emits an explicit thirty-column SELECT,
+   so pointing Source:ItemView at it failed on nineteen invalid column names.
+   That was not a near miss - it is what made sql/26 unreachable by the shipped
+   binaries rather than merely unused by them. The parity is resolved HERE, in
+   the view, rather than by narrowing the connector, for a reason worth stating
+   in full:
+
+     THE ITEM MUST HASH IDENTICALLY WHICHEVER VIEW IT WAS READ FROM.
+
+   The engine escalates to a full crawl on a hash-version change and every
+   Settings:FullEveryHours, and a connector reading incrementally still falls
+   back to the full read whenever there is no checkpoint. So the same item is
+   read through dbo.vwExternalItems on some runs and through this view on
+   others. If the two produced even slightly different property sets, every
+   alternation would rewrite the entire corpus - a hundred thousand Graph
+   writes, reported as an ordinary successful run, on data that did not change.
+   Projecting v.* from the same three sql/12 views makes the two reads the same
+   bytes by construction rather than by inspection, and sql/35 proves it with a
+   SHA2_256 over both projections.
+
+   THE NAMING MISMATCH IS RESOLVED BY KEEPING BOTH COLUMNS, NOT BY ALIASING.
+   v.* carries LastModified - "when did THIS row change" - which is what the
+   connector maps to the lastModified schema property and what a person sees in
+   a search result. EffectiveLastModified is the different question this file
+   exists to answer - "when did anything that affects this row's indexed content
+   last change" - and it is what the checkpoint is taken from. Aliasing either
+   into the other's name would have hidden which timestamp was which at exactly
+   the point where confusing them is unrecoverable: a checkpoint taken from
+   LastModified would advance past every descendant an ancestor rename made
+   stale, permanently, because those rows' own LastModified never moved.
 
    THE JOIN IS ON THE NUMERIC KEY. Each branch joins a sql/12 view back to its
    base table on SourceId, which sql/12 projects for exactly this purpose: the
@@ -393,60 +425,46 @@ GO
    The next lever, if that constant ever matters, is not another join: it is to
    project EffectiveLastModified from the sql/12 views themselves, so this view
    needs no join at all and the marker predicate lands directly on the base
-   table's index. That is a larger change to the file the agent-hosted path also
-   reads, and it is a different item from this one.
+   table's index. That was considered again when the projection was widened and
+   deliberately not taken, because it inverts the deployment order: sql/12 would
+   stop compiling until sql/26 section 1 had added the column, and sql/12 is the
+   file every environment runs whether or not it ever wants incremental reads.
+   One flattening definition, layered on rather than forked, is worth more here
+   than the remaining reads.
 
    The three IsDeleted filters are unchanged from sql/12 and are unrelated to
    deletion detection: the push path detects deletions by diffing its own
    inventory in ConnectorState, not by reading a flag - see
    docs/SOURCE-CONTRACT.md. A row excluded here simply stops being returned,
    which is exactly what the sweep is looking for.
+
+   v.* IS BOUND AT CREATE TIME, exactly as dbo.vwExternalItems' own SELECT * is.
+   A column added to the three sql/12 views reaches this one only when this file
+   is re-run, and until then this view keeps the shape it was created with and
+   returns exactly what it returned before. sql/35's parity check is what turns
+   "someone forgot to re-run sql/26" from a silent divergence into a FAIL.
 --------------------------------------------------------------------------- */
 
 CREATE OR ALTER VIEW dbo.vwExternalItemsIncremental
 AS
-SELECT  ItemId,
-        ItemType,
-        EffectiveLastModified,
-        Title,
-        Content,
-        CustomerName,
-        EngagementName,
-        ConsultantName,
-        Hours,
-        Billable,
-        WorkDate,
-        Url
-FROM
-(
-    SELECT  v.ItemId,
-            v.ItemType,
-            c.EffectiveLastModified,
-            v.Title, v.Content, v.CustomerName, v.EngagementName,
-            v.ConsultantName, v.Hours, v.Billable, v.WorkDate, v.Url
-    FROM    dbo.vwCustomerItems AS v
-    INNER JOIN dbo.Customers    AS c ON c.CustomerId = v.SourceId
+SELECT  v.*,
+        c.EffectiveLastModified
+FROM    dbo.vwCustomerItems AS v
+INNER JOIN dbo.Customers    AS c ON c.CustomerId = v.SourceId
 
-    UNION ALL
+UNION ALL
 
-    SELECT  v.ItemId,
-            v.ItemType,
-            e.EffectiveLastModified,
-            v.Title, v.Content, v.CustomerName, v.EngagementName,
-            v.ConsultantName, v.Hours, v.Billable, v.WorkDate, v.Url
-    FROM    dbo.vwEngagementItems AS v
-    INNER JOIN dbo.Engagements    AS e ON e.EngagementId = v.SourceId
+SELECT  v.*,
+        e.EffectiveLastModified
+FROM    dbo.vwEngagementItems AS v
+INNER JOIN dbo.Engagements    AS e ON e.EngagementId = v.SourceId
 
-    UNION ALL
+UNION ALL
 
-    SELECT  v.ItemId,
-            v.ItemType,
-            te.EffectiveLastModified,
-            v.Title, v.Content, v.CustomerName, v.EngagementName,
-            v.ConsultantName, v.Hours, v.Billable, v.WorkDate, v.Url
-    FROM    dbo.vwTimeEntryItems AS v
-    INNER JOIN dbo.TimeEntries   AS te ON te.TimeEntryId = v.SourceId
-) AS unioned;
+SELECT  v.*,
+        te.EffectiveLastModified
+FROM    dbo.vwTimeEntryItems AS v
+INNER JOIN dbo.TimeEntries   AS te ON te.TimeEntryId = v.SourceId;
 GO
 
 /* ---------------------------------------------------------------------------
