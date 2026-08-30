@@ -54,6 +54,25 @@ public sealed class PushSourceContext
     /// <summary>Gets the logger.</summary>
     public ILogger Log { get; }
 
+    /// <summary>Gets a value indicating whether this run writes nothing.</summary>
+    /// <remarks>
+    /// A source needs this for one reason and it is not cosmetic: a dry run is
+    /// advertised as read-only, and anything a source writes on its own account
+    /// breaks that promise even when the engine writes nothing.
+    ///
+    /// It was added because the CDP principal resolver, once it started caching
+    /// to crawl.PrincipalMap, had no way to see the flag - neither this class
+    /// nor PushOptions carried it - so a dry run wrote cache rows. They are
+    /// TTL'd entries identical to a real run's, and no item state, checkpoint or
+    /// pending delete was touched, but "writes nothing to Graph" and "writes
+    /// nothing" are different claims and the second is the one a dry run makes.
+    ///
+    /// Anything a source does conditionally on this must be a WRITE it skips,
+    /// never a read it changes: a dry run that reads differently from a real one
+    /// stops being a rehearsal of it.
+    /// </remarks>
+    public bool IsDryRun { get; init; }
+
     /// <summary>
     /// Gets where an incremental read should resume, or null when the whole
     /// source must be read.

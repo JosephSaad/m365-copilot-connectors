@@ -823,7 +823,7 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
     public async Task CachePrincipalAsync(
         PrincipalGrant grant,
         string sourceType,
-        TimeSpan ttl,
+        TimeSpan? ttl,
         CancellationToken cancellationToken)
     {
         (string id, _) = this.RequireOpenRun(nameof(this.CachePrincipalAsync));
@@ -1667,9 +1667,31 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
     }
 
     /// <summary>Converts a TTL to the whole minutes uspCachePrincipal takes.</summary>
+    /// <param name="ttl">The caller's TTL, or null to defer to the connection's policy.</param>
+    /// <returns>At least one minute, or DBNull when the caller stated no preference.</returns>
+    /// <remarks>
+    /// NULL IS A REAL ANSWER HERE, not a missing one. uspCachePrincipal reads
+    /// crawl.Connection.PrincipalTtlMinutes when this is null, which is how an
+    /// operator lowering that column actually lowers it. While this parameter
+    /// was a non-nullable TimeSpan the store always sent a number, so the column
+    /// governed nothing for positive answers and sql/33's clamp - which only
+    /// touches negatives - was the sole thing the database controlled. A policy
+    /// column no caller can defer to is a setting that does nothing.
+    /// </remarks>
+    private static object TtlMinutes(TimeSpan? ttl)
+    {
+        if (ttl is null)
+        {
+            return DBNull.Value;
+        }
+
+        return TtlMinutesOf(ttl.Value);
+    }
+
+    /// <summary>The arithmetic, once the caller has stated a TTL.</summary>
     /// <param name="ttl">The caller's TTL.</param>
     /// <returns>At least one minute.</returns>
-    private static int TtlMinutes(TimeSpan ttl)
+    private static int TtlMinutesOf(TimeSpan ttl)
     {
         double minutes = Math.Ceiling(ttl.TotalMinutes);
 

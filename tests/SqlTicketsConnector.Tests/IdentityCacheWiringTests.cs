@@ -426,16 +426,87 @@ namespace SqlTicketsConnector.Tests
         }
 
         [Fact]
+        public async Task A_dry_run_reads_the_cache_and_never_writes_it()
+        {
+            // THIS TEST GUARDS THE READ, not the write, and saying so matters:
+            // it passes with the dry-run guard removed, because a cache HIT
+            // never reaches the write path anyway. Its job is the other half -
+            // that a dry run still consults the cache and still serves from it.
+            // A dry run that resolved principals differently from a real one
+            // would stop being a rehearsal of it, and the preview's item counts
+            // and skip decisions rest on the ACL it resolves.
+            //
+            // The no-write claim is carried by the test below, which does fail
+            // when the guard is removed. Checked by removing it.
+            var store = new FakePrincipalStore();
+            store.Seed(Analysts, FromDirectory);
+
+            var directory = new CountingDirectory(FromDirectory);
+            var resolver = new PrincipalResolver(
+                new Dictionary<string, string>(),
+                directory.Client,
+                Logger.None,
+                store,
+                PrincipalResolver.DefaultCacheTtl,
+                isDryRun: true);
+
+            List<PushAclEntry> grants = await resolver.ResolveAsync(
+                new[] { Analysts }, CancellationToken.None);
+
+            Assert.Equal(FromDirectory.ToString("D"), Assert.Single(grants).Value);
+            Assert.Empty(store.Writes);
+
+            Assert.NotEmpty(store.Reads);
+        }
+
+        [Fact]
+        public async Task A_dry_run_does_not_write_back_a_directory_answer_either()
+        {
+            // The other write path: a name the cache has never seen, resolved
+            // fresh from the directory. A real run remembers it. A dry run must
+            // not, or the first preview against a new cluster silently populates
+            // the cache it was run to preview.
+            var store = new FakePrincipalStore();
+            var directory = new CountingDirectory(FromDirectory);
+
+            var resolver = new PrincipalResolver(
+                new Dictionary<string, string>(),
+                directory.Client,
+                Logger.None,
+                store,
+                PrincipalResolver.DefaultCacheTtl,
+                isDryRun: true);
+
+            List<PushAclEntry> grants = await resolver.ResolveAsync(
+                new[] { Analysts }, CancellationToken.None);
+
+            Assert.Equal(FromDirectory.ToString("D"), Assert.Single(grants).Value);
+            Assert.Equal(1, directory.Lookups);
+            Assert.Empty(store.Writes);
+        }
+        [Fact]
         public void The_configured_ttl_is_read_and_a_useless_one_is_refused()
         {
-            // Absent is the normal case and must agree with the schema, because a
-            // caller shipping a different default would put the connector and
-            // crawl.Connection.PrincipalTtlMinutes into a disagreement only
-            // crawl.vwPrincipalCacheTtl could see.
+            // ABSENT IS NULL, meaning "the database decides".
+            //
+            // This assertion used to require 720 - the schema's own default -
+            // reasoning that a caller shipping a DIFFERENT default would put the
+            // connector and crawl.Connection.PrincipalTtlMinutes into a
+            // disagreement only crawl.vwPrincipalCacheTtl could see. The reason
+            // was right and the remedy was the weaker of the two available: it
+            // was forced, because CachePrincipalAsync took a non-nullable
+            // TimeSpan and the store therefore always sent a number, so matching
+            // the schema's default was the closest thing to deferring to it.
+            //
+            // The seam is nullable now, so the connector can hold no opinion at
+            // all - and then there is no second default to disagree with, rather
+            // than two that happen to agree today. It also makes lowering the
+            // column actually lower it, which the old shape did not: sending a
+            // number unconditionally left sql/33's clamp, which only touches
+            // negative answers, as the only thing the database controlled.
             PushOptions options = TestData.ValidPushOptions();
 
-            Assert.Equal(TimeSpan.FromMinutes(720), CdpCrawlState.PrincipalCacheTtl(options));
-            Assert.Equal(PrincipalResolver.DefaultCacheTtl, CdpCrawlState.PrincipalCacheTtl(options));
+            Assert.Null(CdpCrawlState.PrincipalCacheTtl(options));
 
             options.Settings[CdpCrawlState.PrincipalCacheTtlSetting] = "60";
             Assert.Equal(TimeSpan.FromMinutes(60), CdpCrawlState.PrincipalCacheTtl(options));
@@ -445,13 +516,13 @@ namespace SqlTicketsConnector.Tests
             // hits and never says so - which is the same correction sql/23 makes
             // at the other end of the call.
             options.Settings[CdpCrawlState.PrincipalCacheTtlSetting] = "0";
-            Assert.Equal(PrincipalResolver.DefaultCacheTtl, CdpCrawlState.PrincipalCacheTtl(options));
+            Assert.Null(CdpCrawlState.PrincipalCacheTtl(options));
 
             options.Settings[CdpCrawlState.PrincipalCacheTtlSetting] = "-30";
-            Assert.Equal(PrincipalResolver.DefaultCacheTtl, CdpCrawlState.PrincipalCacheTtl(options));
+            Assert.Null(CdpCrawlState.PrincipalCacheTtl(options));
 
             options.Settings[CdpCrawlState.PrincipalCacheTtlSetting] = "soon";
-            Assert.Equal(PrincipalResolver.DefaultCacheTtl, CdpCrawlState.PrincipalCacheTtl(options));
+            Assert.Null(CdpCrawlState.PrincipalCacheTtl(options));
         }
 
         /// <summary>A resolver with no explicit map, over the given store and directory.</summary>
@@ -472,7 +543,7 @@ namespace SqlTicketsConnector.Tests
 
             public string SourceType { get; set; }
 
-            public TimeSpan Ttl { get; set; }
+            public TimeSpan? Ttl { get; set; }
         }
 
         /// <summary>
@@ -550,7 +621,7 @@ namespace SqlTicketsConnector.Tests
             }
 
             public Task CachePrincipalAsync(
-                PrincipalGrant grant, string sourceType, TimeSpan ttl, CancellationToken cancellationToken)
+                PrincipalGrant grant, string sourceType, TimeSpan? ttl, CancellationToken cancellationToken)
             {
                 this.Writes.Add(new CachedPrincipal { Grant = grant, SourceType = sourceType, Ttl = ttl });
 
@@ -594,6 +665,10 @@ namespace SqlTicketsConnector.Tests
 
             public Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken) =>
                 this.inner.GetLiveItemIdsAsync(cancellationToken);
+
+            public Task<IReadOnlySet<string>> CompareAndSeeAsync(
+                IReadOnlyCollection<CrawlItemState> candidates, CancellationToken cancellationToken) =>
+                this.inner.CompareAndSeeAsync(candidates, cancellationToken);
 
             public Task ConfirmDeletesAsync(
                 IReadOnlyCollection<string> itemIds, CancellationToken cancellationToken) =>

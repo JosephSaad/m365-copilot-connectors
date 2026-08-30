@@ -129,10 +129,23 @@ public static class CdpCrawlState
     /// is a cache that never hits and never says that it never hits. sql/23 makes
     /// the same correction at the other end for the same reason.
     /// </remarks>
-    public static TimeSpan PrincipalCacheTtl(PushOptions options)
+    public static TimeSpan? PrincipalCacheTtl(PushOptions options)
     {
         int minutes = options.Setting(PrincipalCacheTtlSetting, 0);
 
-        return minutes > 0 ? TimeSpan.FromMinutes(minutes) : PrincipalResolver.DefaultCacheTtl;
+        // NULL WHEN UNSET, and that is the whole point of the nullable seam.
+        // uspCachePrincipal reads crawl.Connection.PrincipalTtlMinutes when the
+        // caller states nothing, so an operator who lowers that column has
+        // actually lowered it. Sending a number here unconditionally - which is
+        // what this did while the store's parameter was a non-nullable TimeSpan
+        // - made the column govern nothing for positive answers, leaving sql/33's
+        // clamp, which only touches negatives, as the only thing the database
+        // controlled. A policy column no caller can defer to is a setting that
+        // does nothing.
+        //
+        // The setting remains as an override for a deployment that wants a
+        // different number from the one in the database, which is a fair thing
+        // to want and is now distinguishable from having no opinion.
+        return minutes > 0 ? TimeSpan.FromMinutes(minutes) : null;
     }
 }

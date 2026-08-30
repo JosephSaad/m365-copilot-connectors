@@ -131,7 +131,7 @@ public sealed class NullCrawlStateStore : ICrawlStateStore
 
     /// <inheritdoc/>
     public Task CachePrincipalAsync(
-        PrincipalGrant grant, string sourceType, TimeSpan ttl, CancellationToken cancellationToken)
+        PrincipalGrant grant, string sourceType, TimeSpan? ttl, CancellationToken cancellationToken)
         => Task.CompletedTask;
 
     /// <inheritdoc/>

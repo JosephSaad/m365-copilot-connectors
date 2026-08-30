@@ -289,7 +289,7 @@ public static class PushHost
                     "will be deleted - see docs/CRAWL-STATE-DEPLOYMENT.md.");
             }
 
-            var context = new PushSourceContext(options, credential, secrets, Log.Logger);
+            var context = new PushSourceContext(options, credential, secrets, Log.Logger) { IsDryRun = dryRun };
             var engine = new PushEngine(connector, options, graph, Log.Logger, dryRun, store);
 
             // Ctrl+C cancels cleanly: the token reaches every Graph call and

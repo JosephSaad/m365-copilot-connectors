@@ -103,7 +103,7 @@ namespace SqlTicketsConnector.Tests.TestSupport
         public Task CachePrincipalAsync(
             PrincipalGrant grant,
             string sourceType,
-            TimeSpan ttl,
+            TimeSpan? ttl,
             CancellationToken cancellationToken) =>
             this.inner.CachePrincipalAsync(grant, sourceType, ttl, cancellationToken);
 

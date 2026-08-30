@@ -117,7 +117,8 @@ public sealed class HiveContractsConnector : IPushConnector
             directory,
             context.Log,
             CdpCrawlState.Current,
-            CdpCrawlState.PrincipalCacheTtl(context.Options));
+            CdpCrawlState.PrincipalCacheTtl(context.Options),
+            context.IsDryRun);
 
         var reader = new HiveOdbcRowReader(
             HiveConnectionStringFactory.Build(settings),

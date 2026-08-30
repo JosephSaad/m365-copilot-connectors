@@ -129,7 +129,8 @@ public sealed class AtlasCatalogueConnector : IPushConnector
             directory,
             context.Log,
             CdpCrawlState.Current,
-            CdpCrawlState.PrincipalCacheTtl(context.Options));
+            CdpCrawlState.PrincipalCacheTtl(context.Options),
+            context.IsDryRun);
 
         return new AtlasPushSource(
             settings,

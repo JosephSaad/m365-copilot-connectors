@@ -255,7 +255,7 @@ public interface ICrawlStateStore : IAsyncDisposable
     Task CachePrincipalAsync(
         PrincipalGrant grant,
         string sourceType,
-        TimeSpan ttl,
+        TimeSpan? ttl,
         CancellationToken cancellationToken);
 
     /// <summary>Buffers one throttling event for the run's record.</summary>

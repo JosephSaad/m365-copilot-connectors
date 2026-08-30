@@ -229,7 +229,18 @@ public sealed class PrincipalResolver
     private readonly GraphServiceClient? graph;
     private readonly ILogger log;
     private readonly ICrawlStateStore store;
-    private readonly TimeSpan cacheTtl;
+
+    /// <summary>
+    /// Whether this run writes nothing. A dry run reads the cache and never
+    /// writes it: the row would be a real TTL'd entry indistinguishable from a
+    /// real run's, and "writes nothing to Graph" is a weaker claim than the one
+    /// a dry run makes.
+    ///
+    /// It does not change what is READ, deliberately. A dry run that resolved
+    /// differently from a real one would stop being a rehearsal of it.
+    /// </summary>
+    private readonly bool isDryRun;
+    private readonly TimeSpan? cacheTtl;
     private readonly Dictionary<string, string?> cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> reportedMisses = new(StringComparer.OrdinalIgnoreCase);
 
@@ -273,13 +284,15 @@ public sealed class PrincipalResolver
         GraphServiceClient? graph,
         ILogger log,
         ICrawlStateStore? store = null,
-        TimeSpan? cacheTtl = null)
+        TimeSpan? cacheTtl = null,
+        bool isDryRun = false)
     {
         this.explicitMap = new Dictionary<string, string>(explicitMap, StringComparer.OrdinalIgnoreCase);
         this.graph = graph;
         this.log = log;
         this.store = store ?? NullCrawlStateStore.Instance;
-        this.cacheTtl = cacheTtl ?? DefaultCacheTtl;
+        this.cacheTtl = cacheTtl;
+        this.isDryRun = isDryRun;
 
         // Read once. IsEnabled is a property of the store's identity rather than
         // of its current health, so re-reading it per group would buy nothing and
@@ -546,6 +559,20 @@ public sealed class PrincipalResolver
             }
 
             id = parsed;
+        }
+
+        // A DRY RUN READS THE CACHE AND NEVER WRITES IT. The row would be a real
+        // TTL'd entry, indistinguishable from a real run's, and a run advertised
+        // as writing nothing must not leave one behind - "writes nothing to
+        // Graph" is a weaker claim than the one a dry run makes.
+        //
+        // Placed here rather than at the read, on purpose: a dry run that
+        // resolved principals differently from a real run would stop being a
+        // rehearsal of it, and the resolved ACL is what the preview's item
+        // counts and skip decisions rest on.
+        if (this.isDryRun)
+        {
+            return;
         }
 
         try
