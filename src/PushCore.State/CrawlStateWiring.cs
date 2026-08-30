@@ -18,6 +18,7 @@
 
 namespace PushCore.State;
 
+using Microsoft.Data.SqlClient;
 using Serilog;
 
 /// <summary>Builds the crawl state store from a connector's configuration.</summary>
@@ -44,12 +45,22 @@ public static class CrawlStateWiring
     /// release before the state store did, and the engine's behaviour without a
     /// store is unchanged from those - write everything, delete nothing.
     ///
-    /// The refusal below is the only opinion this method holds. A connection
-    /// string carrying a password would put a credential in appsettings.json,
-    /// which build/SecretHygiene.targets exists to prevent and which the whole
-    /// repository is arranged to make unnecessary. Refusing loudly is better
-    /// than connecting: the alternative is a secret in a file that is copied to
-    /// every deployment host and read by anyone who can read the directory.
+    /// The two refusals below are the only opinions this method holds. A
+    /// connection string carrying a password would put a credential in
+    /// appsettings.json, which build/SecretHygiene.targets exists to prevent and
+    /// which the whole repository is arranged to make unnecessary. Refusing
+    /// loudly is better than connecting: the alternative is a secret in a file
+    /// that is copied to every deployment host and read by anyone who can read
+    /// the directory.
+    ///
+    /// THE SECOND REFUSAL IS NEW AND IS THE POINT OF PARSING AT ALL. A value
+    /// SqlConnectionStringBuilder cannot parse used to be accepted here without
+    /// comment, because a substring test has no opinion about syntax. The store
+    /// was then constructed, the run started, and the failure arrived at the
+    /// first connection attempt as a SqlClient exception that names neither this
+    /// setting nor this file - which is as far from the mistyped character as the
+    /// failure could reasonably be put. Refusing at the point of reading turns
+    /// that into one sentence naming the setting, before anything else happens.
     /// </remarks>
     public static ICrawlStateStore? FromSettings(PushOptions options, ILogger log)
     {
@@ -60,7 +71,35 @@ public static class CrawlStateWiring
             return null;
         }
 
-        if (ContainsPassword(connectionString))
+        SqlConnectionStringBuilder parsed;
+
+        try
+        {
+            parsed = new SqlConnectionStringBuilder(connectionString);
+        }
+        catch (ArgumentException ex)
+        {
+            // NOTHING FROM ex.Message IS REPEATED, and that is deliberate rather
+            // than lazy. The parser quotes the offending token back at you -
+            // "Keyword not supported: 'correcthorse'" - and a malformed
+            // connection string is exactly where a password has ended up in
+            // keyword position. Running it: "...;Password=hun;ter=x" is an
+            // unquoted password holding a semicolon, an ordinary mistake, and the
+            // parser's message for it is "Keyword not supported: 'ter'" - a
+            // fragment of the secret. This message is logged, so it says nothing
+            // the value could have coloured. The exception is kept as the inner
+            // one so a debugger still has it; RedactedException.Wrap in PushHost
+            // scrubs that on the way to a sink.
+            throw new InvalidOperationException(
+                $"Settings:{ConnectionStringSetting} is not a valid SQL Server connection string and " +
+                "was refused before anything tried to use it. Correct it in appsettings.json - a working " +
+                "value looks like 'Server=SQL01;Database=ConnectorState;Integrated Security=true'. " +
+                "Neither the value nor the parser's own message is reproduced here, because a malformed " +
+                "connection string is precisely where a password can have landed in the wrong position.",
+                ex);
+        }
+
+        if (CarriesPassword(parsed))
         {
             throw new InvalidOperationException(
                 $"Settings:{ConnectionStringSetting} contains a password. Crawl state is reached with " +
@@ -71,22 +110,70 @@ public static class CrawlStateWiring
 
         log.Information("Crawl state is enabled. Delete detection, change detection and resume are available.");
 
+        // The ORIGINAL string, not parsed.ConnectionString. The builder
+        // round-trips a normalised form - reordered, requoted, and carrying every
+        // default it decided to make explicit - and handing that on would mean
+        // the connector connects with a string the operator never wrote and
+        // cannot find in any log or ticket. Parsing here is a question asked
+        // about the value, not a rewrite of it.
         return new SqlCrawlStateStore(connectionString, log);
     }
 
-    /// <summary>Looks for a password keyword in a connection string.</summary>
-    /// <param name="connectionString">The configured value.</param>
-    /// <returns>True when it appears to carry a secret.</returns>
+    /// <summary>Asks SQL Server's own parser whether a connection string carries a password.</summary>
+    /// <param name="parsed">The configured value, already through the parser.</param>
+    /// <returns>True when it carries a non-empty Password or PWD.</returns>
     /// <remarks>
-    /// Deliberately a substring test rather than a parse. SqlConnectionStringBuilder
-    /// would be more precise and would also THROW on a malformed string, turning
-    /// a typo into a stack trace instead of the specific message above - and a
-    /// malformed string is exactly when an operator most needs to be told which
-    /// setting is wrong.
+    /// THIS WAS A SUBSTRING TEST, and the comment that defended it made one good
+    /// point and one mistake. The good point: SqlConnectionStringBuilder THROWS
+    /// on a malformed string, and a bare ArgumentException in place of the
+    /// specific message above is worse than useless when a typo is exactly the
+    /// thing the operator has to find. The mistake was concluding that the test
+    /// therefore had to be a substring match, when the throw can simply be caught
+    /// and re-stated - which is what <see cref="FromSettings"/> now does, and
+    /// which leaves the operator with a better message than before rather than a
+    /// worse one, because an unparseable value is now refused HERE instead of at
+    /// the first connection attempt somewhere in the middle of a run.
+    ///
+    /// WHAT THE PARSE BUYS, measured against the shipped parser rather than
+    /// assumed. The substring test refused, today, every one of these, none of
+    /// which carries a credential:
+    ///
+    ///   Server=pwd-sql01;Database=ConnectorState;Integrated Security=true
+    ///   Server=sql01;Database=PasswordVault;Integrated Security=true
+    ///   Server=sql01;Application Name=PwdReset;Integrated Security=true
+    ///   Server=sql01;Initial Catalog='a;Password=x';Integrated Security=true
+    ///
+    /// The first is not a curiosity. A host named for the credential service it
+    /// runs is ordinary, and an operator whose only correct connection string is
+    /// refused with "contains a password" has been told something false about a
+    /// value they cannot fix. The last one is the case a substring match cannot
+    /// reach at all: the text "Password=x" is there, inside a QUOTED database
+    /// name, and the parser correctly reports no password.
+    ///
+    /// The other direction was checked and is the smaller half. Every legal
+    /// spelling of the keyword was run through the builder - Password, PWD, Pwd,
+    /// mixed case, padded with spaces and tabs on both sides of the '=' - and all
+    /// of them contain "password" or "pwd" literally, so none slipped past the
+    /// old test. The encodings that do not (fullwidth, a soft hyphen, an escaped
+    /// '=', internal spaces) are rejected by the parser as unsupported keywords
+    /// rather than honoured, so there is no spelling that carries a password past
+    /// a substring match. What the old test let through was the malformed string,
+    /// which it accepted in silence.
+    ///
+    /// ShouldSerialize rather than ContainsKey: the builder pre-populates every
+    /// keyword it knows, so ContainsKey("Password") is true for a connection
+    /// string that never mentioned one, and a check built on it would refuse
+    /// everything. ShouldSerialize is false for absent and for present-but-empty,
+    /// which is the right reading - "Password=" carries nothing.
+    ///
+    /// Where the parser draws the empty/present line is worth knowing and is not
+    /// where it was assumed to be: an UNQUOTED trailing space is whitespace
+    /// between tokens and gets trimmed, so "Password= " also carries nothing,
+    /// while the quoted "Password=' '" is a value somebody chose and is refused.
+    /// That was found by asserting the opposite and watching the test fail.
     /// </remarks>
-    private static bool ContainsPassword(string connectionString)
+    private static bool CarriesPassword(SqlConnectionStringBuilder parsed)
     {
-        return connectionString.Contains("password", StringComparison.OrdinalIgnoreCase)
-            || connectionString.Contains("pwd", StringComparison.OrdinalIgnoreCase);
+        return parsed.ShouldSerialize("Password");
     }
 }
