@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Diagnoses the on-premises half of the pipeline: configuration, the service,
     the certificate, the port, the agent hop and SQL reachability.

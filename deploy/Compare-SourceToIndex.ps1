@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Reconciles dbo.Tickets against what is actually in the external connection,
     row by row — and finds the orphans the direct push path leaves behind.

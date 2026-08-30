@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Watches an external connection move from draft to ready, and explains every
     state it passes through on the way.

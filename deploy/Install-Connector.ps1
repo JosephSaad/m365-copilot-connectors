@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Deploys the SQL Tickets connector on a server that already runs the
     Microsoft Graph connector agent.

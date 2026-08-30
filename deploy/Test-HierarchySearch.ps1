@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Proves the point of the three level test case: that searching for a CUSTOMER
     returns engagement and time entry items too, not just the customer.

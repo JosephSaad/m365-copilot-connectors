@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Pre-flight for SqlGraphPush: proves the certificate, the token, the granted
     application permissions and the ownership of the connection — before the

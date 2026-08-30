@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Proves stage 1 on its own: that the source table is readable, shaped as the
     connector expects, and that its LastModified values can carry a watermark.

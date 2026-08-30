@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Reads the connector log and reconstructs what every crawl did: counts,
     duration, errors, and whether the watermark chain is intact.

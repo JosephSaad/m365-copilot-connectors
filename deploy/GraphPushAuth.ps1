@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Shared client-credentials authentication for the SqlGraphPush diagnostic
     scripts. Dot-source it; it defines functions and does nothing on its own.
