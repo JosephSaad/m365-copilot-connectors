@@ -4,6 +4,7 @@
     ViewData["Title"] = Model.Health.DisplayName;
     ConnectionHealthRow health = Model.Health;
     string encodedId = Uri.EscapeDataString(health.ConnectionId);
+    DisplayZone zone = DisplayZoneRequest.For(this.ViewContext.HttpContext);
 }
 
 <p class="crumb"><a href="/">Overview</a> / Connections</p>
@@ -33,11 +34,11 @@
     <div class="panel panel-pad">
         <dl class="facts">
             <div>
-                <dt>Last run</dt>
+                <dt>Last run (@zone.Label)</dt>
                 <dd>
                     @if (health.LastRunId.HasValue)
                     {
-                        <a href="/Runs/@health.LastRunId.Value">@Format.TimestampShort(health.LastRunStartedUtc)</a>
+                        <a href="/Runs/@health.LastRunId.Value">@Format.TimestampShort(health.LastRunStartedUtc, zone)</a>
                         <span class="tag">@health.LastRunStatus</span>
                     }
                     else
@@ -46,7 +47,7 @@
                     }
                 </dd>
             </div>
-            <div><dt>Last success (UTC)</dt><dd>@Format.Timestamp(health.LastSuccessUtc)</dd></div>
+            <div><dt>Last success (@zone.Label)</dt><dd>@Format.Timestamp(health.LastSuccessUtc, zone)</dd></div>
             <div><dt>Since last success</dt><dd>@Format.Age(health.MinutesSinceLastSuccess)</dd></div>
             <div><dt>Expected interval</dt><dd>@Format.Age(health.ExpectedIntervalMinutes)</dd></div>
             <div><dt>Consecutive failures</dt><dd>@Format.Count(health.ConsecutiveFailures)</dd></div>
@@ -165,14 +166,14 @@
         else
         {
             <dl class="facts">
-                <div><dt>Marker time (UTC)</dt><dd>@Format.Timestamp(Model.Checkpoint.MarkerTime)</dd></div>
+                <div><dt>Marker time (@zone.Label)</dt><dd>@Format.Timestamp(Model.Checkpoint.MarkerTime, zone)</dd></div>
                 <div><dt>Marker key</dt><dd>@(Model.Checkpoint.MarkerKey ?? Format.None)</dd></div>
                 <div>
                     <dt>Set by run</dt>
                     <dd><a href="/Runs/@Model.Checkpoint.RunId">@Model.Checkpoint.RunId</a></dd>
                 </div>
                 <div><dt>Runs recorded</dt><dd>@Format.Count(Model.Checkpoint.RunCount)</dd></div>
-                <div><dt>Updated (UTC)</dt><dd>@Format.Timestamp(Model.Checkpoint.UpdatedUtc)</dd></div>
+                <div><dt>Updated (@zone.Label)</dt><dd>@Format.Timestamp(Model.Checkpoint.UpdatedUtc, zone)</dd></div>
             </dl>
             <p class="note">
                 This is where the next incremental run would start. A checkpoint that has stopped

@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = $"Run {Model.Run.RunId} throttling";
     RunHistoryRow run = Model.Run;
+    DisplayZone zone = DisplayZoneRequest.For(this.ViewContext.HttpContext);
 }
 
 <p class="crumb">
@@ -14,7 +15,7 @@
 <h1>Throttle events</h1>
 <p class="subtitle">
     Every 429 and 5xx this run waited on, in the order they arrived.
-    @run.DisplayName · started @Format.Timestamp(run.StartedUtc) UTC ·
+    @run.DisplayName · started @Format.Timestamp(run.StartedUtc, zone) @zone.Label ·
     @Format.Duration(run.DurationSeconds) · @(run.Mode ?? Format.None) crawl
 </p>
 
@@ -60,7 +61,7 @@ else
             <table class="grid">
                 <thead>
                     <tr>
-                        <th class="num">Occurred (UTC)</th>
+                        <th class="num">Occurred (@zone.Label)</th>
                         <th class="num">Into run</th>
                         <th class="num">Status</th>
                         <th class="num">Retry-After</th>
@@ -73,7 +74,7 @@ else
                     @foreach (ThrottleEventRow throttle in Model.Result.Rows)
                     {
                         <tr>
-                            <td class="num nowrap">@Format.Timestamp(throttle.OccurredUtc)</td>
+                            <td class="num nowrap">@Format.Timestamp(throttle.OccurredUtc, zone)</td>
                             <td class="num">@Format.Duration(throttle.SecondsIntoRun)</td>
                             <td class="num">
                                 @if (throttle.StatusCode == 429)

@@ -16,6 +16,11 @@
 
     int refreshSeconds = wantsRefresh ? CrawlStateSettings.Value.AutoRefreshSeconds : 0;
 
+    // The zone every timestamp on this page is rendered in. Resolved once here
+    // and used by the furniture below; each page resolves it again for its own
+    // column headers, and gets the same cached instance.
+    DisplayZone zone = DisplayZoneRequest.For(this.Context);
+
     bool IsCurrent(string prefix) =>
         prefix == "/"
             ? string.Equals(path, "/", StringComparison.OrdinalIgnoreCase)
@@ -51,6 +56,23 @@
                quiet system from a stale page, and the wrong one of those is
                the reassuring one. *@
             <div class="who">
+                @* Which zone the times below are in, on every page, next to the
+                   switch that changes it. A time on an operations dashboard
+                   with no zone against it is the thing that gets copied into a
+                   ticket and read as something else an hour later. *@
+                <span class="tz-note">
+                    times in <strong>@zone.Label</strong>
+                    @if (!zone.IsUtc)
+                    {
+                        <a href="@DisplayZoneRequest.SwitchUrl(this.Context.Request, DisplayZone.UtcMode)"
+                           title="Show every time on this page in UTC, which is what the store holds.">UTC</a>
+                    }
+                    else if (zone.DeviceZoneLabel is not null)
+                    {
+                        <a href="@DisplayZoneRequest.SwitchUrl(this.Context.Request, DisplayZone.DeviceMode)"
+                           title="Show every time on this page in your browser's time zone.">@zone.DeviceZoneLabel</a>
+                    }
+                </span>
                 @if (refreshSeconds > 0)
                 {
                     <span class="refresh-note" title="This page reloads itself; it is not a live stream.">
@@ -82,8 +104,48 @@
                 identifier, a type, a content hash, an ACL hash and a byte count. Titles, field
                 values and document bodies are not recorded here and cannot be shown.
             </p>
-            <p>All times are UTC.</p>
+            @* The zone, spelled out once per page in prose as well as in the
+               masthead. The masthead line is what somebody glances at; this is
+               what they read when the glance did not answer the question - in
+               particular WHY they are looking at UTC when they expected not to,
+               which is otherwise indistinguishable from the feature not
+               working. *@
+            <p>
+                Times are shown in <strong>@zone.Label</strong>, converted from the UTC the store
+                holds. The stored values are UTC and are not changed by this setting; the
+                <strong>from</strong> and <strong>to</strong> filters on the run list are UTC too,
+                and say so, because those bounds go to the database as typed.
+                @if (zone.DeviceZoneRejected)
+                {
+                    <text>
+                        Your browser reported a time zone
+                        @if (zone.RejectedZoneId is not null)
+                        {
+                            <text>, <strong>@zone.RejectedZoneId</strong>,</text>
+                        }
+                        that this server does not recognise, so UTC is being shown instead.
+                    </text>
+                }
+                else if (zone.DeviceZoneLabel is null)
+                {
+                    <text>
+                        Your browser's zone has not been detected — that needs the one small script
+                        on this page, which either has not run yet or is blocked here. UTC is what
+                        the store holds, so nothing on this page is wrong; it is simply not local.
+                    </text>
+                }
+            </p>
         </footer>
     </main>
+
+    @* THE ONE SCRIPT ON THIS SITE. It writes the browser's time zone to a
+       cookie and does nothing else - no fetch, no DOM, no reload.
+
+       Content-Security-Policy permits it by a SHA-256 of its exact bytes, so
+       DO NOT REFORMAT THIS TAG. A newline or an indent between <script> and
+       @@Html.Raw would change the element's content, the hash would no longer
+       match, and the browser would refuse to run it - leaving the page
+       reporting UTC for ever with nothing in the server log to say why. *@
+    <script>@Html.Raw(TimeZoneProbeScript.Source)</script>
 </body>
 </html>

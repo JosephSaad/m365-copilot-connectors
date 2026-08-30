@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "Overview";
     DashboardTiles tiles = Model.Summary.Tiles;
+    DisplayZone zone = DisplayZoneRequest.For(this.ViewContext.HttpContext);
 
     string windowLabel = Model.EffectiveWindowHours % 24 == 0 && Model.EffectiveWindowHours >= 24
         ? $"last {Model.EffectiveWindowHours / 24} day{(Model.EffectiveWindowHours == 24 ? string.Empty : "s")}"
@@ -116,7 +117,7 @@
                         <tr>
                             <th>Connection</th>
                             <th>Health</th>
-                            <th>Last run</th>
+                            <th>Last run (@zone.Label)</th>
                             <th class="num">Since success</th>
                             <th class="num">Failures</th>
                             <th class="num">Live items</th>
@@ -137,7 +138,7 @@
                                 <td class="nowrap dim">
                                     @if (connection.LastRunId.HasValue)
                                     {
-                                        <a href="/Runs/@connection.LastRunId.Value">@Format.TimestampShort(connection.LastRunStartedUtc)</a>
+                                        <a href="/Runs/@connection.LastRunId.Value">@Format.TimestampShort(connection.LastRunStartedUtc, zone)</a>
                                         <span class="tag">@connection.LastRunStatus</span>
                                     }
                                     else
@@ -234,7 +235,7 @@
                 @foreach (RunHistoryRow run in Model.Summary.RecentRuns)
                 {
                     <div class="strip-row">
-                        <span class="strip-time">@Format.TimestampShort(run.StartedUtc)</span>
+                        <span class="strip-time">@Format.TimestampShort(run.StartedUtc, zone)</span>
                         <partial name="_ConnectionPill" model="run.Status ?? string.Empty" />
                         <a class="strip-name" href="/Runs/@run.RunId">@run.DisplayName</a>
                         @if (run.IsDryRun)

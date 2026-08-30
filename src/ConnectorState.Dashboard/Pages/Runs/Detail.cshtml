@@ -11,6 +11,8 @@
     // during a long crawl, which is exactly when that adds up.
     bool stillRunning = string.Equals(run.Status, "running", StringComparison.OrdinalIgnoreCase);
     ViewData["AutoRefresh"] = stillRunning;
+
+    DisplayZone zone = DisplayZoneRequest.For(this.ViewContext.HttpContext);
 }
 
 <p class="crumb">
@@ -62,8 +64,8 @@
 <section class="section">
     <div class="panel panel-pad">
         <dl class="facts">
-            <div><dt>Started (UTC)</dt><dd>@Format.Timestamp(run.StartedUtc)</dd></div>
-            <div><dt>Completed (UTC)</dt><dd>@Format.Timestamp(run.CompletedUtc)</dd></div>
+            <div><dt>Started (@zone.Label)</dt><dd>@Format.Timestamp(run.StartedUtc, zone)</dd></div>
+            <div><dt>Completed (@zone.Label)</dt><dd>@Format.Timestamp(run.CompletedUtc, zone)</dd></div>
             <div><dt>Duration</dt><dd>@Format.Duration(run.DurationSeconds)</dd></div>
             <div><dt>Throughput</dt><dd>@Format.Decimal2(run.ItemsPerSecond) items/s</dd></div>
             <div><dt>Read</dt><dd>@Format.Count(run.ItemsRead)</dd></div>
@@ -212,8 +214,8 @@
                 <div><dt>Time asked for</dt><dd>@Format.Duration(Model.Throttling.TotalRetryAfterSeconds)</dd></div>
                 <div><dt>Longest wait</dt><dd>@Format.Duration(Model.Throttling.MaxRetryAfterSeconds)</dd></div>
                 <div><dt>Distinct minutes</dt><dd>@Format.Count(Model.Throttling.DistinctMinutes)</dd></div>
-                <div><dt>First event (UTC)</dt><dd>@Format.Timestamp(Model.Throttling.FirstEventUtc)</dd></div>
-                <div><dt>Last event (UTC)</dt><dd>@Format.Timestamp(Model.Throttling.LastEventUtc)</dd></div>
+                <div><dt>First event (@zone.Label)</dt><dd>@Format.Timestamp(Model.Throttling.FirstEventUtc, zone)</dd></div>
+                <div><dt>Last event (@zone.Label)</dt><dd>@Format.Timestamp(Model.Throttling.LastEventUtc, zone)</dd></div>
                 <div><dt>Deepest retry</dt><dd>@Format.Count(Model.Throttling.DeepestRetry)</dd></div>
             </dl>
             <p class="note">
