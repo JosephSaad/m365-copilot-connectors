@@ -11,14 +11,15 @@ supported service rather than a release that builds.
 
 It is deliberately blunt about the gap between *built* and *verified*, because
 that gap is the whole risk right now: 17 features are implemented, 4 more are
-part-built, 312 tests pass, and **three of the six blockers are now closed and a
-fourth is part-done** — against one closed at the last revision. Every one that
-ran found something. Blocker 1
-found two defects in `sql/26`, one of them silent. Blockers 2 and 5 found the
-shared ACL that wrote 441 of 1,118 items and refused the other 677. None was
-findable by reading the code; all are fixed. What remains is one rehearsal
-(deletion, row 4), one smoke test (the dashboard, row 6), and the parts no quiet
-tenant can prove: the engine's backoff has still never answered a real 429. Every
+part-built, 312 tests pass, and **four of the six blockers are now closed, a
+fifth is part-done, and one is untouched** — against one closed two revisions
+ago. Every blocker that ran found something. Blocker 1 found two defects in
+`sql/26`, one of them silent. Blockers 2 and 5 found the shared ACL that wrote
+441 of 1,118 items and refused the other 677. None was findable by reading the
+code; all are fixed. The full lifecycle now has evidence behind it — write,
+skip-unchanged, and delete confirmed gone from the index. What remains is the
+dashboard smoke test, the three caveats on row 1, and the parts no quiet tenant
+can prove: the engine's backoff has still never answered a real 429. Every
 go-live blocker below is a verification task. None of them is construction.
 
 **What this document does not cover.** Every task here is engineering: run it,
@@ -38,8 +39,8 @@ then what is cheap now and expensive later, then what can follow go-live.
 ## 1. The six blockers
 
 They are blockers because each one is a claim the release makes and cannot yet
-support. Three are now closed and row 1 is part-done. The two untouched are an
-afternoon's work on one machine, and what follows is how to build that machine —
+support. Four are now closed and row 1 is part-done. Only the dashboard smoke
+test is untouched. What follows is how to build the machine they were run on,
 kept in full, because the rig has to be rebuilt for the customer environment
 anyway.
 
@@ -54,12 +55,28 @@ Note *where* the connection string is: the `bin` copy only, never a tracked
 `bin/**`, so this touches no gate — but a rebuild wipes it, which makes it a
 demonstration rather than a deployment. Section 3 carries the permanent decision.
 
+**Two things the delete rehearsal settled that are worth carrying into
+monitoring.** `crawl.vwPendingDeletes` read 0 before the sweep and 0 after:
+detect, delete and confirm all happen inside one sweep, so a healthy run never
+leaves anything there. It is a failure indicator, not a work queue — which is
+what [`CRAWL-STATE-DEPLOYMENT.md`](CRAWL-STATE-DEPLOYMENT.md) already says, now
+observed. An alert built expecting that view to be busy will only ever fire when
+something is wrong, which is correct, and will look broken until it does.
+
+And the sweep runs on a **full** crawl only. All four runs were full because
+`Settings:Incremental` was never set. Turn it on and the sweep does not stop
+firing, but it stops firing *every run*: `uspBeginRun` escalates to full once the
+last full success ages past `Settings:FullEveryHours`, 168 by default, so
+deletions arrive weekly rather than per run. That is the same number
+[`PRODUCTION-ONBOARDING.md`](PRODUCTION-ONBOARDING.md) row 1.1 asks somebody to
+accept in writing, and this is what it buys.
+
 | # | Feature | What it means | Status |
 |---|---|---|---|
 | 1 | **SQL scripts executed** | Run `sql/20`–`25` against a real instance and read the verification block each one prints. A syntax error in a `CREATE OR ALTER` batch would leave a procedure absent and only fail later, at the `GRANT`. **Partially done.** `sql/02`, `10`–`13`, `20`–`26` have now been run once against a scratch SQL Server 2025 instance, and `ConnectorState` built out — 8 tables, 6 views, 19 write and 7 reporting procedures. It paid for itself immediately: `sql/26` carried two defects, one of them silent, both fixed in `eb94ab1`. It stays open on three counts. `sql/20` ran from an edited copy, not the repo file, its `D:` paths being placeholders. `sql/01`, `13` and `25` created no principals at all — their `CONTOSO\` logins cannot exist on that machine, and local accounts stood in, so the least-privilege model is deployed but has never been exercised by the accounts it is written for. And the run is reported rather than witnessed. Re-run it where the accounts are real | ⚠️ |
 | 2 | **Live tenant pilot run** | One full crawl of the timesheet fixture against a real connection. Validates the retry removal, `$batch`, hashing and the state store in a single pass, and produces the first attribution table anyone has seen. **Done**, and it validated three of the four: `$batch` (row 5), hashing and the state store (row 3). Attribution tables exist — the first measurements of this pipeline that are not a guess. One item failed in run 1 and *run 2 rewrote it without any source change*, because the store had never recorded a confirmation for it. That is the "record the hash only after Graph confirms" rule working, observed rather than argued. **The retry removal remains unproven**: `throttleWaits=0` across every run, so the engine-owned backoff has still never answered a real 429 | ✅ |
 | 3 | **Second-run validation** | Re-run immediately and check `UnchangedPercent` in `crawl.vwRunHistory` climbs. Stuck near zero means item IDs are not deterministic and the corpus is being rewritten every run — see [`SOURCE-CONTRACT.md`](SOURCE-CONTRACT.md). **Done, and it climbed to 99.9%.** Run 2 read 1,118 and wrote 1; run 3, after one time entry was inserted, read 1,119 and wrote 3. The item IDs are deterministic and the corpus is not being rewritten. The 3 is the part worth reading twice: the inserted entry, its parent engagement and its grandparent customer, because the `sql/12` views roll `TotalHours` and `ChildCount` upward, so one insert genuinely changes three items. The engine knows nothing of the hierarchy — it hashed all 1,119 and found the three that differed. Wall clock fell 77s → 10s → 3s as the work shrank to what had actually changed | ✅ |
-| 4 | **Delete detection rehearsal** | Remove a fixture row, run a full crawl, watch the sweep remove it from the index and `crawl.vwPendingDeletes` drain. The most dangerous feature in the release must be seen working before it guards anything. **No longer blocked, and now the more interesting of the two left.** The store that rows 2 and 3 proved is the same store the sweep diffs against, and an insert has been rehearsed — a deletion has not. Note it needs a *full* crawl: the sweep refuses an incremental run outright, so this is not something a routine run will demonstrate by accident | ❌ |
+| 4 | **Delete detection rehearsal** | Remove a fixture row, run a full crawl, watch the sweep remove it from the index. **Done, and verified on three surfaces with a control.** One time entry soft-deleted at the source, so it fell out of the views; run 4 read 1,118, logged "Delete sweep: 1 item(s) the source no longer returns", and reported `deleted=1`. After it: `crawl.Item` state 3 with `PendingSinceUtc` NULL, and the item **404 in the Graph index** — the proof that matters, since the other two are the connector agreeing with itself. The control item beside it was untouched, and the 2 rewrites were the parent engagement and grandparent customer, the rollups changing back exactly as they changed in run 3. The guard was never near firing: 1 of 1,119 is 0.09% against `MaxDeletePercent` 10 | ✅ |
 | 5 | **`$batch` live validation** | **Done.** The default write path has now spoken to Graph: 1,118 items in 56 batches, zero failures, at 8 writers and again at 16. It did not pass first time — the run it was meant to validate is the one that exposed the shared-ACL defect fixed in `44e464f`, writing 441 and refusing 677, which is the whole argument for this row existing. One clause of it is still untested: `Settings:Batch = false` is named here as the rehearsed fallback and has not actually been rehearsed. Also note `throttleWaits=0` throughout, so the backoff path is unexercised — 16 writers × 20 sub-requests is nominally far above the 25 concurrent operations per connection the clamp's own warning cites, and a quiet tenant is not evidence that a busy one will agree | ✅ |
 | 6 | **Dashboard smoke test** | Deploy to IIS, confirm Windows authentication and that all seven pages render against real rows. It compiles and every route resolves; no page has ever displayed data | ❌ |
 
@@ -97,10 +114,9 @@ re-run and read `UnchangedPercent` (3) → delete a row and run again (4) →
 publish the dashboard to IIS (6). Optionally then `sql/26`, rename a fixture
 customer, and confirm every descendant's `EffectiveLastModified` moves.
 
-This order has now been walked as far as row 3. Only row 4, the delete
-rehearsal, and row 6, the dashboard against real rows, remain — and the state
-database they both read from is populated, so neither is waiting on anything but
-someone doing it.
+This order has now been walked to the end of row 4. Only row 6, the dashboard
+against real rows, remains — and the state database it reads is populated with
+four runs and a tombstone, so it is waiting on nothing but someone doing it.
 
 **What this rig cannot prove**, so the pilot's scope stays honest: production
 scale, the locked-down network path (`Settings:GraphProxy` against a real
