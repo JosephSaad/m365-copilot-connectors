@@ -1457,6 +1457,7 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
             new SqlMetaData("ItemsDeleted", SqlDbType.Int),
             new SqlMetaData("ItemsSkipped", SqlDbType.Int),
             new SqlMetaData("ItemsFailed", SqlDbType.Int),
+            new SqlMetaData("ItemsDuplicate", SqlDbType.Int),
             new SqlMetaData("BytesWritten", SqlDbType.BigInt),
         };
 
@@ -1478,7 +1479,8 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
             record.SetInt32(3, totals.ItemsDeleted);
             record.SetInt32(4, totals.ItemsSkipped);
             record.SetInt32(5, totals.ItemsFailed);
-            record.SetInt64(6, totals.BytesWritten);
+            record.SetInt32(6, totals.ItemsDuplicate);
+            record.SetInt64(7, totals.BytesWritten);
 
             yield return record;
         }

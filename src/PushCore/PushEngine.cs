@@ -1389,7 +1389,7 @@ public sealed class PushEngine
             // a source that reaches the same item twice through two paths writes
             // it once. It is kept on the reading thread, which is why duplicate
             // detection stays correct however many writers are running.
-            summary.CountDuplicate();
+            summary.CountDuplicate(mapped.ItemType);
             this.log.Warning(
                 "Item {ItemId} appeared more than once (row {RowOrdinal}); the later row overwrote the earlier item.",
                 mapped.Id,

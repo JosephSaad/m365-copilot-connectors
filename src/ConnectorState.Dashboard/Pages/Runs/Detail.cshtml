@@ -108,6 +108,7 @@
                             <th class="num">Deleted</th>
                             <th class="num">Skipped</th>
                             <th class="num">Failed</th>
+                            <th class="num">Duplicate</th>
                             <th class="num">Bytes</th>
                         </tr>
                     </thead>
@@ -125,6 +126,20 @@
                                     @if (type.ItemsFailed > 0)
                                     {
                                         <span class="pill pill-bad">@Format.Count(type.ItemsFailed)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="zero">0</span>
+                                    }
+                                </td>
+                                @* A repeated ID is an upsert overwriting an earlier item while the
+                                   count claims both, so a non-zero here is a defect in the source
+                                   query rather than a fact about the corpus - warn, not dim. Per
+                                   kind because the run total cannot say which join is wrong. *@
+                                <td class="num">
+                                    @if (type.ItemsDuplicate > 0)
+                                    {
+                                        <span class="pill pill-warn">@Format.Count(type.ItemsDuplicate)</span>
                                     }
                                     else
                                     {

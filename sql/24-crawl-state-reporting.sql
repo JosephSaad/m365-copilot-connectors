@@ -254,6 +254,7 @@ BEGIN
             t.ItemsDeleted,
             t.ItemsSkipped,
             t.ItemsFailed,
+            t.ItemsDuplicate,
             t.BytesWritten,
             CAST(100.0 * t.ItemsUnchanged
                  / NULLIF(t.ItemsWritten + t.ItemsUnchanged, 0) AS DECIMAL(5, 1)) AS UnchangedPercent

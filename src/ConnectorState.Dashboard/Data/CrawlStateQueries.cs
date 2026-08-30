@@ -564,6 +564,7 @@ public sealed class CrawlStateQueries
         ItemsDeleted = row.Int32("ItemsDeleted"),
         ItemsSkipped = row.Int32("ItemsSkipped"),
         ItemsFailed = row.Int32("ItemsFailed"),
+        ItemsDuplicate = row.Int32("ItemsDuplicate"),
         BytesWritten = row.Int64("BytesWritten"),
         UnchangedPercent = row.DecimalOrNull("UnchangedPercent"),
     };
