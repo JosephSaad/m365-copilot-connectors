@@ -68,6 +68,7 @@
 
 namespace PushCore;
 
+using Connector.Security.Logging;
 using Microsoft.Graph;
 using Microsoft.Graph.Models.ExternalConnectors;
 using Microsoft.Graph.Models.ODataErrors;
@@ -592,10 +593,24 @@ public sealed class GraphBatchWriter
             // unaffected, and the run does not stop.
             item.Refuse(status, subResponse?.ReasonPhrase);
 
+            // The body, not just the status. A terminal 4xx from Graph carries an
+            // error object naming the field it objected to, and logging only the
+            // status discards precisely the sentence that ends the investigation:
+            // one pilot spent a day on a 400 whose body read "DeserializationError
+            // | The Value field is required". The sub-response is already
+            // materialised above, so this costs a read of a few hundred bytes on
+            // the failure path only.
+            //
+            // It is safe to log because an external-item error body describes the
+            // request's shape, not its content - and this is the failure path, so
+            // it is bounded by the number of refusals rather than by corpus size.
+            string body = await ReadErrorBodyAsync(subResponse, cancellationToken);
+
             this.log.Error(
-                "Batched write of {ItemId} was refused with status {Status}. Not retrying this item.",
+                "Batched write of {ItemId} was refused with status {Status}. Not retrying this item. {Body}",
                 item.ItemId,
-                status);
+                status,
+                body);
         }
 
         foreach (TrackedItem item in items)
@@ -664,6 +679,59 @@ public sealed class GraphBatchWriter
     /// <summary>Reads Retry-After off one sub-response.</summary>
     /// <param name="response">The sub-response, as the SDK rebuilt it.</param>
     /// <param name="status">The status it carried.</param>
+    /// <summary>
+    /// Reads a refused sub-response's body for the log, scrubbed and capped.
+    /// </summary>
+    /// <param name="response">The refused sub-response, already materialised.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>A one-line description, never null and never throwing.</returns>
+    /// <remarks>
+    /// Three constraints, all of them the reason this is a method rather than a
+    /// ReadAsStringAsync at the call site.
+    ///
+    /// It never throws. This runs on the failure path, and an exception raised
+    /// while explaining a failure replaces a useful error with a useless one.
+    ///
+    /// It is scrubbed. A Graph error body normally names the offending field and
+    /// not its value, but "normally" is not a guarantee worth logging against,
+    /// and every other log line in this codebase passes through LogScrubber.
+    ///
+    /// It is capped. The cap is small on purpose: the sentence that identifies a
+    /// malformed request is at the front of the body, and a refusal storm should
+    /// not be able to fill a disk with the same paragraph.
+    /// </remarks>
+    private static async Task<string> ReadErrorBodyAsync(
+        HttpResponseMessage? response,
+        CancellationToken cancellationToken)
+    {
+        const int MaxBodyChars = 800;
+
+        if (response?.Content is null)
+        {
+            return "No response body.";
+        }
+
+        try
+        {
+            string body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return "Empty response body.";
+            }
+
+            body = LogScrubber.Scrub(body).ReplaceLineEndings(" ").Trim();
+
+            return body.Length <= MaxBodyChars
+                ? body
+                : body.Substring(0, MaxBodyChars) + " [truncated]";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return "Response body could not be read: " + ex.GetType().Name;
+        }
+    }
+
     /// <returns>The wait the service asked for, or null when it did not say.</returns>
     /// <remarks>
     /// The headers are transplanted onto an <see cref="ODataError"/> so that

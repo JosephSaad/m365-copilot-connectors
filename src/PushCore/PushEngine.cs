@@ -84,7 +84,6 @@ public sealed class PushEngine
     private readonly bool dryRun;
     private readonly ICrawlStateStore store;
 
-    private List<Acl>? sharedAcl;
     private GraphBatchWriter? batchWriter;
 
     // What kind of read this run is making. Full unless the state store said an
@@ -1428,8 +1427,25 @@ public sealed class PushEngine
             // Entra group principals, never Everyone. Every item in a connection
             // gets the same ACL: a child row is at least as sensitive as its
             // parent, so there is no argument for trimming them differently.
-            // Built once per run - it cannot change between items.
-            return this.sharedAcl ??= BuildAcl(this.options);
+            //
+            // DO NOT CACHE THIS. The grants cannot change between items, so one
+            // instance reused across the run reads as the obvious optimisation,
+            // and it was written that way. Acl is a Graph SDK model carrying a
+            // backing store, and hanging one instance off every ExternalItem
+            // made a pilot write 441 of 1,118 items and refuse 677 with
+            //
+            //     DeserializationError | The Value field is required.
+            //
+            // Item one carried a complete ACL and every item after it carried a
+            // valueless one. Rebuilding per item took the same run to 1,118
+            // written and 0 failed. The allocation is a few objects per item
+            // against a write measured in hundreds of milliseconds; the sharing
+            // is not worth having at any price.
+            //
+            // The regression test in PushSourceTests states this invariant but
+            // cannot enforce it - see the comment there. This paragraph is the
+            // guard.
+            return BuildAcl(this.options);
         }
 
         if (mapped.Acl.Count == 0)
