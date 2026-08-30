@@ -50,6 +50,7 @@
 // query is written. The pages say so where somebody would otherwise expect it.
 // ---------------------------------------------------------------------------
 
+using ConnectorState.Dashboard;
 using ConnectorState.Dashboard.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Server.IISIntegration;
@@ -74,31 +75,15 @@ builder.Services.AddAuthentication(IISDefaults.AuthenticationScheme);
 // with everybody nested inside it - is a directory change rather than a
 // configuration change, and needs somebody else's approval on the day.
 string[] readerGroups = builder.Configuration
-    .GetSection("CrawlState:ReaderGroups")
+    .GetSection(ReaderPolicy.ConfigurationPath)
     .Get<string[]>() ?? Array.Empty<string>();
 
+// The rule itself is in ReaderPolicy, so it can be tested. Its negative case -
+// somebody outside every configured group being refused - is the half that
+// matters and the half a running site cannot show you without a second person.
 builder.Services.AddAuthorization(options =>
 {
-    // A FALLBACK policy rather than an attribute per page. An attribute is
-    // something a new page can forget; a fallback applies to every endpoint that
-    // does not opt out, so adding a page cannot accidentally add an anonymous
-    // one.
-    var policy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser();
-
-    if (readerGroups.Length > 0)
-    {
-        // RequireRole against a Windows identity tests group membership: the
-        // negotiate handshake puts one role claim on the principal per group in
-        // the user's token, so a group name is matched the same way a role is.
-        //
-        // Nested groups therefore work, and only because the token already
-        // flattened them - this is not walking the directory, and a group the
-        // token did not carry is a group this check cannot see. That is the
-        // documented reason a user in a newly added group has to sign in again.
-        policy = policy.RequireRole(readerGroups);
-    }
-
-    options.FallbackPolicy = policy.Build();
+    options.FallbackPolicy = ReaderPolicy.Build(readerGroups);
 });
 
 builder.Services.AddRazorPages();

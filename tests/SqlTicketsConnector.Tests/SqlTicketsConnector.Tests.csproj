@@ -42,6 +42,15 @@
     <ProjectReference Include="..\..\src\Connector.Security\Connector.Security.csproj" />
 
     <!--
+      The dashboard, for ReaderPolicy alone. Referenced rather than copied
+      because the alternative is a test that rebuilds the authorization rule
+      itself and then agrees with its own copy - which passes whatever the
+      application does, and is the shape of test this repository has already
+      been caught writing once.
+    -->
+    <ProjectReference Include="..\..\src\ConnectorState.Dashboard\ConnectorState.Dashboard.csproj" />
+
+    <!--
       The Cloudera CDP connector and the two libraries behind it. Referenced for
       the same reason the SQL push tools are: the routing refusals, the ACL
       derivation and the watermark comparison are the most expensive things here

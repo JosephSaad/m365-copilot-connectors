@@ -84,6 +84,7 @@ $packages = @(
     @{ Id = 'Grpc.Tools'; Version = '2.40.0' }
     @{ Id = 'Microsoft.Bcl.AsyncInterfaces'; Version = '10.0.3' }
     @{ Id = 'Microsoft.CodeCoverage'; Version = '18.9.0' }
+    @{ Id = 'Microsoft.CSharp'; Version = '4.5.0' }
     @{ Id = 'Microsoft.Data.SqlClient'; Version = '5.2.2' }
     @{ Id = 'Microsoft.Data.SqlClient.SNI.runtime'; Version = '5.2.0' }
     @{ Id = 'Microsoft.Extensions.Configuration.Abstractions'; Version = '10.0.3' }
@@ -119,6 +120,8 @@ $packages = @(
     @{ Id = 'Microsoft.Kiota.Serialization.Multipart'; Version = '1.21.1' }
     @{ Id = 'Microsoft.Kiota.Serialization.Text'; Version = '1.21.1' }
     @{ Id = 'Microsoft.NET.Test.Sdk'; Version = '18.9.0' }
+    @{ Id = 'Microsoft.NETCore.Platforms'; Version = '1.1.0' }
+    @{ Id = 'Microsoft.NETCore.Targets'; Version = '1.1.0' }
     @{ Id = 'Microsoft.SqlServer.Server'; Version = '1.0.0' }
     @{ Id = 'Microsoft.TestPlatform.ObjectModel'; Version = '18.9.0' }
     @{ Id = 'Microsoft.TestPlatform.TestHost'; Version = '18.9.0' }
@@ -130,12 +133,21 @@ $packages = @(
     @{ Id = 'System.ClientModel'; Version = '1.10.0' }
     @{ Id = 'System.Configuration.ConfigurationManager'; Version = '8.0.0' }
     @{ Id = 'System.Data.Odbc'; Version = '9.0.0' }
+    @{ Id = 'System.Diagnostics.DiagnosticSource'; Version = '10.0.3' }
     @{ Id = 'System.Diagnostics.EventLog'; Version = '8.0.0' }
     @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '6.35.0' }
     @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '8.15.0' }
+    @{ Id = 'System.IO.Pipelines'; Version = '10.0.3' }
+    @{ Id = 'System.Memory'; Version = '4.5.3' }
     @{ Id = 'System.Memory.Data'; Version = '10.0.3' }
+    @{ Id = 'System.Runtime'; Version = '4.3.0' }
     @{ Id = 'System.Runtime.Caching'; Version = '8.0.0' }
+    @{ Id = 'System.Security.Cryptography.Cng'; Version = '4.5.0' }
     @{ Id = 'System.Security.Cryptography.ProtectedData'; Version = '8.0.0' }
+    @{ Id = 'System.Text.Encoding'; Version = '4.3.0' }
+    @{ Id = 'System.Text.Encodings.Web'; Version = '10.0.3' }
+    @{ Id = 'System.Text.Json'; Version = '10.0.3' }
+    @{ Id = 'System.ValueTuple'; Version = '4.5.0' }
     @{ Id = 'xunit'; Version = '2.9.3' }
     @{ Id = 'xunit.abstractions'; Version = '2.0.3' }
     @{ Id = 'xunit.analyzers'; Version = '1.18.0' }
