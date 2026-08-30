@@ -11,12 +11,13 @@ supported service rather than a release that builds.
 
 It is deliberately blunt about the gap between *built* and *verified*, because
 that gap is the whole risk right now: 17 features are implemented, 4 more are
-part-built, 311 tests pass, and **almost none of it has been exercised against a
-real SQL Server, and none of it against a real Microsoft 365 tenant**. The one
-exception is blocker 1, run once on a scratch instance — which immediately found
-two defects in `sql/26`, and which is still open for the three reasons named on
-that row. Every go-live blocker below is a verification task. None of them is
-construction.
+part-built, 312 tests pass, and **most of it has still never been exercised
+outside a test harness**. What has: blocker 1 on a scratch SQL instance, and
+blocker 5 against a real tenant and a real connection. Both earned their place
+immediately — `sql/26` carried two defects, one silent, and the first live
+`$batch` run wrote 441 of 1,118 items and refused the other 677. Neither was
+findable by reading the code, and both are fixed. Every go-live blocker below is
+a verification task. None of them is construction.
 
 **What this document does not cover.** Every task here is engineering: run it,
 watch it, prove it. None of it establishes who owns the connection, who is woken
@@ -43,14 +44,14 @@ one is a claim the release currently makes and cannot support.
 | 2 | **Live tenant pilot run** | One full crawl of the timesheet fixture against a real connection. Validates the retry removal, `$batch`, hashing and the state store in a single pass, and produces the first attribution table anyone has seen | ❌ |
 | 3 | **Second-run validation** | Re-run immediately and check `UnchangedPercent` in `crawl.vwRunHistory` climbs. Stuck near zero means item IDs are not deterministic and the corpus is being rewritten every run — see [`SOURCE-CONTRACT.md`](SOURCE-CONTRACT.md) | ❌ |
 | 4 | **Delete detection rehearsal** | Remove a fixture row, run a full crawl, watch the sweep remove it from the index and `crawl.vwPendingDeletes` drain. The most dangerous feature in the release must be seen working before it guards anything | ❌ |
-| 5 | **`$batch` live validation** | `Settings:Batch` defaults on, so the default write path has never spoken to Graph. `Settings:Batch = false` is the rehearsed fallback if it misbehaves | ❌ |
+| 5 | **`$batch` live validation** | **Done.** The default write path has now spoken to Graph: 1,118 items in 56 batches, zero failures, at 8 writers and again at 16. It did not pass first time — the run it was meant to validate is the one that exposed the shared-ACL defect fixed in `44e464f`, writing 441 and refusing 677, which is the whole argument for this row existing. One clause of it is still untested: `Settings:Batch = false` is named here as the rehearsed fallback and has not actually been rehearsed. Also note `throttleWaits=0` throughout, so the backoff path is unexercised — 16 writers × 20 sub-requests is nominally far above the 25 concurrent operations per connection the clamp's own warning cites, and a quiet tenant is not evidence that a busy one will agree | ✅ |
 | 6 | **Dashboard smoke test** | Deploy to IIS, confirm Windows authentication and that all seven pages render against real rows. It compiles and every route resolves; no page has ever displayed data | ❌ |
 
 ### Doing all six on one Windows machine
 
 A single Windows 11 box hosting both the code and SQL Server clears every one of
 them, and is a better rig than a Mac: it builds the gRPC connector project
-(`Grpc.Tools` ships an x64 `protoc`, so all 311 tests run rather than 239), and
+(`Grpc.Tools` ships an x64 `protoc`, so all 312 tests run rather than 239), and
 it is closer to the production Windows Server than anything that has touched
 this code.
 
