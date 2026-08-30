@@ -118,6 +118,28 @@ below.
 | 13 | `sql/43-crawl-state-run-lock.sql` | The heartbeat lease: one live crawl per connection | `db_owner` | `ConnectorState` |
 | 14 | `sql/30-verify-set-options.sql` | Nothing — it checks what everything above created | any reader | `ConnectorState`, and every other database holding modules |
 | 15 | `sql/42-verify-least-privilege.sql` | Nothing — it exercises the roles `sql/25` created | `db_owner` | `ConnectorState` |
+| 16 | `sql/44-agent-jobs-availability-group.sql` | Nothing in `ConnectorState` — it edits the two SQL Agent job steps | `SQLAgentOperatorRole` in `msdb` | **`msdb`, on every replica** |
+
+⚠️ **Step 16 is the only one that does not run against `ConnectorState`, and the
+only one that runs more than once.** SQL Agent jobs live in `msdb`, which is not
+a user database and does **not** fail over with an Availability Group. Deploy the
+jobs on the primary alone and they vanish at the first failover, silently:
+nothing runs, nothing errors, retention stops bounding the history table and the
+trigger health check stops watching the triggers. Deploy them on every replica
+without `sql/44` and every replica runs them on schedule, so a secondary — where
+`ConnectorState` is unreadable or read-only — fails its retention job nightly and
+pages whoever wired the alerting. `sql/44` prepends a primary-replica guard to
+both job steps so the jobs can be deployed everywhere and still act in one place.
+
+It is safe and pointless on a standalone instance, which is the case it was
+verified against: `sys.fn_hadr_is_primary_replica` returns `NULL` off an
+Availability Group, the guard treats only `0` as "not my turn", and the jobs run
+as before. **The secondary path has not been exercised** — that needs a two-node
+rig, and `sql/44`'s own verification block says so rather than implying it works.
+
+Skip step 16 entirely if you have no Availability Group and never will; run
+`sql/27` and `sql/32` first if you want the jobs at all, since `sql/44` edits
+them and reports plainly when they are absent.
 
 ⚠️ **`sql/40` runs at step 5, before `sql/24`, and the order is not cosmetic.**
 `sql/24` creates `uspGetRun`, which projects `t.ItemsDuplicate` from
