@@ -23,10 +23,16 @@
 --
 -- The re-grant is guarded on the role existing: sql/25 is optional on a
 -- single-machine rig, and a script that fails because a role it did not create
--- is absent would be its own kind of wrong.
+-- is absent would be its own kind of wrong. In the documented fresh-deployment
+-- order this script runs BEFORE sql/25, so the role is usually absent here and
+-- sql/25 issues both grants itself. The re-grant is what matters on an upgrade,
+-- where sql/25 ran long ago and nothing else would put them back.
 --
--- Run against ConnectorState AFTER sql/20-25. Idempotent. Verification at the
--- foot, including an explicit check that the grants came back.
+-- Run against ConnectorState AFTER sql/20-23 and BEFORE sql/24, which selects
+-- the column this file adds and will not compile without it. On an upgrade,
+-- where sql/24 and sql/25 have long since run, run this and then re-run sql/24.
+-- Idempotent. Verification at the foot, including an explicit check that the
+-- grants came back.
 -- ===========================================================================
 
 USE [ConnectorState];
