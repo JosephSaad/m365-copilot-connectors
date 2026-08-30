@@ -251,34 +251,34 @@ Both looked like passes.
 
 ### Blocking — these close row 1, the last open blocker
 
-| # | Test | Pass looks like | Why it cannot be done here |
-|---|---|---|---|
-| L1 | Run `sql/25` where the `CONTOSO\` principals are real, then run a crawl as `crawl_writer` and open the dashboard as `crawl_reader` | The crawl writes and the dashboard reads, and *nothing else works*: `crawl_writer` must fail a direct `SELECT` on `crawl.Item`, and `crawl_reader` must fail every write procedure | Domain accounts. CI substitutes nothing and says so; a grant nobody has authenticated against is a claim, not a control |
-| L2 | Run `sql/20` **unedited** on an instance that has the `D:` volumes it names | It creates the database without the placeholder edit every run so far has made | The rig has no `D:`, so every execution to date used a modified copy |
-| L3 | Deploy `sql/27`, then `sp_start_job` it once | `run_status = 1`, and the step history names each connection it purged | LocalDB has no SQL Agent |
+| # | Test | Pass looks like | Why it cannot be done here | Live Test Status |
+|---|---|---|---|---|
+| L1 | Run `sql/25` where the `CONTOSO\` principals are real, then run a crawl as `crawl_writer` and open the dashboard as `crawl_reader` | The crawl writes and the dashboard reads, and *nothing else works*: `crawl_writer` must fail a direct `SELECT` on `crawl.Item`, and `crawl_reader` must fail every write procedure | Domain accounts. CI substitutes nothing and says so; a grant nobody has authenticated against is a claim, not a control | **BLOCKED** — the principals are domain accounts and cannot exist on this machine. Local ones stood in, so the roles exist and `sql/28` granted to `crawl_writer` successfully, but no grant here has been authenticated against by the account it is written for |
+| L2 | Run `sql/20` **unedited** on an instance that has the `D:` volumes it names | It creates the database without the placeholder edit every run so far has made | The rig has no `D:`, so every execution to date used a modified copy | **BLOCKED** — no `D:` volume on this box, which is the whole point of the test |
+| L3 | Deploy `sql/27`, then `sp_start_job` it once | `run_status = 1`, and the step history names each connection it purged | LocalDB has no SQL Agent | **PASSED**, after a fix. `sp_add_job` was given a concatenated `@description` and T-SQL takes no expression as a procedure parameter, so the script would not run at all. Corrected, the job deployed, `sp_start_job` returned `run_status = 1`, and the step history read "Purging consultingwork" |
 
 ### Confirming the three shipped-but-not-deployed items from section 3
 
-| # | Test | Pass looks like |
-|---|---|---|
-| L4 | Set `CrawlState:ReaderGroups` to a real group, then open the dashboard as a member and as a non-member | The member sees pages; the non-member is refused. **Test the non-member** — an empty list silently permits everyone, and that is the state this shipped in |
-| L5 | Publish to a folder outside the repository, put the real `StateConnectionString` in *that* `appsettings.json`, and rebuild the repository | The connector still runs, and the rebuild did not wipe the setting. This is the route section 11 of the deployment guide recommends, and it is untested |
-| L6 | Re-run `Invoke-SecurityEvidence.ps1` on a machine with `gitleaks` and `pre-commit` installed | Zero SKIPPED. Every run so far has skipped most of the controls, which is not the same as passing them |
+| # | Test | Pass looks like | Live Test Status |
+|---|---|---|---|
+| L4 | Set `CrawlState:ReaderGroups` to a real group, then open the dashboard as a member and as a non-member | The member sees pages; the non-member is refused. **Test the non-member** — an empty list silently permits everyone, and that is the state this shipped in | **BLOCKED** — IIS administration needs elevation, and the deployed build predates the setting: its DLL carries no mention of `ReaderGroups`. The rule itself is now covered by eight tests through the real `AuthorizationService`, verified to fail when `RequireRole` is removed — but nothing there sees a Windows token, so this row stays open |
+| L5 | Publish to a folder outside the repository, put the real `StateConnectionString` in *that* `appsettings.json`, and rebuild the repository | The connector still runs, and the rebuild did not wipe the setting. This is the route section 11 of the deployment guide recommends, and it is untested | **PASSED** — the connector loaded its configuration from outside the repository, logged "Crawl state is enabled", opened run 8 and wrote nothing to Graph. A repository rebuild left the setting intact, the tracked file stayed clean and the hygiene gate stayed green |
+| L6 | Re-run `Invoke-SecurityEvidence.ps1` on a machine with `gitleaks` and `pre-commit` installed | Zero SKIPPED. Every run so far has skipped most of the controls, which is not the same as passing them | **NOT MET** — the script ran and behaved correctly, but neither tool is installed here, so five controls came back SKIPPED against a pass condition of zero. It did catch a real gap: this clone has no pre-commit hooks installed |
 
 ### The two things no quiet tenant has been able to prove
 
-| # | Test | Pass looks like |
-|---|---|---|
-| L7 | Provoke throttling — a corpus large enough, or a tenant busy enough, to return a real `429` | `throttleWaits > 0`, the run still completes, and the backoff honours `Retry-After`. **Unproven today**: every run has seen `throttleWaits=0`, so the engine's own retry path has never executed against a real refusal |
-| L8 | Fail a run deliberately — `MaxDeletePercent = 0` with one row missing trips `THROW 50007` | The Runs page shows a failed run, the connection health badge flips, and the Overview shows "needs attention". No page has rendered any of those three |
+| # | Test | Pass looks like | Live Test Status |
+|---|---|---|---|
+| L7 | Provoke throttling — a corpus large enough, or a tenant busy enough, to return a real `429` | `throttleWaits > 0`, the run still completes, and the backoff honours `Retry-After`. **Unproven today**: every run has seen `throttleWaits=0`, so the engine's own retry path has never executed against a real refusal | **NOT RUN** — and the one test here that cannot be scheduled. Every run so far has seen `throttleWaits=0` |
+| L8 | Fail a run deliberately — `MaxDeletePercent = 0` with one row missing trips `THROW 50007` | The Runs page shows a failed run, the connection health badge flips, and the Overview shows "needs attention". No page has rendered any of those three | **PARTIAL** — the guard was tripped and runs 5 and 6 failed with `THROW 50007`, and `/Runs` now renders two `failed` pills. The other two thirds are unproven: the connection reads **healthy** and no attention banner appears, because run 7 succeeded afterwards and health is measured against the last *successful* run. Seeing the badge flip needs a failure that is still the most recent run |
 
 ### Worth doing while the fixture is in the right state
 
-| # | Test | Pass looks like |
-|---|---|---|
-| L9 | Set `IsDeleted = 0` on the tombstoned time entry and run a full crawl | The item returns and `crawl.Item` moves from state 3 back to live. Resurrection is what `@KeepTombstoneDays` exists for and it has never been exercised |
-| L10 | Set `Settings:Incremental = true` and run twice inside `FullEveryHours` | The second run reads incrementally and performs **no** delete sweep, logging "Incremental run; no delete sweep". Every run so far has been full, so the mode gate has only ever been observed in one direction |
-| L11 | Deploy `sql/28` to the live `ConnectorState`, then run the connector | No migration is reported, because the framing has not changed. Then set `ItemHasher.HashVersion` to 2 in a scratch build and confirm the next run escalates to full, says so, and reports it only once |
+| # | Test | Pass looks like | Live Test Status |
+|---|---|---|---|
+| L9 | Set `IsDeleted = 0` on the tombstoned time entry and run a full crawl | The item returns and `crawl.Item` moves from state 3 back to live. Resurrection is what `@KeepTombstoneDays` exists for and it has never been exercised | **NOT RUN** |
+| L10 | Set `Settings:Incremental = true` and run twice inside `FullEveryHours` | The second run reads incrementally and performs **no** delete sweep, logging "Incremental run; no delete sweep". Every run so far has been full, so the mode gate has only ever been observed in one direction | **NOT RUN** — every run to date has been full, so the mode gate has only ever been observed in one direction |
+| L11 | Deploy `sql/28` to the live `ConnectorState`, then run the connector | No migration is reported, because the framing has not changed. Then set `ItemHasher.HashVersion` to 2 in a scratch build and confirm the next run escalates to full, says so, and reports it only once | **PARTIAL** — `sql/28` is deployed to the live `ConnectorState`, the connector ran against it and reported no migration, and `HashVersion` stayed 1, which is the first half. The report-once contract was proven directly against the procedure: same version 0, upgrade 1, asked again 0, downgrade 1. What has not been done is driving the escalation through a connector built at version 2 |
 
 Two notes on the order. L1 first, because it is the only one still holding a
 blocker open. L7 last, because it is the only one that cannot be scheduled —
