@@ -629,6 +629,13 @@ namespace SqlTicketsConnector.Tests
             public Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken) =>
                 this.inner.GetLiveItemIdsAsync(cancellationToken);
 
+
+            public Task<IReadOnlySet<string>> CompareAndSeeAsync(
+
+                IReadOnlyCollection<CrawlItemState> candidates, CancellationToken cancellationToken) =>
+
+                NullCrawlStateStore.Instance.CompareAndSeeAsync(candidates, cancellationToken);
+
             public Task ConfirmDeletesAsync(
                 IReadOnlyCollection<string> itemIds, CancellationToken cancellationToken) =>
                 this.inner.ConfirmDeletesAsync(itemIds, cancellationToken);
@@ -651,7 +658,7 @@ namespace SqlTicketsConnector.Tests
             public Task CachePrincipalAsync(
                 PrincipalGrant grant,
                 string sourceType,
-                TimeSpan ttl,
+                TimeSpan? ttl,
                 CancellationToken cancellationToken) =>
                 this.inner.CachePrincipalAsync(grant, sourceType, ttl, cancellationToken);
 
