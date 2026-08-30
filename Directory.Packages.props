@@ -147,6 +147,31 @@
   </ItemGroup>
 
   <!--
+    Traces and metrics, as against the log records the Serilog sink above
+    carries. Referenced only by PushCore, and only under
+    -p:EnableOtlpExporter=true.
+
+    Declared UNCONDITIONALLY, at one version, unlike Google.Protobuf a few
+    entries up. That entry needs two branches because two things disagree about
+    it; these two are referenced by nothing when the flag is off, so a version
+    named here has nothing to conflict with and a condition would only be
+    another thing that can be wrong.
+
+    1.18.0 rather than the 1.13.x this was first written against, and the reason
+    is not novelty: 1.13.1 restores with three NU1902 moderate-severity advisory
+    warnings against the exporter package itself, and CI builds with
+    -warnaserror. The current release clears all three.
+
+    Both move together. The SDK and its exporter are versioned in lockstep by
+    the project that publishes them, and a mismatched pair fails at the
+    AddOtlpExporter extension method rather than at restore.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="OpenTelemetry" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
+  </ItemGroup>
+
+  <!--
     Only referenced under -p:EnablePdfExtraction=true. PDF is the one common
     format with no answer in the base class library, and adding a parser is a
     dependency decision rather than a coding one: PdfPig is Apache-2.0, which

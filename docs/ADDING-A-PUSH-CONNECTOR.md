@@ -247,6 +247,28 @@ append-only: you can add a property, but no property's type, annotation or label
 can ever be changed. Correcting one means deleting the connection and every item
 in it. This is the one part of the job worth being slow about.
 
+**If your source classifies its own content**, two lines are all it takes, and
+both belong in the schema decision above because neither can be retrofitted to a
+live connection:
+
+```csharp
+// In MapRow / MapAsync - raw, in the source's vocabulary, uninterpreted.
+item.Classifications = row.Tags;
+
+// In BuildSchema. String, not StringCollection: one item has ONE label.
+PushSchema.Prop(
+    SensitivityOptions.DefaultProperty,
+    PropertyType.String,
+    queryable: true, retrievable: true, refinable: true)
+```
+
+Register the property whether or not anyone has configured a mapping yet.
+`EnsureSchemaAsync` will not PATCH a connection that has reached `Ready`, so the
+alternative to registering it now is deleting the connection the day somebody
+wants it. What the tags *mean* is not your problem — that is the `Sensitivity`
+section, and it is configured once for every connector. See
+[`SENSITIVITY-LABELS.md`](SENSITIVITY-LABELS.md).
+
 ---
 
 ## Why `ISqlPushConnector` implements `Validate` explicitly

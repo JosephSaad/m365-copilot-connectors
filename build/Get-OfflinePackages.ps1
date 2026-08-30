@@ -29,11 +29,19 @@
           different host asks for its own RID's packs as well. Two of the four
           are requested only from some hosts; see the list itself below.
 
-      OpenTelemetry (5 packages, about 3 MB)
-          Only for 'Build.ps1 -EnableOtlpExporter'. That configuration raises
-          Google.Protobuf and Grpc.Core.Api rather than merely adding packages,
-          so the higher versions are listed here alongside the pinned ones in
-          the base set. Skip with -SkipOtlp.
+      OpenTelemetry (16 packages, about 6 MB)
+          Only for 'Build.ps1 -EnableOtlpExporter'. Two exporters share the
+          flag: the Serilog sink that sends LOG RECORDS from the agent-hosted
+          connector, and the OpenTelemetry SDK that sends TRACES AND METRICS
+          from every push executable.
+
+          That configuration raises Google.Protobuf and Grpc.Core.Api rather
+          than merely adding packages, so the higher versions are listed here
+          alongside the pinned ones in the base set. The gRPC packages belong to
+          the Serilog sink alone; the OpenTelemetry SDK speaks both OTLP
+          protocols over HttpClient and adds no gRPC stack of its own.
+
+          Skip with -SkipOtlp.
 
     Runtime pack versions are chosen by the SDK, not by this repository, so the
     script asks MSBuild for BundledNETCoreAppPackageVersion rather than
@@ -200,6 +208,25 @@ if (-not $SkipRuntimePacks) {
 }
 
 # --- OpenTelemetry: only for -EnableOtlpExporter ---------------------------
+#
+# TWO EXPORTERS, NOT ONE, AND THEY ARRIVED SEPARATELY. The Serilog sink carries
+# LOG RECORDS and lives in the agent-hosted connector. The OpenTelemetry SDK and
+# its OTLP exporter carry TRACES AND METRICS and live in PushCore, so they reach
+# every push executable. Both are behind the same MSBuild flag; neither is in
+# the default graph.
+#
+# The gRPC block below belongs to the Serilog sink alone. OpenTelemetry 1.18.0
+# speaks both OTLP protocols over HttpClient and pulls no gRPC stack of its own,
+# which is why adding it did not disturb the Google.Protobuf pinning that the
+# sink forces.
+#
+# The seven Microsoft.Extensions.* entries are deliberately NOT pinned in
+# Directory.Packages.props. They arrive only under this flag, nothing in the
+# base build references them, and seven entries the default configuration never
+# uses would be seven more things to keep true. They are transcribed here
+# instead, which is the file whose job is to be a transcript - and CI compares
+# it against the real graph, so a floor that moves shows up as a failed check
+# rather than as a folder of nupkgs that does not restore.
 if (-not $SkipOtlp) {
     $packages += @(
         @{ Id = 'Google.Protobuf'; Version = '3.35.1' }
@@ -207,6 +234,19 @@ if (-not $SkipOtlp) {
         @{ Id = 'Grpc.Net.Client'; Version = '2.62.0' }
         @{ Id = 'Grpc.Net.Common'; Version = '2.62.0' }
         @{ Id = 'Serilog.Sinks.OpenTelemetry'; Version = '4.1.1' }
+
+        @{ Id = 'OpenTelemetry'; Version = '1.18.0' }
+        @{ Id = 'OpenTelemetry.Api'; Version = '1.18.0' }
+        @{ Id = 'OpenTelemetry.Api.ProviderBuilderExtensions'; Version = '1.18.0' }
+        @{ Id = 'OpenTelemetry.Exporter.OpenTelemetryProtocol'; Version = '1.18.0' }
+
+        @{ Id = 'Microsoft.Extensions.Configuration'; Version = '10.0.0' }
+        @{ Id = 'Microsoft.Extensions.Configuration.Binder'; Version = '10.0.0' }
+        @{ Id = 'Microsoft.Extensions.Configuration.EnvironmentVariables'; Version = '10.0.0' }
+        @{ Id = 'Microsoft.Extensions.DependencyInjection'; Version = '10.0.0' }
+        @{ Id = 'Microsoft.Extensions.Logging'; Version = '10.0.0' }
+        @{ Id = 'Microsoft.Extensions.Logging.Configuration'; Version = '10.0.0' }
+        @{ Id = 'Microsoft.Extensions.Options.ConfigurationExtensions'; Version = '10.0.0' }
     )
 }
 

@@ -32,6 +32,7 @@ using Microsoft.Graph;
 using Microsoft.Graph.Models.ExternalConnectors;
 using Microsoft.Graph.Models.ODataErrors;
 using PushCore.State;
+using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 using Serilog;
@@ -153,6 +154,11 @@ public sealed partial class PushEngine
 
     private readonly TimeSpan heartbeatEvery;
 
+    // Compiled once, consulted once per row, and immutable so the concurrent
+    // path needs no lock - it is read on the single reading thread anyway, which
+    // is the same reason duplicate detection lives there.
+    private readonly SensitivityPolicy sensitivity;
+
     // The rescue path's stand-in for a lookup that cannot be made. See its use
     // in the reader's catch: static, immutable, and shared because nothing ever
     // writes to it.
@@ -241,6 +247,25 @@ public sealed partial class PushEngine
         this.lookupChunkBytes = this.options.Setting("LookupChunkBytes", 0) > 0
             ? this.options.Setting("LookupChunkBytes", 0)
             : DefaultLookupChunkBytes;
+
+        this.sensitivity = SensitivityPolicy.Compile(this.options.Sensitivity);
+
+        if (this.sensitivity.IsEnabled)
+        {
+            // Announced at construction, because a control that is off and a
+            // control that is on look identical in a log until it refuses
+            // something - and the run where it refuses nothing is exactly the
+            // run somebody later has to prove it was switched on for.
+            this.log.Information(
+                "Sensitivity mapping is {Mode}: {Count} classification(s) mapped, published as {Property}. " +
+                "{Effect}",
+                this.sensitivity.Mode,
+                this.sensitivity.MappedClassifications,
+                this.sensitivity.Property,
+                this.sensitivity.Enforces
+                    ? "Items whose label is not indexable will NOT be written."
+                    : "No item will be refused; this mode only publishes the label.");
+        }
     }
 
     /// <summary>Creates the connection and schema if needed, then pushes every item.</summary>
@@ -249,6 +274,15 @@ public sealed partial class PushEngine
     /// <returns>What the run wrote.</returns>
     public async Task<PushSummary> RunAsync(PushSourceContext context, CancellationToken cancellationToken = default)
     {
+        // Opened first and disposed last, so that every phase below is a child of
+        // it and a run that throws still closes a span rather than leaving one
+        // open for the exporter to time out on. Null when nobody is listening,
+        // which is the ordinary case and costs a null check.
+        using Activity? runSpan = PushTelemetry.StartRun(
+            this.connector.Key, this.options.Graph.ConnectionId, this.dryRun);
+
+        long runStarted = PushTiming.Now();
+
         if (this.dryRun)
         {
             // A dry run still builds the schema: the searchable-and-refinable and
@@ -287,8 +321,18 @@ public sealed partial class PushEngine
         }
         else
         {
-            await this.EnsureConnectionAsync(cancellationToken);
-            await this.EnsureSchemaAsync(cancellationToken);
+            using (Activity? _ = PushTelemetry.StartPhase("connection"))
+            {
+                await this.EnsureConnectionAsync(cancellationToken);
+            }
+
+            // Its own phase because it is the one that can legitimately take
+            // fifteen minutes, and an operator watching a trace needs to see
+            // that the time is registration rather than the source.
+            using (Activity? _ = PushTelemetry.StartPhase("schema"))
+            {
+                await this.EnsureSchemaAsync(cancellationToken);
+            }
         }
 
         // Opened after the ownership check, never before: a connector pointed at
@@ -298,6 +342,8 @@ public sealed partial class PushEngine
         // But the RUN is opened before the source, because the source may want
         // to know where to resume from and that answer lives in the store.
         CrawlRunStart run = await this.OpenRunAsync(context, cancellationToken);
+
+        PushTelemetry.SetRun(runSpan, run.RunId, run.Mode.ToString(), this.store.IsEnabled);
 
         // Every event from here to the end of the run carries the run identifier,
         // so a log file and a dashboard row can be lined up by reading rather than
@@ -330,15 +376,45 @@ public sealed partial class PushEngine
 
         try
         {
-            PushSummary summary = await this.PushItemsAsync(source, cancellationToken);
+            PushSummary summary;
+
+            using (Activity? _ = PushTelemetry.StartPhase("items"))
+            {
+                summary = await this.PushItemsAsync(source, cancellationToken);
+            }
 
             await this.store.CompleteRunAsync(
                 this.Totals(summary), summary.TypeTotals(), summary.Timing, cancellationToken);
+
+            // Recorded after the store call rather than before it, so the
+            // duration a dashboard shows is the duration an operator waited
+            // rather than the part of it this class happens to own.
+            PushTelemetry.RecordRun(
+                summary,
+                this.connector.Key,
+                this.options.Graph.ConnectionId,
+                PushTiming.MicrosecondsSince(runStarted) / 1_000_000.0);
+
+            runSpan?.SetTag("crawl.items.written", summary.Total);
+            runSpan?.SetTag("crawl.items.failed", summary.Failed);
+            runSpan?.SetTag("crawl.items.skipped", summary.Skipped);
+            runSpan?.SetTag("crawl.items.deleted", summary.Deleted);
+
+            if (this.sensitivity.IsEnabled)
+            {
+                // Only when the policy is on. A tag reading zero on every run of
+                // every connector that has no policy is noise that makes the
+                // runs which DO have one harder to find, not easier.
+                runSpan?.SetTag("crawl.sensitivity.mode", this.sensitivity.Mode.ToString());
+                runSpan?.SetTag("crawl.items.refused_by_label", summary.RefusedByLabel);
+            }
 
             return summary;
         }
         catch (Exception ex)
         {
+            PushTelemetry.SetFailed(runSpan, ex);
+
             // Closed as failed rather than left open, so the next run does not
             // have to reap it and the dashboard shows a failure instead of a run
             // that appears to still be going. The message is flattened and
@@ -1015,6 +1091,11 @@ public sealed partial class PushEngine
         byte[] aclHash;
         int contentBytes;
 
+        if (this.sensitivity.IsEnabled && !this.ApplySensitivity(mapped, summary))
+        {
+            return null;
+        }
+
         try
         {
             long prepareStarted = PushTiming.Now();
@@ -1073,6 +1154,62 @@ public sealed partial class PushEngine
         }
 
         return new Prepared(mapped, item, contentHash, aclHash, contentBytes, rowStarted);
+    }
+
+    /// <summary>Applies the sensitivity policy to one row, publishing or refusing it.</summary>
+    /// <param name="mapped">The row as the source yielded it. Its properties may gain the label.</param>
+    /// <param name="summary">The run's counters.</param>
+    /// <returns>True to carry on preparing the item; false when it must not be written.</returns>
+    /// <remarks>
+    /// DELIBERATELY OUTSIDE THE try IN <see cref="Prepare"/>. That block converts
+    /// any exception into a run-ending InvalidOperationException naming the row,
+    /// which is right for a mapping fault and wrong for a security decision: a
+    /// policy that threw would take down the crawl rather than decline one item.
+    /// Nothing here can throw - the policy is compiled, the lookup is a
+    /// dictionary and the write is into a dictionary the engine owns.
+    ///
+    /// IT RUNS BEFORE THE ACL RESOLVE, WHICH IS BOTH CHEAPER AND MORE CORRECT.
+    /// Cheaper because a refused item costs a dictionary probe instead of a
+    /// group resolution, a truncation and two hashes. More correct because an
+    /// item that must not be indexed must not be indexed whether or not anybody
+    /// could have been granted it.
+    ///
+    /// THE LABEL IS ADDED BEFORE THE HASHES ARE TAKEN, and that ordering is what
+    /// makes a relabelling detectable. ItemHasher.HashContent covers
+    /// mapped.Properties, so an item whose classification changed hashes
+    /// differently and is rewritten; a label added after hashing would be
+    /// published once and then never corrected on any later run.
+    ///
+    /// It also runs on a DRY RUN, which is the only way to answer "how much of
+    /// this corpus would we refuse" before committing to the mode.
+    /// </remarks>
+    private bool ApplySensitivity(PushItem mapped, PushSummary summary)
+    {
+        SensitivityVerdict verdict = this.sensitivity.Evaluate(mapped.Classifications);
+
+        if (!verdict.Indexable)
+        {
+            summary.CountRefusedByLabel(mapped.ItemType);
+
+            // Warning rather than Information. This is not routine housekeeping
+            // like a lease refusal - something the source holds was declined,
+            // and the count of these is what somebody is asked to evidence.
+            // The classification name is metadata, not content, so naming it is
+            // within the logging policy; the row itself still is not.
+            this.log.Warning(
+                "Item {ItemId} was NOT indexed: {Reason}.",
+                mapped.Id,
+                verdict.Reason);
+
+            return false;
+        }
+
+        if (verdict.Label is not null)
+        {
+            mapped.Properties[this.sensitivity.Property] = verdict.Label;
+        }
+
+        return true;
     }
 
 

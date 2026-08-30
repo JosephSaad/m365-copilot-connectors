@@ -261,6 +261,34 @@ Two additional constraints apply when items carry their own permissions:
 
 ---
 
+## Classifications
+
+Optional, and independent of everything above. If the source labels its own
+content — Atlas classifications, a catalogue's tags, a real MIP label name — set
+`PushItem.Classifications` to those tags **raw, in the source's own vocabulary,
+uninterpreted**.
+
+Do not map them yourself. What a tag *means* — whether it is a label, and
+whether an item carrying it may be indexed at all — is policy, and policy is
+configured once for every connector in the `Sensitivity` section rather than
+compiled into each one. See [SENSITIVITY-LABELS.md](SENSITIVITY-LABELS.md).
+
+Two consequences worth telling the source team about:
+
+- **A tag change is a content change.** The label is added to the item before its
+  hash is taken, so re-tagging a record rewrites it on the next run. That is what
+  makes a relabelling take effect; it is also change volume that the daily
+  estimate above should account for if bulk retagging is routine.
+- **Enforcement withdraws an item on a full crawl only.** An indexed item that
+  becomes refusable is not marked seen, so the delete sweep removes it — but only
+  on a full crawl, only with a state store, and only if the change stays inside
+  `Settings:MaxDeletePercent`. Plan a full crawl after any bulk retagging.
+
+A source with no notion of classification leaves it null, and none of this
+applies.
+
+---
+
 ## Checklist to send the source team
 
 Copy this into the pilot parameters document
@@ -282,6 +310,11 @@ writing.
       percentage of the corpus — this sets the delete guard's threshold.
 - [ ] If items carry their own ACLs: name the **group identifier** and confirm
       it is stable.
+- [ ] If the source **classifies its own content**: name every tag in use, say
+      which are applied deliberately versus propagated, and confirm whether they
+      are applied at the level this connector reads. Ask who owns the taxonomy —
+      an index that refuses items on a mapping is only as good as the person who
+      can be asked what a tag means.
 
 ---
 

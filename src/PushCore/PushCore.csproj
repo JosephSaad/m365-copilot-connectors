@@ -33,6 +33,23 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>PushCore</RootNamespace>
     <AssemblyName>PushCore</AssemblyName>
+
+    <!--
+      The same switch SqlTicketsConnector uses for its log sink, extended to the
+      push tools for traces and metrics. The INSTRUMENTATION - PushTelemetry.cs -
+      is unconditional and needs no package: ActivitySource, Meter, Counter and
+      Histogram are in the shared framework on both target frameworks, so the
+      default dependency graph and the offline restore list are untouched by it.
+      Only the EXPORTER costs anything, and it is behind this.
+
+      The DefineConstants line is not optional and not a copy for tidiness.
+      Compile constants do not cross project boundaries, so the one declared in
+      SqlTicketsConnector.csproj is invisible here: without this line,
+      #if OTLP_EXPORTER in PushTelemetryExporter.cs compiles the disabled branch
+      whatever the flag says, and nothing warns.
+    -->
+    <EnableOtlpExporter Condition="'$(EnableOtlpExporter)' == ''">false</EnableOtlpExporter>
+    <DefineConstants Condition="'$(EnableOtlpExporter)' == 'true'">$(DefineConstants);OTLP_EXPORTER</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -50,6 +67,23 @@
       several to remove together, once the Graph SDK catches up.
     -->
     <PackageReference Include="Microsoft.Kiota.Abstractions" />
+  </ItemGroup>
+
+  <!--
+    Traces and metrics to an OTLP collector, and nothing else in this project
+    references either package. Versions are in Directory.Packages.props.
+
+    Worth knowing before raising the version: 1.18.0 carries NO gRPC stack -
+    both OTLP protocols are spoken over HttpClient - so Grpc.Net.Client,
+    Grpc.Core.Api and Google.Protobuf stay out of the graph. That is load
+    bearing here rather than merely pleasant, because this same flag already
+    moves Google.Protobuf between two pinned versions for the log sink, and a
+    third constraint on it would be an NU1605 with no version that satisfies
+    everything.
+  -->
+  <ItemGroup Condition="'$(EnableOtlpExporter)' == 'true'">
+    <PackageReference Include="OpenTelemetry" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
   </ItemGroup>
 
   <ItemGroup>

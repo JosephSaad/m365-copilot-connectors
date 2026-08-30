@@ -46,6 +46,27 @@ public sealed class PushOptions
     public SourceSection Source { get; set; } = new SourceSection();
 
     /// <summary>
+    /// Gets or sets how the source's own classifications become a published
+    /// label, and which of them must not be indexed at all.
+    /// </summary>
+    /// <remarks>
+    /// A property here rather than a Settings key, and it is the exception that
+    /// proves the rule at the top of this file. The Settings bag is for values
+    /// ONE connector reads. This is read by the ENGINE, on every connector, and
+    /// it decides whether an item reaches the index - so it is validated before
+    /// a socket opens rather than parsed halfway through a crawl, and it is a
+    /// typed shape rather than a semicolon-delimited string somebody has to get
+    /// right in a text editor.
+    /// </remarks>
+    public SensitivityOptions Sensitivity { get; set; } = new SensitivityOptions();
+
+    /// <summary>
+    /// Gets or sets where this run's traces and metrics are sent. Disabled, and
+    /// therefore free, unless a collector is configured.
+    /// </summary>
+    public OtlpOptions Otlp { get; set; } = new OtlpOptions();
+
+    /// <summary>
     /// Gets or sets connector-specific values, so a new connector never has to
     /// add a property to this class. Keys are matched case insensitively.
     /// </summary>
@@ -196,6 +217,12 @@ public sealed class PushOptions
 
         this.Graph.Validate(errors, "Graph");
         this.Source.Validate(errors, "Source");
+
+        // Validated even when the mode is Off, because a malformed mapping that
+        // is switched off today is a malformed mapping the day somebody turns it
+        // on - and that day is a change window, not a development afternoon.
+        this.Sensitivity?.Validate(errors, "Sensitivity");
+        this.Otlp?.Validate(errors, "Otlp");
 
         // vaultRequired is false here because whether a secret is needed at all
         // is a property of the source family. The family adds the "you need a

@@ -40,6 +40,8 @@ documentation that ships with it.
 | [**Upgrade and rollback**](UPGRADE-RUNBOOK.md) | v1.4 → v1.5 script by script, how to back out, and the additive-only rule that makes rollback possible — including the one migration that currently breaks it |
 | [**Alerting**](ALERTING.md) | Why a dead connector is a security incident rather than an outage, the watch that detects it, and the paging matrix — which conditions wake somebody at 03:00, which wait for morning, which are dashboard-only, and which nothing on the host can detect at all |
 | [**Scheduling**](SCHEDULING.md) | How to schedule incremental crawls and what they cost in deletion latency; several connectors on one host serialised behind one queue so their crawls cannot stack; and the weekly reconciliation, with the exit codes that page and the one that must not |
+| [**Telemetry**](TELEMETRY.md) | The span tree and the eleven instruments every run emits, why they cost nothing when nobody is listening, how to send them to a collector, and the two decisions behind them — delta temporality, and why the exception message never reaches a span |
+| [**Sensitivity labels**](SENSITIVITY-LABELS.md) | Mapping a source's own classifications to a label, publishing it, and declining to index what the mapping says must not be — including the four things it cannot see, and why refusal is the only closed option available |
 
 ## Reviewing
 
