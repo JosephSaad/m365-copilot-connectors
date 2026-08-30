@@ -76,6 +76,46 @@ SET QUOTED_IDENTIFIER ON;
 SET ANSI_NULLS ON;
 GO
 -- ---------------------------------------------------------------------------
+-- SourceId - THE NUMERIC KEY BEHIND ItemId, PROJECTED SO IT CAN BE JOINED ON.
+--
+-- Each of the three views below builds its ItemId by concatenating a prefix
+-- onto an integer primary key. Anything that needs to get back from an item to
+-- the row it came from - sql/26's incremental view is the one in the tree - then
+-- has to reverse that, and the only reversal available to a join is to build the
+-- string on the other side too:
+--
+--     INNER JOIN dbo.TimeEntries AS te
+--             ON N'time' + CAST(te.TimeEntryId AS NVARCHAR(32)) = v.ItemId
+--
+-- That comparison is not sargable. The measured plan for it was a clustered
+-- index scan of all 105,300 rows of dbo.TimeEntries on every incremental read,
+-- however small the delta, plus the same for Engagements and Customers -
+-- a cost that does not shrink with the thing it was added to make smaller.
+--
+-- SourceId is that key, projected. It is the integer primary key of the row the
+-- item was built from: CustomerId at level 1, EngagementId at level 2,
+-- TimeEntryId at level 3. Paired with ItemType it identifies the item exactly,
+-- and it lets a join use the primary key it was going to have to reach anyway.
+--
+-- WHY NOT REUSE CustomerId / EngagementId, which two of the three views already
+-- project. Because those answer a different question. In vwTimeEntryItems,
+-- CustomerId is the ANCESTOR the item was denormalised from, not the item's own
+-- key, and level 3 has no column at all for its own. A join written against
+-- them works for two levels and silently reads the wrong rows on the third -
+-- and it reads SOME rows, so it does not announce itself. One column that means
+-- the same thing at every level removes the chance to get that wrong.
+--
+-- ADDING IT IS SAFE, and the ordering is the reason. It is appended LAST in all
+-- three views, so it does not move ItemId, ItemType, Content or anything else
+-- from the ordinal it holds today - which matters because dbo.vwExternalItems
+-- below is a UNION ALL of SELECT *, and a UNION ALL matches its branches by
+-- position. HierarchyPushConnector names its thirty columns explicitly and does
+-- not select this one, so no item's identity, content or hash changes. Verified
+-- against the 111,900-row corpus before and after: same count, same ItemId
+-- checksum, same SHA2_256 over the whole thirty-column projection.
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
 -- Level 1: customers, with their engagement list rolled up.
 -- ---------------------------------------------------------------------------
 CREATE OR ALTER VIEW dbo.vwCustomerItems
@@ -136,7 +176,10 @@ SELECT
         CASE WHEN roll.EngagementList IS NULL THEN ''
              ELSE CONCAT('Engagement list: ', roll.EngagementList, CHAR(13), CHAR(10)) END,
         CHAR(13), CHAR(10),
-        c.Notes) AS NVARCHAR(MAX))                     AS Content
+        c.Notes) AS NVARCHAR(MAX))                     AS Content,
+
+    -- The key ItemId was built from. Appended last; see the note above.
+    CAST(c.CustomerId AS INT)                          AS SourceId
 FROM dbo.Customers AS c
 OUTER APPLY (
     SELECT  COUNT(*)                 AS EngagementCount,
@@ -222,7 +265,10 @@ SELECT
         CASE WHEN people.Consultants IS NULL THEN ''
              ELSE CONCAT('Consultants: ', people.Consultants, CHAR(13), CHAR(10)) END,
         CHAR(13), CHAR(10),
-        e.Scope) AS NVARCHAR(MAX))                     AS Content
+        e.Scope) AS NVARCHAR(MAX))                     AS Content,
+
+    -- The key ItemId was built from - the ENGAGEMENT's, not the customer's.
+    CAST(e.EngagementId AS INT)                        AS SourceId
 FROM dbo.Engagements AS e
 JOIN dbo.Customers   AS c ON c.CustomerId = e.CustomerId
 OUTER APPLY (
@@ -309,7 +355,12 @@ SELECT
         ' | Project manager: ', e.ProjectManager, CHAR(13), CHAR(10),
         'Work type: ', te.WorkType, CHAR(13), CHAR(10),
         CHAR(13), CHAR(10),
-        te.Narrative) AS NVARCHAR(MAX))  AS Content
+        te.Narrative) AS NVARCHAR(MAX))  AS Content,
+
+    -- The key ItemId was built from. This is the level that had no column for
+    -- its own key at all, and the reason SourceId exists rather than a third
+    -- level-specific one alongside CustomerId and EngagementId.
+    CAST(te.TimeEntryId AS INT)          AS SourceId
 FROM dbo.TimeEntries AS te
 JOIN dbo.Engagements AS e ON e.EngagementId = te.EngagementId
 JOIN dbo.Customers   AS c ON c.CustomerId   = e.CustomerId
@@ -324,6 +375,14 @@ GO
 --
 -- Ordered by level at read time, not here — a view cannot carry ORDER BY, and
 -- the tool needs customers first so a partial run leaves the parents present.
+--
+-- SELECT * IS BOUND AT CREATE TIME, so re-running this file is what carries the
+-- SourceId column added above through to here. Until it is re-run, this view
+-- keeps the thirty-one columns it was created with and returns exactly the data
+-- it returned before — because SourceId was appended LAST in all three branches
+-- and nothing else moved. That was checked rather than assumed: adding the
+-- column to the branches and reading this view WITHOUT recreating it returned
+-- the same rows under the same names.
 -- ---------------------------------------------------------------------------
 CREATE OR ALTER VIEW dbo.vwExternalItems
 AS
@@ -367,4 +426,23 @@ FROM    dbo.vwExternalItems
 WHERE   Content LIKE N'%Priya Raman%'
 GROUP BY ItemType
 ORDER BY ItemType;
+
+-- 5. SourceId is a key, and it is the key ItemId was built from. Both halves
+--    matter and neither is checkable by looking at the definition.
+--
+--    Written as a single row with three verdict columns rather than as a
+--    "should return no rows" query, because "no rows" and "the WHERE clause
+--    matched nothing because the join fell over" print identically. A COUNT
+--    that is zero is a zero on the screen; an empty result set is a blank.
+SELECT  CASE WHEN COUNT(*) = COUNT(DISTINCT CONCAT(ItemType, N':', SourceId))
+             THEN N'OK' ELSE N'FAIL - SourceId is not unique within an ItemType' END
+                                                             AS sourceid_is_a_key,
+        SUM(CASE WHEN SourceId IS NULL THEN 1 ELSE 0 END)    AS sourceid_nulls,
+        SUM(CASE WHEN ItemId <> CONCAT(CASE ItemType WHEN N'Customer'   THEN N'cust'
+                                                     WHEN N'Engagement' THEN N'eng'
+                                                     ELSE N'time' END,
+                                       CAST(SourceId AS NVARCHAR(11)))
+                 THEN 1 ELSE 0 END)                          AS sourceid_disagrees_with_itemid,
+        COUNT(*)                                             AS rows_checked
+FROM    dbo.vwExternalItems;
 GO
