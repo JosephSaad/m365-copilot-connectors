@@ -46,16 +46,17 @@ public static class ReaderPolicy
     /// this check cannot see. That is why a user added to a group has to sign in
     /// again.
     ///
-    /// WHETHER A GROUP NAME OR ITS SID BELONGS IN CONFIGURATION IS NOT SETTLED
-    /// HERE. A Windows identity's RoleClaimType is `groupsid` and the claim
-    /// VALUES are SIDs - `S-1-5-32-545`, not `BUILTIN\Users`. Names still work
-    /// if the request principal is a WindowsPrincipal, whose IsInRole resolves a
-    /// name to a SID before comparing; they do not if it arrives as a plain
-    /// ClaimsPrincipal, which compares claim values literally. Which one IIS
-    /// hands over is a property of the host, so no test in this repository can
-    /// answer it - see live test L4 in GO-LIVE-READINESS, which exists to.
+    /// EITHER A GROUP NAME OR ITS SID WORKS, and that was measured rather than
+    /// assumed. A Windows identity's RoleClaimType is `groupsid` and the claim
+    /// VALUES are SIDs - `S-1-5-32-545`, not `BUILTIN\Users` - so a name matches
+    /// only if the request principal is a WindowsPrincipal, whose IsInRole
+    /// resolves a name before comparing. Under IIS with Windows authentication
+    /// it is: live test L4 configured `BUILTIN\Users` and got 200.
     ///
-    /// Until it is answered, a SID is the spelling that works either way.
+    /// That result holds for the only host this application supports. A SID is
+    /// still the more robust spelling, because it needs no resolution and cannot
+    /// be broken by a group being renamed - which is a directory change nobody
+    /// would think to test this against.
     ///
     /// BLANK ENTRIES ARE DROPPED, and that is not tidying. A JSON array with a
     /// stray empty string - the shape a half-finished edit leaves behind -
