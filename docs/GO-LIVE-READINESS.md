@@ -11,10 +11,12 @@ supported service rather than a release that builds.
 
 It is deliberately blunt about the gap between *built* and *verified*, because
 that gap is the whole risk right now: 17 features are implemented, 4 more are
-part-built, 311 tests pass, and **none of it has been executed against a real
-SQL Server or a real
-Microsoft 365 tenant**. Every go-live blocker below is a verification task. None
-of them is construction.
+part-built, 311 tests pass, and **almost none of it has been exercised against a
+real SQL Server, and none of it against a real Microsoft 365 tenant**. The one
+exception is blocker 1, run once on a scratch instance — which immediately found
+two defects in `sql/26`, and which is still open for the three reasons named on
+that row. Every go-live blocker below is a verification task. None of them is
+construction.
 
 **What this document does not cover.** Every task here is engineering: run it,
 watch it, prove it. None of it establishes who owns the connection, who is woken
@@ -22,10 +24,11 @@ when a run fails, or who accepts the ACL staleness bound in writing — that is
 [`PRODUCTION-ONBOARDING.md`](PRODUCTION-ONBOARDING.md), and clearing all six
 blockers below does not answer a single row of it.
 
-**How to read the tables.** Status is ✅ implemented, ⚠️ partial (the plumbing
-exists but nothing calls it), ❌ not built. The priority band is the section
-heading: blockers first, then what is cheap now and expensive later, then what
-can follow go-live.
+**How to read the tables.** Status is ✅ implemented, ⚠️ partial, ❌ not built.
+In the feature tables ⚠️ means the plumbing exists but nothing calls it; in the
+blocker table it means the task has been run, but not in a form that closes it,
+and the row says why. The priority band is the section heading: blockers first,
+then what is cheap now and expensive later, then what can follow go-live.
 
 ---
 
@@ -36,7 +39,7 @@ one is a claim the release currently makes and cannot support.
 
 | # | Feature | What it means | Status |
 |---|---|---|---|
-| 1 | **SQL scripts executed** | Run `sql/20`–`25` against a real instance and read the verification block each one prints. The scripts have never been parsed by a server; a syntax error in a `CREATE OR ALTER` batch would leave a procedure absent and only fail later, at the `GRANT` | ❌ |
+| 1 | **SQL scripts executed** | Run `sql/20`–`25` against a real instance and read the verification block each one prints. A syntax error in a `CREATE OR ALTER` batch would leave a procedure absent and only fail later, at the `GRANT`. **Partially done.** `sql/02`, `10`–`13`, `20`–`26` have now been run once against a scratch SQL Server 2025 instance, and `ConnectorState` built out — 8 tables, 6 views, 19 write and 7 reporting procedures. It paid for itself immediately: `sql/26` carried two defects, one of them silent, both fixed in `eb94ab1`. It stays open on three counts. `sql/20` ran from an edited copy, not the repo file, its `D:` paths being placeholders. `sql/01`, `13` and `25` created no principals at all — their `CONTOSO\` logins cannot exist on that machine, and local accounts stood in, so the least-privilege model is deployed but has never been exercised by the accounts it is written for. And the run is reported rather than witnessed. Re-run it where the accounts are real | ⚠️ |
 | 2 | **Live tenant pilot run** | One full crawl of the timesheet fixture against a real connection. Validates the retry removal, `$batch`, hashing and the state store in a single pass, and produces the first attribution table anyone has seen | ❌ |
 | 3 | **Second-run validation** | Re-run immediately and check `UnchangedPercent` in `crawl.vwRunHistory` climbs. Stuck near zero means item IDs are not deterministic and the corpus is being rewritten every run — see [`SOURCE-CONTRACT.md`](SOURCE-CONTRACT.md) | ❌ |
 | 4 | **Delete detection rehearsal** | Remove a fixture row, run a full crawl, watch the sweep remove it from the index and `crawl.vwPendingDeletes` drain. The most dangerous feature in the release must be seen working before it guards anything | ❌ |
