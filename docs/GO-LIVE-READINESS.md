@@ -10,10 +10,17 @@ as a whole — what exists, what does not, and what has to happen before it is a
 supported service rather than a release that builds.
 
 It is deliberately blunt about the gap between *built* and *verified*, because
-that gap is the whole risk right now: 22 features are implemented and 311 tests
-pass, and **none of it has been executed against a real SQL Server or a real
+that gap is the whole risk right now: 17 features are implemented, 4 more are
+part-built, 311 tests pass, and **none of it has been executed against a real
+SQL Server or a real
 Microsoft 365 tenant**. Every go-live blocker below is a verification task. None
 of them is construction.
+
+**What this document does not cover.** Every task here is engineering: run it,
+watch it, prove it. None of it establishes who owns the connection, who is woken
+when a run fails, or who accepts the ACL staleness bound in writing — that is
+[`PRODUCTION-ONBOARDING.md`](PRODUCTION-ONBOARDING.md), and clearing all six
+blockers below does not answer a single row of it.
 
 **How to read the tables.** Status is ✅ implemented, ⚠️ partial (the plumbing
 exists but nothing calls it), ❌ not built. The priority band is the section
@@ -45,7 +52,9 @@ it is closer to the production Windows Server than anything that has touched
 this code.
 
 **Install:** SQL Server 2022 Developer Edition (free; not Express — you want SQL
-Agent for the retention job in `sql/27`), the .NET SDK, and IIS with the Windows
+Agent to schedule `crawl.uspPurgeHistory`, which `sql/23` defines and `sql/25`
+withholds from both roles; nothing in the repository ships the job itself, which
+is the ⚠️ row in section 3), the .NET SDK, and IIS with the Windows
 Authentication feature plus the ASP.NET Core Hosting Bundle. The dashboard
 *requires* IIS's authentication handler; under bare Kestrel it returns 500 on
 every page by design. The Entra app certificate goes in the certificate store

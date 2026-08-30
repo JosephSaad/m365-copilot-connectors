@@ -20,6 +20,7 @@ documentation that ships with it.
 | [**Copilot Router**](copilot-router.html) | Nineteen questions that route one source to one delivery path — synced or federated connector, one of the three Power BI storage modes, a live call, or an application you host — with the cost and the warnings attached. Self-contained: no build step, no network calls |
 | [**Routing: own it or call it**](COPILOT-ROUTING.md) | Why ownership decides the architecture before cost does, why residency then picks the storage mode, and the decision tree in full |
 | [**Assumptions**](ASSUMPTIONS.md) | Every decision taken on the reader's behalf, and what would change if it were wrong |
+| [**Go-live readiness**](GO-LIVE-READINESS.md) | Every feature in the direct-push path at v1.3.1 — what is built, what is part-built, what is not — and the six verification tasks between the current release and a supported service |
 
 ## Deploying
 
@@ -28,7 +29,7 @@ documentation that ships with it.
 | [**What a source must guarantee**](SOURCE-CONTRACT.md) | The four hard requirements a source has to meet before a direct push can detect deletions, skip unchanged items and resume — and what a source that meets only some of them still gets |
 | [**What we need from the CDP team**](CDP-PILOT-PARAMETERS.md) | The parameters to collect before a pilot — what is asked, why, and a column to answer in |
 | [**What we need from the SQL team**](SQL-PILOT-PARAMETERS.md) | The same, for a SQL Server source — covering both the agent-hosted and direct-push paths |
-| [**Production onboarding**](PRODUCTION-ONBOARDING.md) | What has to be true before either connector is a supported service rather than a pilot that happens to be running |
+| [**Production onboarding**](PRODUCTION-ONBOARDING.md) | The other half of go-live readiness: who owns the connection, who is woken when a run fails, and which numbers somebody has to accept in writing — every row named and owned |
 | [CDP connector](CDP-DEPLOYMENT.md) | HDFS documents, Hive tables and the Atlas catalogue, from a Kerberised cluster |
 | [Hierarchy connector](HIERARCHY-DEPLOYMENT.md) | The worked three-level example, flattened for a flat index |
 | [Crawl state database](CRAWL-STATE-DEPLOYMENT.md) | Standing up `ConnectorState`: the six state-database scripts in order, the two service accounts, retention, and the delete guard an operator has to know before the first refusal — plus `sql/26`, the seventh, which changes the source rather than the state |

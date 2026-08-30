@@ -138,6 +138,9 @@ docs/
   CRAWL-STATE-REFERENCE.md             Every table, view and procedure in the state database, with parameters
   SOURCE-CONTRACT.md                   What a source must guarantee before a push can detect deletes or resume
   ASSUMPTIONS.md                       Decisions, deviations, open questions
+  GO-LIVE-READINESS.md                 Every feature: built, part-built, not built — and the six verification
+                                       tasks between this release and a supported service
+  PRODUCTION-ONBOARDING.md             The other half: who owns the connection, who is woken, what is accepted
   ADDING-A-PUSH-CONNECTOR.md           One class and one config file: the recipe and the reasoning
   COPILOT-ROUTING.md                   Connector, action, MCP or Foundry - the decision upstream of this repository
   copilot-router.html                 The Copilot Router: a 19 question router, the tree, and the matrices

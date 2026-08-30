@@ -11,6 +11,13 @@ lists ask *what do we need to connect*. This one asks *what breaks at 03:00, who
 is woken, and what do they do*. A pilot that works proves the pipeline; it
 proves nothing about the six months after.
 
+**How this differs from go-live readiness.**
+[`GO-LIVE-READINESS.md`](GO-LIVE-READINESS.md) asks *is the code proven* —
+feature by feature, what is built, what is part-built, and the six verification
+tasks nobody has run yet. This document asks *is the service owned*. Neither
+replaces the other: clearing every blocker there still leaves every Owner cell
+here blank, and filling this in does not make an unexecuted SQL script run.
+
 Legend: **Gate** = production does not start without it · **Check** = must be
 answered and recorded, an answer of "accepted" is valid.
 
@@ -22,7 +29,7 @@ Not negotiable, and all four are cheaper to settle now than to discover.
 
 | # | Type | What must be true | Why | Owner | State |
 |---|---|---|---|---|---|
-| 1.1 | Gate | **The deletion SLA is met by the chosen path** | A direct push never deletes; an agent-hosted crawl deletes on its next incremental pass. If the agreed SLA is tighter than the mechanism, the SLA has to change — engineering cannot close this gap | | |
+| 1.1 | Gate | **The deletion SLA is met by the chosen path** | Since v1.3.0 a direct push does delete, but only on a *full* crawl and only with a state store configured: absence from an incremental read means nothing, so the SLA is bounded by the full-crawl cadence (`Settings:FullEveryHours`, default 168), not by the run interval. An agent-hosted crawl deletes on its next incremental pass. Without `Settings:StateConnectionString` neither applies and nothing is ever deleted. If the agreed SLA is tighter than the chosen mechanism, the SLA has to change — engineering cannot close this gap | | |
 | 1.2 | Gate | **The ACL staleness bound is written into the risk register** | A permission change at the source does not alter a row's timestamp, so only the periodic full recrawl re-derives who may see an item. At the default of 7 daily runs, a revocation can take a week to reach the index. That is a number somebody must accept in writing | | |
 | 1.3 | Gate | **Someone owns the connection**, by name, not by team | A Graph connection is a durable object with a quota, a schema that cannot be edited, and items that outlive the person who created them | | |
 | 1.4 | Gate | **A backout exists and has been rehearsed** | Deleting the connection removes every item in it. That is the backout. It should be a decision somebody has already thought about, not one taken during an incident | | |
@@ -72,7 +79,7 @@ Not negotiable, and all four are cheaper to settle now than to discover.
 | 6.1 | Gate | **The schema is final** | A registered schema is append-only: no property's type, annotation or label can change. Correcting one means deleting the connection and every item in it | | |
 | 6.2 | Gate | A **release process** exists for the connector itself | Which build is in production, how it is upgraded, and how it is rolled back | | |
 | 6.3 | Check | Source schema changes have a **notification path** to whoever owns the connection | A renamed column silently empties a field. The database team rarely knows an index depends on them | | |
-| 6.4 | Check | **Orphan reconciliation** is scheduled, if the path is direct push | It never deletes. Rows leaving scope keep their items indefinitely, and this is the job that finds them | | |
+| 6.4 | Check | **Orphan reconciliation** is scheduled, if the path is direct push **without a state store** | With `Settings:StateConnectionString` set, the delete sweep is the reconciliation and this row is satisfied by 1.1. Without one the push never deletes, rows leaving scope keep their items indefinitely, and a periodic reconciliation is the only thing that finds them — note that `deploy/Compare-SourceToIndex.ps1` predates the inventory and still rebuilds its picture by re-reading the source | | |
 
 ## 7 · CDP only
 
