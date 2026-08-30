@@ -22,10 +22,31 @@ skip-unchanged, delete confirmed gone from the index, and every dashboard page
 rendering it under Windows authentication. What remains is the three caveats on
 row 1. The backoff has now answered a real 429, which no fixture of 1,118 items
 could ever have made it do: a 100-fold corpus made the tenant push back, and the
-first throttled run in this project's history lost 191 items on the spot, to a defect nothing smaller could reach. The failure views have now been seen — a deliberate
+first throttled run in this project's history lost 191 items on the spot, to a defect nothing smaller could reach. Those 191 are back: run 21 read all 111,900 rows, rewrote exactly those items in 41 seconds, refused none, and Graph now returns all 191 with their ACLs intact. A run that completes with refusals is no longer filed as a success. The failure views have now been seen — a deliberate
 refusal put the connection into `failing`, raised the attention banner and left
 three failed runs in the history, and a clean run put it back. Every go-live
 blocker below is a verification task. None of them is construction.
+
+**A deployment defect worth naming separately**, because nothing in the code
+review or the test suite could have reached it. SQL Server stores
+`QUOTED_IDENTIFIER` *with each module*, as it stood in the session that created
+it, and replays that stored value on every execution whatever the caller sets.
+sqlcmd connects with it off; SSMS connects with it on. `crawl.Item` carries a
+filtered index, so every procedure deployed from a command line was refused at
+execution — `uspBeginRun` threw error 1934 and no crawl could open a run. The
+scripts had only ever been deployed from a query window, so the documented
+command-line path had never once produced a working database. All six
+module-creating scripts now set the option, and `sql/30` fails a deployment that
+produces a module without it.
+
+The same shape turned up once more in `deploy/GraphPushAuth.ps1`. Its Credential
+Manager reader passed `-UsingNamespace` to `Add-Type` for a namespace `Add-Type`
+already supplies — a duplicate using directive, which Windows PowerShell 5.1
+treats as warning-as-error and Roslyn rejects outright. It failed on every
+supported shell, so `Get-StoredClientSecret` had always fallen through to
+prompting, and every pre-flight that claimed to test the stored secret was
+testing whichever one the operator typed. That is the failure its own
+documentation says it exists to catch.
 
 **What this document does not cover.** Every task here is engineering: run it,
 watch it, prove it. None of it establishes who owns the connection, who is woken
@@ -168,8 +189,8 @@ The foundation. All of it rides on the verification above.
 
 | Feature | Description | Status | Live Test Status |
 |---|---|---|---|
-| Push engine | Connection and schema registration, foreign-connection guard, truncation, ACL resolution, upsert writes, documented exit codes | ✅ | **PARTIAL** — registration, schema, ACL resolution and upsert writes all exercised across 20 runs and 110,590 items; exit 0 and exit 4 both observed. Two clauses untested: no item has ever exceeded `MaxContentBytes`, so truncation has never fired, and the foreign-connection guard has never been offered a foreign connection |
-| Retry and throttling | Engine-owned backoff honouring `Retry-After`; the SDK's hidden retry handler is removed and its absence pinned by a test | ✅ | **PASSED, and it found a defect.** The 100-fold run was the first ever throttled: 191 sub-requests took a 429 with `Retry-After: 10`, and the engine backed off and retried each. That retry then refused all 191 with `400 NullOrEmptyValue` — a retried item was being re-serialized from the same instance and losing its ACL. Fixed in `af3dc6e`; the backoff itself behaved exactly as written |
+| Push engine | Connection and schema registration, foreign-connection guard, truncation, ACL resolution, upsert writes, documented exit codes | ✅ | **PASSED, in full.** Registration, schema, ACL resolution and upsert writes exercised across 24 runs and 110,590 items, with exit 0 and exit 4 both observed. The two clauses that had never fired now have: **truncation** — customer 1's notes were enlarged to 4,000,561 bytes, and the run logged "content truncated from 4000561 to 3670016 bytes", wrote exactly 3,670,016, kept the head marker, dropped the tail marker and ended with the visible notice; the source was then restored byte-for-byte and re-crawled to `truncated=0`. **Foreign-connection guard** — a dry run pointed at `sqltickets`, a connection this connector does not own, refused with "properties ticketId, assignedTo do not exist in this connector's schema", exited 4 and wrote nothing |
+| Retry and throttling | Engine-owned backoff honouring `Retry-After`; the SDK's hidden retry handler is removed and its absence pinned by a test | ✅ | **PASSED, and it found a defect.** The 100-fold run was the first ever throttled: 191 sub-requests took a 429 with `Retry-After: 10`, and the engine backed off and retried each. That retry then refused all 191 with `400 NullOrEmptyValue` — a retried item was being re-serialized from the same instance and losing its ACL. Fixed in `af3dc6e`; the backoff itself behaved exactly as written. **The 191 have since been recovered** — run 21 read all 111,900 rows, rewrote exactly those 191 in 41 seconds and refused none, and Graph now returns all 191 with their ACLs intact. Note run 21 was not itself throttled, so it re-proved the recovery path, not the retry fix; that remains covered by `BatchRetrySerializationTests` |
 | Concurrent writers | `Settings:Writers`, default 4, clamped to 16 because Graph allows 25 concurrent operations per connection. Forced to 1 for any source that keeps a position | ✅ | **PASSED** — `Writers=99` logged "was 99; using 16", and the run used 16. "Forced to 1 for any source that keeps a position" is untested, no shipped source keeping one |
 | `$batch` writing | Twenty per request, capped by accumulated content bytes, with per-item outcomes so one refusal does not abandon the other nineteen | ✅ | **PASSED** — 5,608 batches of 20 across 111,709 rows, with per-item outcomes proven the hard way: 191 refused individually while the rest of their batches landed. The 4 MiB byte cap has never been approached; the largest item is 808 bytes |
 | Change detection | Content and ACL hashed separately and both compared; an unchanged item is skipped but still marked seen | ✅ | **PASSED at both scales** — 1,117 of 1,118 skipped on a second run, and at 100-fold the 1,119 pre-existing items were re-read, re-hashed and skipped with **zero** rewrites while 110,590 new ones were written |
@@ -177,7 +198,7 @@ The foundation. All of it rides on the verification above.
 | Delete guard | Refuses a sweep after an incremental run outright, and one that would remove more than `Settings:MaxDeletePercent` of the live corpus | ✅ | **PASSED** — tripped deliberately at `MaxDeletePercent = 0`: exit 4, nothing marked pending, the store unchanged. "Refuses a sweep after an incremental run outright" is untested because no incremental run can occur — see L10 |
 | Checkpointing | Composite `(marker, id)` marker, forward-only, frozen for the rest of a run once anything is refused so it cannot pass a gap | ✅ | **NOT EXERCISED** — `crawl.Checkpoint` is empty after 20 runs and has never held a row. No shipped connector sets `PushItem.LastModifiedUtc`, so no marker is ever saved. Same root cause as L10 and the `sql/26` incompatibility |
 | Duplicate detection | Per-run identifier set held on the reading thread, counted and logged | ✅ | **NOT EXERCISED** — `duplicates=0` on every run; no source has offered the same identifier twice |
-| Run history | Per connection, per run, per item type, with the timing attribution and raw throttling events persisted | ✅ | **PASSED** — 20 runs with per-item-type breakdowns, 119 phase-timing rows and the throttle events behind them |
+| Run history | Per connection, per run, per item type, with the timing attribution and raw throttling events persisted | ✅ | **PASSED** — 21 runs with per-item-type breakdowns, phase-timing rows and the throttle events behind them. A run that completes with refusals is now recorded `partial` (status 5) rather than `succeeded`, and the connection reads `items refused` until a later run clears it — see `sql/29`. Run 20 is the one row in the history carrying it |
 | Dashboard | Seven read-only Razor Pages, every list paged in the database, two roles that share no permission | ✅ | **PASSED** — all seven pages against real data (blocker 6), and the authorisation rule proven live (L4) |
 | Throttle telemetry | Every 429 and 5xx buffered with its real timestamp and flushed once at run close, never on the hot path | ✅ | **PASSED at scale** — 191 events buffered with their real timestamps, endpoint and attempt number, flushed once at run close. It also exposed a mislabelled tile: the figure counts 429s only while the label claimed 429 and 5xx, and this rig had a 504 on record under a tile reading zero |
 | Timing attribution | p50/p95/p99/max per phase with a verdict that states the precondition it rests on | ✅ | **PASSED** — p50/p95/p99/max per phase over 111,709 rows, with the verdict stating its precondition: "191 of 111709 row(s) (0.2%) slept at least once; backoff is 0.0% of per-row time" |

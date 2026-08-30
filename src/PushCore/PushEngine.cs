@@ -1688,6 +1688,15 @@ public sealed class PushEngine
         {
             for (int attempt = 1; ; attempt++)
             {
+                // SAME DEFECT AS THE BATCH PATH, AND THIS IS THE PATH THAT KEPT
+                // IT. Every attempt after the first re-serializes this same
+                // ExternalItem, and a backed model emits only what changed since
+                // the last serialization - nothing - so the retry arrives with
+                // no ACL and Graph refuses it 400 NullOrEmptyValue. The batch
+                // writer was fixed for this; this loop was not, and a chunk of
+                // one always comes here.
+                GraphModelReset.ForSerialization(item);
+
                 long started = PushTiming.Now();
 
                 try

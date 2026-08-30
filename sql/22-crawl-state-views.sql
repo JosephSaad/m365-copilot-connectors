@@ -30,6 +30,29 @@
 USE [ConnectorState];
 GO
 
+-- ---------------------------------------------------------------------------
+-- SET OPTIONS ARE STORED WITH THE MODULE, NOT SUPPLIED BY THE CALLER.
+--
+-- SQL Server records QUOTED_IDENTIFIER as it stands in THIS session at CREATE
+-- time and replays that stored setting every time the module runs, ignoring
+-- whatever the caller has set. sqlcmd connects with it OFF; SSMS connects with
+-- it ON. The same script therefore yields a working module from a query window
+-- and a broken one from the command line, and the deployment output is
+-- identical either way.
+--
+-- crawl.Item carries a filtered index, and any UPDATE against a table carrying one is refused
+-- unless QUOTED_IDENTIFIER was ON at CREATE time:
+--   "UPDATE failed because the following SET options have incorrect settings"
+-- The refusal lands at EXECUTION, not deployment. The deploy reports success,
+-- and the failure surfaces later in an application that has not changed - which
+-- is as far from the cause as this failure mode can put you.
+--
+-- Setting it here makes the stored setting independent of who ran the script.
+-- Verify with sys.sql_modules.uses_quoted_identifier; sql/30 checks it.
+-- ---------------------------------------------------------------------------
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
 /* ---------------------------------------------------------------------------
    1. crawl.vwRunHistory
 

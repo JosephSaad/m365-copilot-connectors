@@ -107,6 +107,7 @@ rather than being deferred.**
 | 4 | `sql/23-crawl-state-procedures.sql` | Nineteen procedures — the write path | `db_owner` | `ConnectorState` |
 | 5 | `sql/24-crawl-state-reporting.sql` | Seven procedures — the dashboard's read path | `db_owner` | `ConnectorState` |
 | 6 | `sql/25-crawl-state-least-privilege.sql` | Two logins, two users, two roles, the grants and the denials | `securityadmin` **and** `db_owner` — see below | `master`, then `ConnectorState` |
+| 7 | `sql/30-verify-set-options.sql` | Nothing — it checks what the six above created | any reader | `ConnectorState`, and every other database holding modules |
 
 **`sql/25` needs rights in two places, and its own header understates one of
 them.** The first half runs in `master` and issues `CREATE LOGIN`, which needs
@@ -130,6 +131,25 @@ is deployed. `sql/25` is idempotent and safe to re-run after any change to the
 roles — running it is the cheapest way to prove the permission set has not
 drifted.
 
+**Every module-creating script sets `QUOTED_IDENTIFIER ON`, and `sql/30` proves
+they took.** SQL Server stores that option *with each module* as it stood in the
+session that created it, and replays the stored value on every execution
+regardless of what the caller sets. sqlcmd connects with it OFF; SSMS connects
+with it ON. So the same file produces a working procedure from a query window
+and a broken one from the command line, with identical output both times.
+
+It is not cosmetic. `crawl.Item` carries a filtered index, and any `UPDATE`
+against a table with one is refused when the calling module holds
+`QUOTED_IDENTIFIER OFF`. `uspBeginRun` then fails with error 1934 — *"UPDATE
+failed because the following SET options have incorrect settings"* — the next
+time a connector starts, which may be days after the deployment that caused it,
+in an application nobody has touched. That is how this was found: a crawl that
+could not open a run, hours after a deploy that reported success.
+
+The `SET` statements at the top of `sql/12`, `sql/22`, `sql/23`, `sql/24`,
+`sql/26` and `sql/28` make the result independent of the client. Run `sql/30`
+last, in every database holding modules; it lists any offender by name and
+throws `50030` so a pipeline stops there rather than at the connector.
 **One thing to watch when re-running `sql/20`.** The `CREATE DATABASE` is
 guarded, but the three `ALTER DATABASE` statements after it are not, and the
 read-committed-snapshot one carries `WITH ROLLBACK IMMEDIATE`. Against a live
