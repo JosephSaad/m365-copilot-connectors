@@ -64,7 +64,7 @@ BEGIN
         (SELECT COUNT(*) FROM [crawl].[Connection] WHERE IsEnabled = 1)              AS ConnectionsEnabled,
         (SELECT COUNT(*) FROM [crawl].[vwConnectionHealth] WHERE Health = N'healthy') AS ConnectionsHealthy,
         (SELECT COUNT(*) FROM [crawl].[vwConnectionHealth]
-         WHERE Health IN (N'failing', N'late'))                                       AS ConnectionsNeedingAttention,
+         WHERE Health IN (N'failing', N'late', N'items refused'))                     AS ConnectionsNeedingAttention,
         (SELECT COUNT(*) FROM [crawl].[Run] WHERE Status = 1)                        AS RunsInProgress,
 
         (SELECT COUNT(*) FROM [crawl].[Item] WHERE State = 1)                        AS LiveItems,

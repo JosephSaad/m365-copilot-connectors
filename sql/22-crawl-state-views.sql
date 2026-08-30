@@ -52,8 +52,9 @@ SELECT
     c.DisplayName,
     c.ConnectorKey,
     CASE r.Mode   WHEN 1 THEN N'full'    WHEN 2 THEN N'incremental' END      AS Mode,
-    CASE r.Status WHEN 1 THEN N'running' WHEN 2 THEN N'succeeded'
-                  WHEN 3 THEN N'failed'  WHEN 4 THEN N'abandoned'   END      AS Status,
+    CASE r.Status WHEN 1 THEN N'running'   WHEN 2 THEN N'succeeded'
+                  WHEN 3 THEN N'failed'    WHEN 4 THEN N'abandoned'
+                  WHEN 5 THEN N'partial'   END                      AS Status,
     r.IsDryRun,
     r.StartedUtc,
     r.CompletedUtc,
@@ -146,8 +147,9 @@ SELECT
     c.ExpectedIntervalMinutes,
 
     lr.RunId                                                        AS LastRunId,
-    CASE lr.Status WHEN 1 THEN N'running' WHEN 2 THEN N'succeeded'
-                   WHEN 3 THEN N'failed'  WHEN 4 THEN N'abandoned' END AS LastRunStatus,
+    CASE lr.Status WHEN 1 THEN N'running'   WHEN 2 THEN N'succeeded'
+                   WHEN 3 THEN N'failed'    WHEN 4 THEN N'abandoned'
+                   WHEN 5 THEN N'partial'   END AS LastRunStatus,
     lr.StartedUtc                                                   AS LastRunStartedUtc,
     ls.CompletedUtc                                                 AS LastSuccessUtc,
     DATEDIFF(MINUTE, ls.CompletedUtc, SYSUTCDATETIME())             AS MinutesSinceLastSuccess,
@@ -165,6 +167,17 @@ SELECT
         WHEN lr.RunId IS NULL                      THEN N'never run'
         WHEN lr.Status = 1                         THEN N'running'
         WHEN ISNULL(fs.ConsecutiveFailures, 0) > 0 THEN N'failing'
+
+        -- Below 'failing' and above 'late': a connection whose most recent run
+        -- lost items is not healthy, and is not failing either. Ranked here
+        -- because a run that DIED is the more urgent of the two - this one at
+        -- least wrote what it could - while both outrank a schedule that has
+        -- merely slipped.
+        --
+        -- Keyed on the LAST run only. Items refused three runs ago were retried
+        -- since, because a refused write records no hash; leaving the word on
+        -- would make it permanent and unactionable.
+        WHEN lr.Status = 5                         THEN N'items refused'
         WHEN c.ExpectedIntervalMinutes IS NOT NULL
              AND DATEDIFF(MINUTE, ls.CompletedUtc, SYSUTCDATETIME())
                  > c.ExpectedIntervalMinutes * 2   THEN N'late'

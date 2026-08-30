@@ -233,8 +233,23 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
+    -- 2 SUCCEEDED, 5 PARTIAL. A run that finished with items refused is not a
+    -- success, and the word matters more than it looks: succeeded is the one
+    -- value that stops anybody looking, and a refused write records no hash, so
+    -- the corpus does not look wrong afterwards either. The first run to hit
+    -- this refused 191 items and was stored as a success.
+    --
+    -- Not 3. Failed means the run died - no totals, an ErrorKind, a crawl to
+    -- repeat in full. A partial run completed, kept every hash it earned, and
+    -- needs only its refused items retried, which the next run does by itself.
+    -- Collapsing the two would send somebody to repeat a crawl that does not
+    -- need repeating.
+    --
+    -- Status 5 needs sql/29, which widens CK_Run_Status. Without it this
+    -- UPDATE throws on the first partial run rather than silently storing a
+    -- success, which is the right way round for a missing migration.
     UPDATE  [crawl].[Run]
-    SET     Status         = 2,
+    SET     Status         = CASE WHEN @ItemsFailed > 0 THEN 5 ELSE 2 END,
             CompletedUtc   = SYSUTCDATETIME(),
             ItemsRead      = @ItemsRead,
             ItemsWritten   = @ItemsWritten,

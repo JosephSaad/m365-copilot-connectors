@@ -22,7 +22,7 @@ public static class StateCodes
 {
     /// <summary>The run statuses, in the order CK_Run_Status defines them.</summary>
     public static readonly IReadOnlyList<string> RunStatuses =
-        new[] { "running", "succeeded", "failed", "abandoned" };
+        new[] { "running", "succeeded", "failed", "abandoned", "partial" };
 
     /// <summary>The run modes, in the order CK_Run_Mode defines them.</summary>
     public static readonly IReadOnlyList<string> RunModes = new[] { "full", "incremental" };
@@ -59,6 +59,14 @@ public static class StateCodes
         {
             "healthy" or "succeeded" => "ok",
             "failing" or "failed" or "abandoned" => "bad",
+
+            // Warn, not bad. A partial run completed and kept every hash it
+            // earned; its refused items are retried by the next run on their
+            // own. Colouring it like a dead run would send somebody to repeat a
+            // crawl that does not need repeating - and colouring it like a
+            // success is what this whole change exists to stop.
+            "partial" or "items refused" => "warn",
+
             "late" or "deletes pending" or "pending delete" => "warn",
             "running" => "busy",
             "live" => "ok",
