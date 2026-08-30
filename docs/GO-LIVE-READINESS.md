@@ -11,15 +11,16 @@ supported service rather than a release that builds.
 
 It is deliberately blunt about the gap between *built* and *verified*, because
 that gap is the whole risk right now: 17 features are implemented, 4 more are
-part-built, 312 tests pass, and **four of the six blockers are now closed, a
-fifth is part-done, and one is untouched** — against one closed two revisions
-ago. Every blocker that ran found something. Blocker 1 found two defects in
+part-built, 312 tests pass, and **five of the six blockers are closed, with the
+sixth part-done** — against none at all a few days ago. Every blocker that ran
+found something. Blocker 1 found two defects in
 `sql/26`, one of them silent. Blockers 2 and 5 found the shared ACL that wrote
 441 of 1,118 items and refused the other 677. None was findable by reading the
 code; all are fixed. The full lifecycle now has evidence behind it — write,
-skip-unchanged, and delete confirmed gone from the index. What remains is the
-dashboard smoke test, the three caveats on row 1, and the parts no quiet tenant
-can prove: the engine's backoff has still never answered a real 429. Every
+skip-unchanged, delete confirmed gone from the index, and every dashboard page
+rendering it under Windows authentication. What remains is the three caveats on
+row 1, and the parts no quiet tenant can prove: the engine's backoff has still
+never answered a real 429, and no page has yet rendered a failed run. Every
 go-live blocker below is a verification task. None of them is construction.
 
 **What this document does not cover.** Every task here is engineering: run it,
@@ -39,10 +40,9 @@ then what is cheap now and expensive later, then what can follow go-live.
 ## 1. The six blockers
 
 They are blockers because each one is a claim the release makes and cannot yet
-support. Four are now closed and row 1 is part-done. Only the dashboard smoke
-test is untouched. What follows is how to build the machine they were run on,
-kept in full, because the rig has to be rebuilt for the customer environment
-anyway.
+support. Five are now closed and row 1 is part-done; every one of the six has
+been attempted. What follows is how to build the machine they were run on, kept
+in full, because the rig has to be rebuilt for the customer environment anyway.
 
 **Crawl state is now enabled, and rows 2 and 3 closed with it.** Every run before
 that logged "No crawl state store configured", wrote all 1,118 items each time,
@@ -63,6 +63,14 @@ what [`CRAWL-STATE-DEPLOYMENT.md`](CRAWL-STATE-DEPLOYMENT.md) already says, now
 observed. An alert built expecting that view to be busy will only ever fire when
 something is wrong, which is correct, and will look broken until it does.
 
+**The dashboard also gave the ACL fix its first behavioural evidence.** The
+inventory page shows one ACL hash, `94B60AC534B3`, identical on every row. The
+regression test for that defect is a source scan and says in its own header that
+it cannot prove the behaviour — no harness here reproduces the field being
+dropped. A column of identical hashes across 1,119 items does prove it: the
+shared-object regression is exactly what would make them diverge. Worth knowing
+that the check exists and where it lives, because it is not in the test suite.
+
 And the sweep runs on a **full** crawl only. All four runs were full because
 `Settings:Incremental` was never set. Turn it on and the sweep does not stop
 firing, but it stops firing *every run*: `uspBeginRun` escalates to full once the
@@ -78,7 +86,7 @@ accept in writing, and this is what it buys.
 | 3 | **Second-run validation** | Re-run immediately and check `UnchangedPercent` in `crawl.vwRunHistory` climbs. Stuck near zero means item IDs are not deterministic and the corpus is being rewritten every run — see [`SOURCE-CONTRACT.md`](SOURCE-CONTRACT.md). **Done, and it climbed to 99.9%.** Run 2 read 1,118 and wrote 1; run 3, after one time entry was inserted, read 1,119 and wrote 3. The item IDs are deterministic and the corpus is not being rewritten. The 3 is the part worth reading twice: the inserted entry, its parent engagement and its grandparent customer, because the `sql/12` views roll `TotalHours` and `ChildCount` upward, so one insert genuinely changes three items. The engine knows nothing of the hierarchy — it hashed all 1,119 and found the three that differed. Wall clock fell 77s → 10s → 3s as the work shrank to what had actually changed | ✅ |
 | 4 | **Delete detection rehearsal** | Remove a fixture row, run a full crawl, watch the sweep remove it from the index. **Done, and verified on three surfaces with a control.** One time entry soft-deleted at the source, so it fell out of the views; run 4 read 1,118, logged "Delete sweep: 1 item(s) the source no longer returns", and reported `deleted=1`. After it: `crawl.Item` state 3 with `PendingSinceUtc` NULL, and the item **404 in the Graph index** — the proof that matters, since the other two are the connector agreeing with itself. The control item beside it was untouched, and the 2 rewrites were the parent engagement and grandparent customer, the rollups changing back exactly as they changed in run 3. The guard was never near firing: 1 of 1,119 is 0.09% against `MaxDeletePercent` 10 | ✅ |
 | 5 | **`$batch` live validation** | **Done.** The default write path has now spoken to Graph: 1,118 items in 56 batches, zero failures, at 8 writers and again at 16. It did not pass first time — the run it was meant to validate is the one that exposed the shared-ACL defect fixed in `44e464f`, writing 441 and refusing 677, which is the whole argument for this row existing. One clause of it is still untested: `Settings:Batch = false` is named here as the rehearsed fallback and has not actually been rehearsed. Also note `throttleWaits=0` throughout, so the backoff path is unexercised — 16 writers × 20 sub-requests is nominally far above the 25 concurrent operations per connection the clamp's own warning cites, and a quiet tenant is not evidence that a busy one will agree | ✅ |
-| 6 | **Dashboard smoke test** | Deploy to IIS, confirm Windows authentication and that all seven pages render against real rows. It compiles and every route resolves; no page has ever displayed data | ❌ |
+| 6 | **Dashboard smoke test** | Deploy to IIS, confirm Windows authentication and that all seven pages render against real rows. **Done.** Anonymous requests get `401` with IIS advertising `Negotiate` and `NTLM`, so Anonymous is off and the fallback policy in `Program.cs` is holding — there is no anonymous page. All seven routes render under an authenticated identity against four runs and 1,119 items. **Five show rows; two are empty and correctly so**: Throttling, because nothing was throttled across 1,123 writes, and Pending deletes, because a healthy sweep leaves nothing there. Both say so on the page rather than looking broken. What has *not* been seen is either page carrying a row, and no page has yet rendered a failed run, an unhealthy connection, or the "needs attention" banner — the states an operator actually reads during an incident are the ones still unexercised | ✅ |
 
 ### Doing all six on one Windows machine
 
@@ -114,9 +122,14 @@ re-run and read `UnchangedPercent` (3) → delete a row and run again (4) →
 publish the dashboard to IIS (6). Optionally then `sql/26`, rename a fixture
 customer, and confirm every descendant's `EffectiveLastModified` moves.
 
-This order has now been walked to the end of row 4. Only row 6, the dashboard
-against real rows, remains — and the state database it reads is populated with
-four runs and a tombstone, so it is waiting on nothing but someone doing it.
+This order has now been walked end to end on one machine. What it did not
+produce is a *failure*: every run succeeded, so no page has rendered a failed
+run, an unhealthy connection or the "needs attention" banner, and those are the
+views an operator reads when something is wrong rather than when it is right.
+Setting `Settings:MaxDeletePercent` to 0 and sweeping with one row missing trips
+`THROW 50007` and exercises all three cheaply. It leaves a real failed run in the
+history, which `crawl.uspPurgeHistory` ages out at 90 days — except that nothing
+schedules that job yet, so on this rig it stays until someone removes it.
 
 **What this rig cannot prove**, so the pilot's scope stays honest: production
 scale, the locked-down network path (`Settings:GraphProxy` against a real

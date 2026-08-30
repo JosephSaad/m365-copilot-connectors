@@ -26,6 +26,12 @@
 // So this asserts the shape of the fix rather than its effect. That is a weaker
 // claim, and it is the strongest one that can be made honestly here. It was
 // verified to fail when the cached field is put back.
+//
+// The effect has since been confirmed, but not by any test: the dashboard's
+// inventory page shows one ACL hash identical across all 1,119 items of a live
+// corpus, and divergent hashes are precisely what the shared-object regression
+// produces. If this file ever needs re-proving against a real tenant, that
+// column is where to look.
 // ---------------------------------------------------------------------------
 
 namespace SqlTicketsConnector.Tests
