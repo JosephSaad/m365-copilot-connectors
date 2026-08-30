@@ -101,6 +101,14 @@ builder.Services
         options => options.CommandTimeoutSeconds > 0 && options.ConnectTimeoutSeconds > 0,
         "CrawlState timeouts must be greater than zero.")
 
+    // Zero is off; anything else has to be long enough to read the page. A
+    // negative or one-second value renders a meta refresh the browser obeys
+    // immediately, which is a site nobody can use and an unbounded query load
+    // on the state database.
+    .Validate(
+        options => options.AutoRefreshSeconds == 0 || options.AutoRefreshSeconds >= 10,
+        "CrawlState:AutoRefreshSeconds must be 0 to disable, or at least 10 seconds.")
+
     // Fail at startup, not on the first page load. A dashboard that starts and
     // then 500s is a dashboard somebody has to open to discover is misconfigured.
     .ValidateOnStart();

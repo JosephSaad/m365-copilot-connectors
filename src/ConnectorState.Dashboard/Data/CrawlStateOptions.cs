@@ -72,6 +72,29 @@ public sealed class CrawlStateOptions
     public int SummaryWindowHours { get; set; } = 24;
 
     /// <summary>
+    /// Gets or sets how often a page reloads itself, in seconds. Zero turns it
+    /// off.
+    /// </summary>
+    /// <remarks>
+    /// A meta refresh, not a script. Program.cs sets a Content-Security-Policy
+    /// of default-src 'none' and says in as many words that the absence of
+    /// script on these pages is a property worth keeping, so the day somebody
+    /// adds a handler it stops working rather than quietly widening what this
+    /// page can do. A reload driven by setInterval would have been the first
+    /// exception to that, for a convenience.
+    ///
+    /// The cost of the meta tag is that it reloads the whole document, so it
+    /// takes the scroll position with it. That is tolerable on a wall display
+    /// and irritating on a long inventory listing, which is the reason this is
+    /// configurable rather than fixed - and the reason zero is a supported
+    /// value rather than an oversight.
+    ///
+    /// Every page reloads to its own URL, so a filtered list keeps its filters
+    /// and a paged one keeps its page.
+    /// </remarks>
+    public int AutoRefreshSeconds { get; set; } = 120;
+
+    /// <summary>
     /// Gets or sets the application name reported to SQL Server. It appears in
     /// sys.dm_exec_sessions, so a query from the dashboard is distinguishable
     /// from a query from the connector without guessing at host names.

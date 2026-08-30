@@ -1,5 +1,10 @@
+@using Microsoft.Extensions.Options
+@using ConnectorState.Dashboard.Data
+@inject IOptions<CrawlStateOptions> CrawlStateSettings
 @{
     string path = this.Context.Request.Path.Value ?? "/";
+
+    int refreshSeconds = CrawlStateSettings.Value.AutoRefreshSeconds;
 
     bool IsCurrent(string prefix) =>
         prefix == "/"
@@ -11,6 +16,13 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    @* Reloads to the SAME url, so a filtered or paged list keeps its filters
+       and its page. Omitted entirely at zero rather than emitted with a value
+       browsers would interpret as "immediately". *@
+    @if (refreshSeconds > 0)
+    {
+        <meta http-equiv="refresh" content="@refreshSeconds" />
+    }
     <title>@ViewData["Title"] — Connector crawl state</title>
     <link rel="stylesheet" href="~/dashboard.css" asp-append-version="true" />
 </head>
@@ -24,7 +36,21 @@
                 <a href="/Items" class="@(IsCurrent("/Items") ? "current" : null)">Inventory</a>
                 <a href="/PendingDeletes" class="@(IsCurrent("/PendingDeletes") ? "current" : null)">Pending deletes</a>
             </nav>
-            <div class="who">@(this.User.Identity?.Name ?? "not signed in")</div>
+            @* Say that the page reloads itself, and how often. Without it a
+               figure that has not moved is ambiguous - a reader cannot tell a
+               quiet system from a stale page, and the wrong one of those is
+               the reassuring one. *@
+            <div class="who">
+                @if (refreshSeconds > 0)
+                {
+                    <span class="refresh-note" title="This page reloads itself; it is not a live stream.">
+                        refreshes every @(refreshSeconds % 60 == 0
+                            ? $"{refreshSeconds / 60} min"
+                            : $"{refreshSeconds}s")
+                    </span>
+                }
+                @(this.User.Identity?.Name ?? "not signed in")
+            </div>
         </div>
     </header>
 
