@@ -403,13 +403,25 @@ dotnet build   .\SqlTicketsConnector.sln -c Release --no-restore
 dotnet test    .\SqlTicketsConnector.sln -c Release --no-build
 ```
 
-94 packages, about 218 MB, in three sets:
+88 packages, about 213 MB, in four sets:
 
 | Set | Packages | Size | Needed for |
 |---|---:|---:|---|
-| Base | 74 | ~119 MB | any build or test run |
+| Base | 62 | ~112 MB | any build or test run, on either target framework |
+| net9.0 supplement | 6 | 2 MB | a `net9.0` build. `-TargetFramework net10.0` leaves it out |
 | Runtime packs | 4 | 93 MB | `Build.ps1 -SelfContained`. `-SkipRuntimePacks` |
 | OpenTelemetry | 16 | 6 MB | `Build.ps1 -EnableOtlpExporter`. `-SkipOtlp` |
+
+**One folder covers both target frameworks.** The default downloads the union,
+because six spare `.nupkg` files on an air-gapped machine cost nothing and six
+missing ones cost a failed restore months later with no clue why. The six are
+what `net10.0`'s shared framework provides and `net9.0`'s does not —
+`System.Text.Json`, `System.Memory` and four neighbours. `net10.0`'s graph is a
+strict subset of `net9.0`'s, so the union is complete for both.
+
+The variable is the **target framework, not the SDK**. Restoring at `net9.0`
+produces byte-identical graphs under the .NET 9 and .NET 10 SDKs; all six
+combinations of framework, SDK and OTLP flag are checked.
 
 The OpenTelemetry set covers two exporters that share one flag: the Serilog sink
 that sends **log records** from the agent-hosted connector, and the OpenTelemetry
@@ -418,15 +430,11 @@ it belong to the Serilog sink alone — OpenTelemetry 1.18.0 speaks both OTLP
 protocols over `HttpClient` and adds no gRPC stack of its own. See
 [TELEMETRY.md](docs/TELEMETRY.md).
 
-> **The Base set is currently under review and its check fails.** On the .NET 10
-> SDK, 62 packages resolve against the 74 listed: the SDK prunes twelve entries
-> as framework-provided that the .NET 9 SDK — which the `release/net9` line and
-> the net9 CI job use — still resolves as real packages. Regenerating the list
-> with `-Update` from a .NET 10 machine would delete exactly those twelve and
-> silently break an air-gapped `net9.0` restore, and nothing in CI would catch it
-> because the Base check only runs on the net10 job. The list needs to represent
-> both SDKs; until it does, do not run `-Update` on Base. The Otlp and
-> RuntimePacks checks pass.
+The check reads which framework was restored out of `project.assets.json` rather
+than taking it as an argument, so it compares against the right set and
+`-Update` rewrites the right block. A parameter that disagreed with the restore
+would delete the six entries the other target depends on, silently, and leave
+the check passing.
 
 The runtime packs are the bundled .NET runtime. Two of the four are requested
 only from some build hosts — a Windows SDK asks for the WindowsDesktop pack and

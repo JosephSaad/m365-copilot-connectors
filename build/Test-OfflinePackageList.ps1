@@ -23,6 +23,27 @@
     breaks an offline restore, and one it invents wastes a download and implies
     a dependency that is no longer there.
 
+    WHICH TARGET FRAMEWORK WAS RESTORED IS READ OUT OF project.assets.json, not
+    passed in. The base list is two blocks - what both frameworks need, and the
+    six packages net10.0's shared framework provides and net9.0's does not - so
+    a parameter that disagreed with the restore on disk would compare against
+    the wrong block, and -Update would rewrite it, deleting six entries the
+    other target depends on while leaving this check green. The assets file
+    cannot disagree with itself.
+
+    Run it four ways, because two of the four have caught something the other
+    two could not:
+
+      net10.0, Base   dotnet restore SqlTicketsConnector.sln
+      net10.0, Otlp   ... -p:EnableOtlpExporter=true
+      net9.0,  Base   ... -p:ConnectorTargetFramework=net9.0
+      net9.0,  Otlp   ... -p:ConnectorTargetFramework=net9.0 -p:EnableOtlpExporter=true
+
+    The last of those is what found seven Microsoft.Extensions.* packages
+    resolving at 9.0.0 on net9.0 and 10.0.0 on net10.0, unpinned and unnoticed
+    for as long as the exporter had existed, because only one target was ever
+    checked. They are pinned in Directory.Packages.props now.
+
     Otlp is compared one way only. That configuration raises Google.Protobuf and
     Grpc.Core.Api rather than adding to them, so the pinned versions are absent
     from this graph while remaining correct entries in the base set. What is
@@ -46,6 +67,15 @@
     pull request as the bump. Base only: the OTLP entries and the runtime packs
     are decisions rather than a transcript of the graph, and both are small
     enough to edit by hand when they genuinely change.
+
+    It rewrites the block matching the framework that was restored. From a
+    net10.0 restore that is the shared block, because net10.0's graph IS the
+    intersection; from a net9.0 restore it is the supplement, computed as what
+    this graph holds that the shared block does not. Do the net10.0 one first
+    when both need refreshing - the supplement is derived from the shared block,
+    so a stale shared block makes a wrong supplement. Running it the other way
+    round is caught rather than silently wrong: if the shared block is not a
+    subset of the net9.0 graph, the update refuses and says so.
 
 .EXAMPLE
     pwsh build/Test-OfflinePackageList.ps1 -Configuration Base
@@ -160,14 +190,14 @@ function Write-Difference {
 # readable and hand-editable everywhere else, and a rewriter that guesses at
 # where a block ends is one refactor away from eating the rest of the script.
 function Set-BaseList {
-    param([string[]]$Packages)
+    param([string[]]$Packages, [string]$Marker = 'BASE')
 
     $lines = Get-Content $listScript
-    $begin = ($lines | Select-String -SimpleMatch '# BEGIN BASE LIST').LineNumber
-    $end = ($lines | Select-String -SimpleMatch '# END BASE LIST').LineNumber
+    $begin = ($lines | Select-String -SimpleMatch "# BEGIN $Marker LIST").LineNumber
+    $end = ($lines | Select-String -SimpleMatch "# END $Marker LIST").LineNumber
 
     if (-not $begin -or -not $end -or $end -le $begin) {
-        throw "Could not find the BEGIN BASE LIST / END BASE LIST markers in $listScript. Restore them, or update the list by hand."
+        throw "Could not find the BEGIN $Marker LIST / END $Marker LIST markers in $listScript. Restore them, or update the list by hand."
     }
 
     $entries = $Packages | ForEach-Object {
@@ -185,8 +215,39 @@ function Set-BaseList {
     [System.IO.File]::WriteAllText($listScript, ($rewritten -join $newline) + $newline)
 }
 
+
+# Which target framework the restore on disk was for.
+#
+# READ FROM THE ASSETS RATHER THAN TAKEN AS A PARAMETER, deliberately. The two
+# base blocks differ by exactly the six packages net10.0's shared framework
+# provides, so a parameter that disagreed with the restore would rewrite the
+# wrong block and delete six entries the other target depends on - silently,
+# and with the check then passing. The assets file cannot disagree with itself.
+function Get-RestoredFramework {
+    param([object[]]$AssetsFiles)
+
+    $frameworks = New-Object 'System.Collections.Generic.HashSet[string]'
+
+    foreach ($file in $AssetsFiles) {
+        $json = Get-Content $file.FullName -Raw | ConvertFrom-Json
+        if (-not $json.project.frameworks) { continue }
+        foreach ($framework in $json.project.frameworks.PSObject.Properties) {
+            [void]$frameworks.Add($framework.Name)
+        }
+    }
+
+    if ($frameworks.Count -ne 1) {
+        throw "Expected every project to have restored for one target framework; found $($frameworks.Count) ($($frameworks -join ', ')). Every project in this solution takes its framework from ConnectorTargetFramework, so a mixture means a stale obj\ directory. Delete src\*\obj and tests\*\obj and restore again."
+    }
+
+    return @($frameworks)[0]
+}
+
 $assetsFiles = Get-AssetsFile -Root $RepositoryRoot
 Write-Host "Read $($assetsFiles.Count) project.assets.json file(s)."
+
+$restoredFramework = Get-RestoredFramework -AssetsFiles $assetsFiles
+Write-Host "Restored for $restoredFramework."
 
 if ($Update -and $Configuration -ne 'Base') {
     throw "-Update applies to the base list only. The OTLP entries and the runtime packs are decisions rather than a transcript of the graph; edit build/Get-OfflinePackages.ps1 by hand and let this check confirm the result."
@@ -262,24 +323,62 @@ if ($Configuration -eq 'RuntimePacks') {
 }
 
 $actual = Get-ResolvedPackage -AssetsFiles $assetsFiles
-$expectedBase = @(& $listScript -ListOnly -SkipRuntimePacks -SkipOtlp)
-$expectedOtlp = @(& $listScript -ListOnly -SkipRuntimePacks)
+
+# Compared against the list AS THIS TARGET FRAMEWORK SEES IT. The script's own
+# -TargetFramework switch is what decides whether the six-package net9.0
+# supplement is included, so asking it the same question the offline machine
+# will ask keeps one answer rather than two.
+$expectedBase = @(& $listScript -ListOnly -SkipRuntimePacks -SkipOtlp -TargetFramework $restoredFramework)
+$expectedOtlp = @(& $listScript -ListOnly -SkipRuntimePacks -TargetFramework $restoredFramework)
+
+# The supplement on its own, for the update path and for the cross-check below.
+$sharedOnly = @(& $listScript -ListOnly -SkipRuntimePacks -SkipOtlp -TargetFramework 'net10.0')
+$net9Only = @($expectedBase | Where-Object { $sharedOnly -notcontains $_ })
 
 if ($Configuration -eq 'Base') {
     $missing = @($actual | Where-Object { $expectedBase -notcontains $_ })
     $extra = @($expectedBase | Where-Object { -not $actual.Contains($_) })
 
+    # A net10.0 restore must not resolve anything from the supplement. If it
+    # does, that package is not net9-only after all and belongs in the shared
+    # block - which the equality check above would already have caught, but
+    # saying WHICH block is wrong turns a diff into an instruction.
+    if ($restoredFramework -eq 'net10.0' -and $net9Only) {
+        throw "The net9.0 supplement should be empty when the list is asked about net10.0, and it is not. Check the -TargetFramework switch in build/Get-OfflinePackages.ps1."
+    }
+
     if ($Update) {
         if (-not $missing -and -not $extra) {
-            Write-Host "Nothing to update: the list already matches the restore graph ($($actual.Count) packages)." -ForegroundColor Green
+            Write-Host "Nothing to update: the list already matches the $restoredFramework restore graph ($($actual.Count) packages)." -ForegroundColor Green
             return
         }
 
         if ($missing) { Write-Difference "Adding:" $missing }
         if ($extra) { Write-Difference "Removing:" $extra }
 
-        Set-BaseList -Packages (@($actual) | Sort-Object)
-        Write-Host "Rewrote the base list in build/Get-OfflinePackages.ps1: $($actual.Count) packages. Commit it with the change that moved them." -ForegroundColor Green
+        if ($restoredFramework -eq 'net10.0') {
+            # net10.0's graph IS the shared block: nothing it needs is absent
+            # from net9.0, so what this restore resolved is exactly the
+            # intersection.
+            Set-BaseList -Packages (@($actual) | Sort-Object) -Marker 'BASE'
+            Write-Host "Rewrote the BASE block: $($actual.Count) packages shared by both target frameworks." -ForegroundColor Green
+            Write-Host "Now refresh the supplement too, or it may name packages the shared block just absorbed:" -ForegroundColor Yellow
+            Write-Host "  dotnet restore SqlTicketsConnector.sln -p:ConnectorTargetFramework=net9.0" -ForegroundColor Yellow
+            Write-Host "  pwsh build/Test-OfflinePackageList.ps1 -Configuration Base -Update" -ForegroundColor Yellow
+            return
+        }
+
+        # net9.0. The supplement is whatever this restore resolved that the
+        # shared block does not already carry.
+        $stale = @($sharedOnly | Where-Object { -not $actual.Contains($_) })
+
+        if ($stale) {
+            Write-Difference "In the shared block but not resolved by this net9.0 build:" $stale
+            throw "The shared block is not a subset of the net9.0 graph, so the supplement cannot be derived from it. net10.0's graph is supposed to be a strict subset of net9.0's; regenerate the shared block from a net10.0 restore first, then run this again."
+        }
+
+        Set-BaseList -Packages (@($actual | Where-Object { $sharedOnly -notcontains $_ }) | Sort-Object) -Marker 'NET9'
+        Write-Host "Rewrote the NET9 block: $(@($actual | Where-Object { $sharedOnly -notcontains $_ }).Count) package(s) net9.0 needs and net10.0 does not." -ForegroundColor Green
         return
     }
 
@@ -287,10 +386,17 @@ if ($Configuration -eq 'Base') {
     if ($extra) { Write-Difference "In the list but not resolved by the build:" $extra }
 
     if ($missing -or $extra) {
-        throw "build/Get-OfflinePackages.ps1 no longer matches the base restore graph ($($actual.Count) packages resolved, $($expectedBase.Count) listed). Regenerate it in this same change: pwsh build/Test-OfflinePackageList.ps1 -Configuration Base -Update"
+        throw "build/Get-OfflinePackages.ps1 no longer matches the $restoredFramework restore graph ($($actual.Count) packages resolved, $($expectedBase.Count) listed for this target). Regenerate it in this same change: pwsh build/Test-OfflinePackageList.ps1 -Configuration Base -Update"
     }
 
-    Write-Host "Base package list matches the restore graph: $($actual.Count) packages." -ForegroundColor Green
+    $note = if ($restoredFramework -eq 'net10.0') {
+        'shared'
+    }
+    else {
+        "$($sharedOnly.Count) shared + $($net9Only.Count) net9.0 only"
+    }
+
+    Write-Host "Base package list matches the $restoredFramework restore graph: $($actual.Count) packages ($note)." -ForegroundColor Green
     return
 }
 
