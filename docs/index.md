@@ -38,6 +38,7 @@ documentation that ships with it.
 | [Runbook](RUNBOOK.md) | Scheduling, certificate rotation, the ACL staleness bound, and what each exit code means |
 | [**Disaster recovery**](DISASTER-RECOVERY.md) | What is actually lost per table and the RPO that supports, why the recovery objective here is a *security* number rather than an availability one, rebuilding on a replacement host, re-provisioning the Entra credential that no backup contains — and the record of the restore rehearsal |
 | [**Upgrade and rollback**](UPGRADE-RUNBOOK.md) | v1.4 → v1.5 script by script, how to back out, and the additive-only rule that makes rollback possible — including the one migration that currently breaks it |
+| [**Alerting**](ALERTING.md) | Why a dead connector is a security incident rather than an outage, the watch that detects it, and the paging matrix — which conditions wake somebody at 03:00, which wait for morning, which are dashboard-only, and which nothing on the host can detect at all |
 
 ## Reviewing
 
