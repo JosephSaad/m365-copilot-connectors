@@ -59,6 +59,7 @@ if (-not (Test-Path (Join-Path $RepositoryRoot 'SqlTicketsConnector.sln'))) {
     throw "SqlTicketsConnector.sln not found under '$RepositoryRoot'. Pass -RepositoryRoot."
 }
 
+$script:RepositoryRootPath = $RepositoryRoot
 $solution = Join-Path $RepositoryRoot 'SqlTicketsConnector.sln'
 $results = New-Object System.Collections.Generic.List[object]
 
@@ -84,9 +85,20 @@ function Test-Tool([string]$name) {
 # PowerShell 5.1 turns a populated stderr into a terminating error under
 # $ErrorActionPreference = 'Stop'. The exit code is the verdict, so stderr is
 # merged into the captured output and read only when the exit code says to.
+#
+# RUNS IN THE REPOSITORY, not wherever the caller happened to be standing. Both
+# gitleaks and pre-commit take their target from the current directory, so
+# without this the script reported on one tree while its header named another -
+# which it did, silently, the first time it was pointed at a second clone.
 function Invoke-Native([string]$exe, [string[]]$exeArgs) {
-    $output = & $exe @exeArgs 2>&1 | Out-String
-    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+    Push-Location $script:RepositoryRootPath
+    try {
+        $output = & $exe @exeArgs 2>&1 | Out-String
+        return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 Write-Host ""
@@ -132,11 +144,30 @@ Write-Host "== Repository history ==" -ForegroundColor Cyan
 if (Test-Tool 'gitleaks') {
     $leaks = Invoke-Native 'gitleaks' @(
         'detect', '--config', (Join-Path $RepositoryRoot '.gitleaks.toml'), '--redact', '--no-banner')
+    # gitleaks exits 1 for findings and something else when it could not run.
+    # THOSE ARE NOT THE SAME RESULT and this script used to report both as FAIL,
+    # which is the mirror of the SKIPPED-is-not-a-pass rule it is built on: a
+    # tool that crashed has produced no evidence either way, and calling that a
+    # failed control sends somebody hunting for a leak that was never reported.
+    #
+    # It mattered immediately. A negative lookahead in .gitleaks.toml made every
+    # version of gitleaks panic on the config, so the scan had never run once -
+    # and this script called that "a finding is present".
     if ($leaks.ExitCode -eq 0) {
         Add-Result 'gitleaks history scan' 'PASS' 'no secret in any commit'
     }
-    else {
+    elseif ($leaks.ExitCode -eq 1) {
         Add-Result 'gitleaks history scan' 'FAIL' 'a finding is present - output is redacted by design'
+    }
+    else {
+        $why = if ($leaks.Output -match 'panic|invalid perl operator|error parsing regexp') {
+            '.gitleaks.toml did not compile - gitleaks uses RE2, which has no lookaround'
+        }
+        else {
+            "gitleaks exited $($leaks.ExitCode) without scanning"
+        }
+
+        Add-Result 'gitleaks history scan' 'SKIPPED' $why
     }
 }
 else {

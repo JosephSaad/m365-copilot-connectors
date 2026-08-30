@@ -22,28 +22,53 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
+      # RedactionCanaryTests holds a fourteen-character fragment of a PEM body
+      # inside an assertion that LogScrubber removes it. It is the test that
+      # proves key material never reaches a sink, so a hook flagging it has
+      # found the control rather than a defect. Excluded by name, not by
+      # directory, so a real key committed anywhere else in tests still fails.
       - id: detect-private-key
+        exclude: '^tests/SqlTicketsConnector\.Tests/RedactionCanaryTests\.cs$'
       - id: check-added-large-files
         args: ["--maxkb=2048"]
+      # The two formatting hooks skip src/SqlTicketsConnector/Contracts. Those
+      # .proto files are Microsoft's, copied in verbatim and carrying their
+      # copyright header, and several have tabs on otherwise-blank lines. Left
+      # unexcluded these hooks rewrite 514 lines across five contract files -
+      # cosmetically correct, and wrong: the tree would then differ from
+      # upstream, and the next refresh from the SDK would reintroduce the
+      # whitespace and rewrite them again. Vendored code is not ours to reformat.
+      #
+      # Nothing else is excluded. This was found the first time the hooks were
+      # ever run over the whole tree, which is to say the first time anybody
+      # installed them - they live in .git/hooks, so a fresh clone has none.
       - id: end-of-file-fixer
+        exclude: '^src/SqlTicketsConnector/Contracts/'
       - id: trailing-whitespace
+        exclude: '^src/SqlTicketsConnector/Contracts/'
 
   - repo: local
     hooks:
       # Certificate material never belongs in the repository. The connector loads
       # certificates from the Windows certificate store and nowhere else.
+      # NO SHELL. This was `bash -c '...'`, and pre-commit reported
+      # "Executable `bash` not found" on the Windows machine this connector is
+      # built and deployed on - so the hook that refuses committed key material
+      # has never once run here. Git Bash exists, but not on the PATH pre-commit
+      # sees, and a hook that depends on that is a hook that silently does
+      # nothing on the only platform that matters.
+      #
+      # `language: fail` needs no interpreter at all: pre-commit matches the
+      # files itself and prints `entry` as the reason. Fewer moving parts than
+      # the pipeline it replaces, and it does the same job on any host.
       - id: no-certificate-files
         name: reject committed certificate or key files
         entry: >-
-          bash -c 'files=$(git diff --cached --name-only --diff-filter=A |
-          grep -Ei "\.(pfx|p12|pem|key|cer|crt)$" || true);
-          if [ -n "$files" ]; then
-            echo "Refusing to commit certificate or key material:"; echo "$files";
-            echo "Install certificates into the Windows certificate store instead. See docs/SECURITY.md.";
-            exit 1;
-          fi'
-        language: system
-        pass_filenames: false
+          Certificate or key material must never be committed. The connector
+          loads certificates from the Windows certificate store and nowhere
+          else - see docs/SECURITY.md.
+        language: fail
+        files: '(?i)\.(pfx|p12|pem|key|cer|crt)$'
 
       # The same rule the build enforces, run before the commit rather than after.
       - id: appsettings-secret-scan

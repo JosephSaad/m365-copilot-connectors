@@ -34,13 +34,34 @@ tags = ["sql", "tls", "policy"]
 [[rules]]
 id = "pfx-or-key-material"
 description = "Certificate or key material committed to the repository"
-regex = '''(?i)(-----BEGIN (RSA |EC |ENCRYPTED )?PRIVATE KEY-----|\.pfx\b|\.p12\b)'''
+# CONTENT ONLY, no file extensions. This used to also match `\.pfx\b|\.p12\b`,
+# which finds the STRING ".pfx" wherever it appears - and the places it appears
+# in this repository are .gitignore's own `*.pfx` rule, Build.ps1's
+# forbidden-extension check, and the documentation explaining why certificates
+# are never committed. The rule was alarming on the three controls that exist to
+# prevent the thing it is looking for.
+#
+# Filenames are somebody else's job and already covered: .gitignore blocks the
+# extensions, the no-certificate-files pre-commit hook rejects them by name, and
+# Build.ps1 fails a package containing one. gitleaks reads content, so it looks
+# for the one thing that is unambiguously key material wherever it appears.
+regex = '''(?i)-----BEGIN (RSA |EC |ENCRYPTED )?PRIVATE KEY-----'''
 tags = ["certificate", "private-key"]
 
 [[rules]]
 id = "appsettings-inline-secret"
 description = "Secret shaped configuration key with a value"
-regex = '''(?i)"[^"]*(password|secret|pwd|apikey|api_key|connectionstring)[^"]*"\s*:\s*"(?!\s*")[^"]{1,200}"'''
+# NO LOOKAHEAD. This read `"(?!\s*")[^"]{1,200}"` to mean "the value is not
+# empty", which is correct PCRE and impossible in RE2 - the engine gitleaks
+# uses. gitleaks does not skip a rule it cannot compile; it panics on the
+# config, so this one expression stopped EVERY rule in this file from ever
+# running. The secret scan has been a control on paper since it was written,
+# passing because it never executed.
+#
+# The RE2 spelling of the same intent: allow leading whitespace, then require
+# at least one character that is neither a quote nor whitespace, which is what
+# makes "" and "   " not match while a real value does.
+regex = '''(?i)"[^"]*(password|secret|pwd|apikey|api_key|connectionstring)[^"]*"\s*:\s*"\s*[^"\s][^"]{0,199}"'''
 path = '''(?i)appsettings.*\.json$'''
 tags = ["configuration"]
 
@@ -59,9 +80,31 @@ tags = ["entra", "oauth"]
 [allowlist]
 description = "Documented references that are not secrets"
 
+# The regexes below are written against the whole LINE - they name a key and the
+# shape of its value - and gitleaks matches an allowlist against the captured
+# secret unless told otherwise. Without this they never match anything, and
+# every documented reference below reports as a leak. Nobody found that out
+# because the config did not compile at all until the lookahead above was
+# removed, so no allowlist in this file has ever been exercised either.
+regexTarget = "line"
+
 paths = [
   # Compiled output and restored packages.
   '''(^|/)(bin|obj|artifacts)/''',
+
+  # Three test files that hold credential-shaped strings ON PURPOSE. The
+  # redaction canaries exist to be logged and then proven absent from the sink,
+  # and a fake client secret and a fake connection string are what those tests
+  # are about. A scanner flagging them has not understood the test.
+  #
+  # STATED PLAINLY BECAUSE IT IS A REAL HOLE: a genuine secret pasted into one
+  # of these three files would not be reported. They are named individually
+  # rather than allowlisting tests/ for exactly that reason, and configuration
+  # - the place credentials actually arrive - is covered by the appsettings
+  # scan in SecretHygiene.targets, which reads JSON paths rather than lines.
+  '''^tests/SqlTicketsConnector\.Tests/RedactionCanaryTests\.cs$''',
+  '''^tests/SqlTicketsConnector\.Tests/PushLoggingRedactionTests\.cs$''',
+  '''^tests/SqlTicketsConnector\.Tests/ClientSecretAuthTests\.cs$''',
 ]
 
 regexes = [
