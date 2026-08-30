@@ -96,6 +96,17 @@ public sealed class NullCrawlStateStore : ICrawlStateStore
         => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Everything, because with no store there is nothing that could say an item
+    /// was already correct. That is the pre-v1.3 behaviour exactly: every item is
+    /// written every run.
+    /// </remarks>
+    public Task<IReadOnlySet<string>> CompareAndSeeAsync(
+        IReadOnlyCollection<CrawlItemState> candidates, CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlySet<string>>(
+            candidates.Select(candidate => candidate.ItemId).ToHashSet(StringComparer.OrdinalIgnoreCase));
+
+    /// <inheritdoc/>
     public Task ConfirmDeletesAsync(
         IReadOnlyCollection<string> itemIds, CancellationToken cancellationToken)
         => Task.CompletedTask;

@@ -80,6 +80,10 @@ namespace SqlTicketsConnector.Tests.TestSupport
         public Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken) =>
             this.inner.GetLiveItemIdsAsync(cancellationToken);
 
+        public Task<IReadOnlySet<string>> CompareAndSeeAsync(
+            IReadOnlyCollection<CrawlItemState> candidates, CancellationToken cancellationToken) =>
+            this.inner.CompareAndSeeAsync(candidates, cancellationToken);
+
         public Task ConfirmDeletesAsync(
             IReadOnlyCollection<string> itemIds, CancellationToken cancellationToken) =>
             this.inner.ConfirmDeletesAsync(itemIds, cancellationToken);

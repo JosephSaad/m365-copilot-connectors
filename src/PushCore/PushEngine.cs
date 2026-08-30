@@ -1478,20 +1478,39 @@ public sealed class PushEngine
     private async Task<IReadOnlySet<string>> ResolveUnchangedAsync(
         List<Prepared> window, CancellationToken cancellationToken)
     {
-        var unchanged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
         if (!this.store.IsEnabled || window.Count == 0)
         {
-            return unchanged;
+            return EmptyUnchanged;
         }
 
-        IReadOnlyDictionary<string, CrawlItemState> known = await this.store.GetItemStatesAsync(
-            window.Select(prepared => prepared.Mapped.Id).ToList(), cancellationToken);
+        // ONE CALL, NOT TWO PLUS ONE PER CHUNK. The store compares the hashes
+        // where the data already is and returns only what has to be written, so
+        // a steady-state window returns a handful of IDs instead of two hundred
+        // rows - and it marks the rest seen while it is there, which used to be
+        // a separate uspRecordUnchanged per write chunk.
+        //
+        // See sql/41 for why marking seen at compare time is safe: "seen"
+        // answers only "did the source still return this item", and for an
+        // unchanged item that is settled the moment its hashes match.
+        IReadOnlySet<string> toWrite = await this.store.CompareAndSeeAsync(
+            window.Select(prepared => new CrawlItemState(
+                prepared.Mapped.Id,
+                prepared.Mapped.ItemType,
+                prepared.ContentHash,
+                prepared.AclHash,
+                prepared.ContentBytes,
+                0)).ToList(),
+            cancellationToken);
+
+        // Inverted here rather than in the store, because everything downstream
+        // is written against "unchanged" and rewriting all of it to think in the
+        // opposite polarity would be a much larger change for no behavioural
+        // difference.
+        var unchanged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (Prepared prepared in window)
         {
-            if (known.TryGetValue(prepared.Mapped.Id, out CrawlItemState state) &&
-                state.Matches(prepared.ContentHash, prepared.AclHash))
+            if (!toWrite.Contains(prepared.Mapped.Id))
             {
                 unchanged.Add(prepared.Mapped.Id);
             }
@@ -1499,7 +1518,6 @@ public sealed class PushEngine
 
         return unchanged;
     }
-
     /// <summary>Cuts a resolved window into the chunks a single write carries.</summary>
     /// <param name="window">The window, already looked up.</param>
     /// <returns>Lists of at most <see cref="WriteChunkSize"/> rows, in source order.</returns>
@@ -1751,15 +1769,14 @@ public sealed class PushEngine
                 await this.store.RecordWrittenAsync(justWritten, recording);
             }
 
-            List<string> seen = stored
-                .Where(prepared => unchanged.Contains(prepared.Mapped.Id))
-                .Select(prepared => prepared.Mapped.Id)
-                .ToList();
-
-            if (seen.Count > 0)
-            {
-                await this.store.RecordUnchangedAsync(seen, recording);
-            }
+            // No RecordUnchangedAsync here any more. CompareAndSeeAsync marked
+            // every unchanged item in the window seen when it decided they were
+            // unchanged, which removed one round trip per write chunk - 5,595 of
+            // them on a full crawl of this corpus.
+            //
+            // The commit prefix above still governs what is recorded as WRITTEN,
+            // and that has not moved: a hash stored before Graph confirms the
+            // write makes the next run skip a stale item for ever.
         }
 
         foreach (Prepared prepared in chunk.Where(p => refused.Contains(p.Mapped.Id)))

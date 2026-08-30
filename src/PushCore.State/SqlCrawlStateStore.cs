@@ -498,6 +498,40 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
 
 
     /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> CompareAndSeeAsync(
+        IReadOnlyCollection<CrawlItemState> candidates,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+
+        var toWrite = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (candidates.Count == 0)
+        {
+            return toWrite;
+        }
+
+        (string id, long run) = this.RequireOpenRun(nameof(this.CompareAndSeeAsync));
+
+        await using SqlConnection sql = await this.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using SqlCommand command = Procedure(sql, "crawl.uspCompareAndSee");
+
+        command.Parameters.Add(Text("@ConnectionId", id, 64));
+        command.Parameters.Add(new SqlParameter("@RunId", SqlDbType.BigInt) { Value = run });
+        command.Parameters.Add(TableValued("@Candidates", "crawl.ItemStateList", ItemStateRows(candidates)));
+
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+        int itemIdColumn = reader.GetOrdinal("ItemId");
+
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            toWrite.Add(reader.GetString(itemIdColumn));
+        }
+
+        return toWrite;
+    }
+    /// <inheritdoc />
     public async Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken)
     {
         (string id, _) = this.RequireOpenRun(nameof(this.GetLiveItemIdsAsync));

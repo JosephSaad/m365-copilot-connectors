@@ -106,6 +106,13 @@ public interface ICrawlStateStore : IAsyncDisposable
     /// Absent means new, and new means write. That is the correct default for
     /// anything this store has never seen, and it is why the result is a
     /// dictionary of what IS known rather than one entry per requested ID.
+    ///
+    /// NO LONGER ON THE HOT PATH. The engine uses CompareAndSeeAsync, which does
+    /// the comparison in the database and returns only what has to be written
+    /// instead of a row per candidate. Reaching for this again would reinstate
+    /// the two-call-per-window shape it replaced, and the per-chunk
+    /// RecordUnchangedAsync that went with it. Kept because reading a known set
+    /// of states is a reasonable thing for a diagnostic to want.
     /// </remarks>
     Task<IReadOnlyDictionary<string, CrawlItemState>> GetItemStatesAsync(
         IReadOnlyCollection<string> itemIds,
@@ -131,6 +138,11 @@ public interface ICrawlStateStore : IAsyncDisposable
     /// skipping the mark are one line apart in the engine and produce opposite
     /// outcomes: the first is the optimisation, the second empties the corpus
     /// one run at a time, silently, starting with whatever changes least.
+    ///
+    /// NO LONGER CALLED BY THE ENGINE. CompareAndSeeAsync marks unchanged items
+    /// seen at the moment it decides they are unchanged, which removed one round
+    /// trip per write chunk. Kept as a primitive, but a caller reaching for it
+    /// on the crawl path almost certainly wants CompareAndSeeAsync instead.
     /// </remarks>
     Task RecordUnchangedAsync(
         IReadOnlyCollection<string> itemIds,
@@ -183,6 +195,30 @@ public interface ICrawlStateStore : IAsyncDisposable
     /// trying to judge whether the number is alarming.
     /// </remarks>
     Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken);
+
+    /// <summary>Decides what needs writing, and records what does not, in one call.</summary>
+    /// <param name="candidates">Every item in one lookup window, with the hashes just computed.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The IDs that must be written. Everything else has been marked seen.</returns>
+    /// <remarks>
+    /// This replaces GetItemStatesAsync plus RecordUnchangedAsync on the hot
+    /// path. The comparison happens where the data is, so the call returns only
+    /// what changed - a handful of rows on a steady corpus instead of the whole
+    /// window - and the untouched items are marked seen in the same statement.
+    ///
+    /// Marking seen here is safe because "seen" answers one question: did the
+    /// source still return this item? For an unchanged item that answer is known
+    /// the moment its hashes match and nothing later in the run can alter it. It
+    /// moves in the safe direction too - more items seen, never fewer, and only
+    /// ever items the source actually returned.
+    ///
+    /// It deliberately does NOT record writes. A hash stored before Graph has
+    /// confirmed the write makes the next run skip the item, so one failure
+    /// becomes an item that is permanently stale and permanently invisible.
+    /// </remarks>
+    Task<IReadOnlySet<string>> CompareAndSeeAsync(
+        IReadOnlyCollection<CrawlItemState> candidates,
+        CancellationToken cancellationToken);
     /// <summary>Reads where the last run got to.</summary>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>The marker, or null when there is none and a full read is required.</returns>
