@@ -35,6 +35,7 @@ documentation that ships with it.
 | [Crawl state database](CRAWL-STATE-DEPLOYMENT.md) | Standing up `ConnectorState`: the six state-database scripts in order, the two service accounts, retention, and the delete guard an operator has to know before the first refusal — plus `sql/26`, the seventh, which changes the source rather than the state |
 | [App registration](APP-REGISTRATION.md) | Entra setup, certificate auth, and the permissions each path actually needs |
 | [Runbook](RUNBOOK.md) | Scheduling, certificate rotation, the ACL staleness bound, and what each exit code means |
+| [Alerting](ALERTING.md) | Why a dead connector is a security incident rather than an outage, the watch that detects it, and the paging matrix — which conditions wake somebody at 03:00, which wait for morning, which are dashboard-only, and which nothing on the host can detect at all |
 
 ## Reviewing
 
