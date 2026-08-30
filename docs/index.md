@@ -30,6 +30,7 @@ documentation that ships with it.
 | [**What we need from the CDP team**](CDP-PILOT-PARAMETERS.md) | The parameters to collect before a pilot — what is asked, why, and a column to answer in |
 | [**What we need from the SQL team**](SQL-PILOT-PARAMETERS.md) | The same, for a SQL Server source — covering both the agent-hosted and direct-push paths |
 | [**Production onboarding**](PRODUCTION-ONBOARDING.md) | The other half of go-live readiness: who owns the connection, who is woken when a run fails, and which numbers somebody has to accept in writing — every row named and owned |
+| [**How the items actually appear**](COPILOT-SURFACING.md) | Result types, verticals and activities: what Microsoft Search renders from, what Copilot renders from instead, which half has a Graph API and which needs a Search Administrator — and why a timesheet database cannot produce activity signals |
 | [CDP connector](CDP-DEPLOYMENT.md) | HDFS documents, Hive tables and the Atlas catalogue, from a Kerberised cluster |
 | [Hierarchy connector](HIERARCHY-DEPLOYMENT.md) | The worked three-level example, flattened for a flat index |
 | [Crawl state database](CRAWL-STATE-DEPLOYMENT.md) | Standing up `ConnectorState`: the six state-database scripts in order, the two service accounts, retention, and the delete guard an operator has to know before the first refusal — plus `sql/26`, the seventh, which changes the source rather than the state |
