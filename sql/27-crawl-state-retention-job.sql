@@ -101,8 +101,7 @@ GO
 
 EXEC msdb.dbo.sp_add_job
         @job_name    = N'ConnectorState - purge crawl history',
-        @description = N'Weekly retention for the crawl state store. Runs crawl.uspPurgeHistory '
-                     + N'once per registered connection. See docs/CRAWL-STATE-DEPLOYMENT.md section 6.',
+        @description = N'Weekly retention for the crawl state store. Runs crawl.uspPurgeHistory once per registered connection. See docs/CRAWL-STATE-DEPLOYMENT.md section 6.',
         @enabled     = 1,
         @owner_login_name = N'sa';
 GO

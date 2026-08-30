@@ -481,7 +481,23 @@ if ($errors.Count -eq 0 -and $orphans.Count -eq 0 -and $missing.Count -eq 0) {
 }
 
 Write-Host ''
-if ($inventoryRead) {
+if ($inventoryRead -and $inventory.Count -eq 0) {
+    # Read successfully, and empty. That is NOT the gap being closed - it is the
+    # connector never having recorded anything for this connection, which means
+    # there is no enumeration to reconcile against and the comparison above was
+    # source-derived after all. Reporting a closed gap here would be the worst
+    # kind of wrong answer: a reassurance produced by an absence of data.
+    Note "crawl.vwItemInventory holds NO items for connection '$ConnectionId', so it closed nothing on this run."
+    Note 'That means the connector has never written to this connection with a state store configured - check'
+    Note 'Settings:StateConnectionString on the push host, and that -ConnectionId names the connection it crawls.'
+    Note 'The hard-delete gap described below is therefore still open.'
+
+    if ($softDelete) {
+        Note 'A row HARD-deleted from dbo.Tickets leaves no trace to look up, so its item cannot be found from the'
+        Note 'source alone - there is no list-items API to enumerate against.'
+    }
+}
+elseif ($inventoryRead) {
     Note 'The hard-delete gap is CLOSED for this run. crawl.vwItemInventory enumerated every item the connector has'
     Note 'written, so an item whose row was removed outright was found by its absence from the source rather than by'
     Note 'the source remembering it. The old advice - delete the connection and push again - is not needed here.'
