@@ -351,18 +351,50 @@ GO
    Same shape as dbo.vwExternalItems in sql/12, with EffectiveLastModified
    added. The connector selects from this one when Settings:Incremental is on.
 
-   ONE PERFORMANCE CAVEAT, STATED SO IT IS NOT DISCOVERED. Each branch joins a
-   sql/12 view back to its base table on a CONSTRUCTED key -
-   N'cust' + CAST(CustomerId AS NVARCHAR(32)) = v.ItemId - because those views
-   project the composed ItemId and not the numeric key it was built from. That
-   comparison is not sargable, so the join itself costs a scan per branch. The
-   incremental predicate can still seek IX_*_Effective, which is where the
-   saving actually is, so this is a constant per run rather than a cost that
-   grows with the size of the delta.
+   THE JOIN IS ON THE NUMERIC KEY. Each branch joins a sql/12 view back to its
+   base table on SourceId, which sql/12 projects for exactly this purpose: the
+   integer primary key the item's ItemId was concatenated from.
 
-   The clean fix is upstream: have the sql/12 views project their numeric key
-   alongside ItemId and join on that. That is a change to files the agent-hosted
-   path also reads, so it is deliberately not made here.
+   It used to join on the constructed string -
+   N'cust' + CAST(c.CustomerId AS NVARCHAR(32)) = v.ItemId - because the sql/12
+   views projected the composed ItemId and not the key behind it. That
+   comparison is not sargable: the plan built the string on BOTH sides with a
+   Compute Scalar and then had nothing to seek with, so each branch scanned its
+   base table whole and joined on text.
+
+   MEASURED, and the honest number rather than the flattering one. A/B on the
+   111,900-item corpus, swapping only this view's definition, at a fixed marker
+   returning 293 items, with a typed DATETIME2(3) marker and OPTION (RECOMPILE)
+   so the optimiser sees the value a sniffed parameter would:
+
+                    constructed string      SourceId
+     TimeEntries              12,069          6,994
+     Engagements               1,308            661
+     Customers                   117            117
+     ------------------------------------------------
+     base tables              13,494          7,772   (-42%)
+     Worktable               271,194        271,194   (unchanged)
+
+   The plan improves in the two upper branches outright: the customer branch is
+   now an Index Seek on IX_Customers_Effective feeding a Clustered Index Seek on
+   PK_Customers, where it was two Compute Scalars and a loop join on text, and
+   the engagement branch is a Merge Join on EngagementId where it was a Hash
+   Match on two built strings.
+
+   WHAT THIS DID NOT FIX, said plainly. The time-entry branch still hash-joins
+   the delta seek to a Clustered Index Scan of PK_TimeEntries. That is now the
+   optimiser's costing choice rather than a consequence of the predicate - the
+   join is an integer equality and could be seeked - but dbo.vwTimeEntryItems is
+   itself a three-table join, and the optimiser costs building it whole and
+   hashing more cheaply than driving 293 seeks through it. The Worktable figure,
+   which dominates both columns, is the STRING_AGG and rollup spools inside the
+   sql/12 views and has nothing to do with how this view joins.
+
+   The next lever, if that constant ever matters, is not another join: it is to
+   project EffectiveLastModified from the sql/12 views themselves, so this view
+   needs no join at all and the marker predicate lands directly on the base
+   table's index. That is a larger change to the file the agent-hosted path also
+   reads, and it is a different item from this one.
 
    The three IsDeleted filters are unchanged from sql/12 and are unrelated to
    deletion detection: the push path detects deletions by diffing its own
@@ -393,7 +425,7 @@ FROM
             v.Title, v.Content, v.CustomerName, v.EngagementName,
             v.ConsultantName, v.Hours, v.Billable, v.WorkDate, v.Url
     FROM    dbo.vwCustomerItems AS v
-    INNER JOIN dbo.Customers    AS c ON N'cust' + CAST(c.CustomerId AS NVARCHAR(32)) = v.ItemId
+    INNER JOIN dbo.Customers    AS c ON c.CustomerId = v.SourceId
 
     UNION ALL
 
@@ -403,7 +435,7 @@ FROM
             v.Title, v.Content, v.CustomerName, v.EngagementName,
             v.ConsultantName, v.Hours, v.Billable, v.WorkDate, v.Url
     FROM    dbo.vwEngagementItems AS v
-    INNER JOIN dbo.Engagements    AS e ON N'eng' + CAST(e.EngagementId AS NVARCHAR(32)) = v.ItemId
+    INNER JOIN dbo.Engagements    AS e ON e.EngagementId = v.SourceId
 
     UNION ALL
 
@@ -413,7 +445,7 @@ FROM
             v.Title, v.Content, v.CustomerName, v.EngagementName,
             v.ConsultantName, v.Hours, v.Billable, v.WorkDate, v.Url
     FROM    dbo.vwTimeEntryItems AS v
-    INNER JOIN dbo.TimeEntries   AS te ON N'time' + CAST(te.TimeEntryId AS NVARCHAR(32)) = v.ItemId
+    INNER JOIN dbo.TimeEntries   AS te ON te.TimeEntryId = v.SourceId
 ) AS unioned;
 GO
 
@@ -505,21 +537,42 @@ FROM    dbo.vwExternalItemsIncremental
 GROUP BY ItemType;
 
 -- The same counts as a verdict, because the query above cannot fail - it can
--- only be misread. Each branch of the view is an INNER JOIN onto a CONSTRUCTED
--- ItemId, so a prefix that does not match what the sql/12 views emit returns
--- NO ROWS rather than raising anything. An empty result set above and a
--- correct one differ by a glance; these differ by a word.
+-- only be misread. A GROUP BY that matches nothing prints no rows at all, and
+-- an empty result set and a correct one differ by a glance; these differ by a
+-- word.
 --
--- Expected at the shipped fixture: 12 customers, 62 engagements and 1,044 of
--- the 1,052 time entries - sql/11 soft-deletes 8 on purpose, and the IsDeleted
--- filters carried over from sql/12 remove them. Total 1,118.
-SELECT  CASE WHEN COUNT(*) = 1118
+-- The comparison is against dbo.vwExternalItems rather than against a literal
+-- count, and that is deliberate. The invariant worth checking is not a number,
+-- it is that the incremental view returns THE SAME ITEMS as the full one: a
+-- join that drops a level, duplicates one, or matches the wrong rows breaks
+-- this, while a corpus that legitimately grew does not. A literal makes the
+-- check report a failure every time the source gets bigger, and a check that
+-- cries wolf is a check nobody reads. For the record, the two known corpora
+-- are 1,118 items for the shipped sql/11 fixture - 12 customers, 62
+-- engagements and 1,044 of 1,052 time entries, eight being soft-deleted on
+-- purpose - and 111,900 for sql/14's scale load.
+--
+-- The joins in section 5 are now on SourceId, so the failure mode this
+-- paragraph used to warn about is gone in a specific way worth knowing: if
+-- sql/12 has not been re-run and the views do not project SourceId, the CREATE
+-- OR ALTER above fails outright with "Invalid column name 'SourceId'" rather
+-- than succeeding and returning nothing.
+--
+-- f.items > 0 is in the verdict on purpose. Without it, two empty views agree
+-- with each other perfectly and the check reports PASS on a source that has
+-- nothing in it.
+SELECT  CASE WHEN f.items = i.items AND f.items = m.matched AND f.items > 0
              THEN N'PASS'
-             ELSE N'FAIL - expected 1118, see the per-type counts above'
-        END                                                     AS verdict,
-        COUNT(*)                                                AS items,
-        SUM(CASE WHEN ItemType = N'Customer'   THEN 1 ELSE 0 END) AS customers,
-        SUM(CASE WHEN ItemType = N'Engagement' THEN 1 ELSE 0 END) AS engagements,
-        SUM(CASE WHEN ItemType = N'TimeEntry'  THEN 1 ELSE 0 END) AS time_entries
-FROM    dbo.vwExternalItemsIncremental;
+             ELSE N'FAIL - the incremental view and dbo.vwExternalItems do not return the same items; see the per-type counts above'
+        END                       AS verdict,
+        f.items                   AS items_in_vwExternalItems,
+        i.items                   AS items_in_vwExternalItemsIncremental,
+        m.matched                 AS itemids_in_both,
+        i.items - m.matched       AS in_incremental_only,
+        f.items - m.matched       AS in_full_only
+FROM       (SELECT COUNT(*) AS items FROM dbo.vwExternalItems)            AS f
+CROSS JOIN (SELECT COUNT(*) AS items FROM dbo.vwExternalItemsIncremental) AS i
+CROSS JOIN (SELECT COUNT(*) AS matched
+            FROM   dbo.vwExternalItems               AS a
+            INNER JOIN dbo.vwExternalItemsIncremental AS b ON b.ItemId = a.ItemId) AS m;
 GO
