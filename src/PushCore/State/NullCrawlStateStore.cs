@@ -101,6 +101,8 @@ public sealed class NullCrawlStateStore : ICrawlStateStore
     /// was already correct. That is the pre-v1.3 behaviour exactly: every item is
     /// written every run.
     /// </remarks>
+    /// <inheritdoc/>
+    public Task HeartbeatAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     public Task<IReadOnlySet<string>> CompareAndSeeAsync(
         IReadOnlyCollection<CrawlItemState> candidates, CancellationToken cancellationToken)
         => Task.FromResult<IReadOnlySet<string>>(

@@ -30,7 +30,15 @@
 -- keeps the two numbers consistent - a separate count can disagree with the
 -- page beside it when a run completes between the two calls.
 --
--- Run after sql/23, before sql/25.
+-- Run after sql/23 AND sql/40, before sql/25. The sql/40 dependency is easy to
+-- miss and is not deferred: uspGetRun below selects ItemsDuplicate from
+-- crawl.RunItemType, and sql/40 is the script that adds that column. Deferred
+-- name resolution covers a missing TABLE, not a missing COLUMN on a table that
+-- already exists, so this file fails outright with "Msg 207, Invalid column
+-- name 'ItemsDuplicate'" if sql/40 has not run - taking uspGetRun with it, and
+-- then sql/25's GRANT on uspGetRun too. On an upgrade that is invisible,
+-- because sql/40 has already run by the time this file is re-run. On a fresh
+-- deployment it stops the sequence at this script.
 -- ===========================================================================
 
 USE [ConnectorState];

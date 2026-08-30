@@ -11,6 +11,19 @@
 //   2  configuration invalid, or no connector could be selected
 //   3  credential could not be built, or was rejected
 //   4  ingestion failed partway
+//   5  another instance is already crawling this connection; nothing was done
+//
+// Five is the one code that is NOT a problem. sql/43 gives each connection a
+// heartbeat lease, and a second run arriving while the first is healthy is
+// refused - a scheduled task overrunning its interval, or the passive half of a
+// pair reaching its scheduled time. Both are the design working, and a scheduler
+// must be able to tell that from a failure or it will page somebody nightly for
+// correct behaviour.
+//
+// Note this is the opposite conclusion to the one reached for refused items,
+// which deliberately reuses 4. That case routes to the same person as any other
+// ingestion failure, so a new code would have split one audience in two. This
+// case routes to nobody, so folding it into 4 would have invented an audience.
 //
 // The log file is named after the executable, not the connector, so an existing
 // deployment's log path does not move when a second connector is added to it.
@@ -371,6 +384,19 @@ public static class PushHost
             }
 
             return 0;
+        }
+        catch (CrawlRunLockedException ex)
+        {
+            // Information, not Error, and no stack trace. This is a scheduled
+            // task doing the right thing, and a log that shouts about it teaches
+            // whoever reads it to stop reading. The message names the holding
+            // run, host and process, which is what somebody investigating "why
+            // did tonight's crawl not run" actually needs.
+            Log.Information(
+                "Skipped: {Message} Exit code 5 - this is not a failure, and the next scheduled run will try again.",
+                ex.Message);
+
+            return 5;
         }
         catch (AuthenticationFailedException ex)
         {

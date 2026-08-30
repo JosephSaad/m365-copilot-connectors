@@ -30,11 +30,16 @@ documentation that ships with it.
 | [**What we need from the CDP team**](CDP-PILOT-PARAMETERS.md) | The parameters to collect before a pilot — what is asked, why, and a column to answer in |
 | [**What we need from the SQL team**](SQL-PILOT-PARAMETERS.md) | The same, for a SQL Server source — covering both the agent-hosted and direct-push paths |
 | [**Production onboarding**](PRODUCTION-ONBOARDING.md) | The other half of go-live readiness: who owns the connection, who is woken when a run fails, and which numbers somebody has to accept in writing — every row named and owned |
+| [**How the items actually appear**](COPILOT-SURFACING.md) | Result types, verticals and activities: what Microsoft Search renders from, what Copilot renders from instead, which half has a Graph API and which needs a Search Administrator — and why a timesheet database cannot produce activity signals |
 | [CDP connector](CDP-DEPLOYMENT.md) | HDFS documents, Hive tables and the Atlas catalogue, from a Kerberised cluster |
 | [Hierarchy connector](HIERARCHY-DEPLOYMENT.md) | The worked three-level example, flattened for a flat index |
 | [Crawl state database](CRAWL-STATE-DEPLOYMENT.md) | Standing up `ConnectorState`: the six state-database scripts in order, the two service accounts, retention, and the delete guard an operator has to know before the first refusal — plus `sql/26`, the seventh, which changes the source rather than the state |
 | [App registration](APP-REGISTRATION.md) | Entra setup, certificate auth, and the permissions each path actually needs |
 | [Runbook](RUNBOOK.md) | Scheduling, certificate rotation, the ACL staleness bound, and what each exit code means |
+| [**Disaster recovery**](DISASTER-RECOVERY.md) | What is actually lost per table and the RPO that supports, why the recovery objective here is a *security* number rather than an availability one, rebuilding on a replacement host, re-provisioning the Entra credential that no backup contains — and the record of the restore rehearsal |
+| [**Upgrade and rollback**](UPGRADE-RUNBOOK.md) | v1.4 → v1.5 script by script, how to back out, and the additive-only rule that makes rollback possible — including the one migration that currently breaks it |
+| [**Alerting**](ALERTING.md) | Why a dead connector is a security incident rather than an outage, the watch that detects it, and the paging matrix — which conditions wake somebody at 03:00, which wait for morning, which are dashboard-only, and which nothing on the host can detect at all |
+| [**Scheduling**](SCHEDULING.md) | How to schedule incremental crawls and what they cost in deletion latency; several connectors on one host serialised behind one queue so their crawls cannot stack; and the weekly reconciliation, with the exit codes that page and the one that must not |
 
 ## Reviewing
 
@@ -42,6 +47,7 @@ documentation that ships with it.
 |---|---|
 | [Security control mapping](SECURITY.md) | Every control, where it is implemented, and the test that proves it |
 | [Crawl state reference](CRAWL-STATE-REFERENCE.md) | Every table, view and procedure in the state database, with columns, parameters and error numbers |
+| [**Capacity planning**](CAPACITY-PLANNING.md) | Will this still work at ten times the corpus? Graph's published ceilings and the one it does not publish, this rig's measured throughput and storage per item, what scales linearly and what has stopped, and the five queries that produce another estate's own version of these numbers |
 | [Adding a connector](ADDING-A-PUSH-CONNECTOR.md) | The source seam, and what a new source has to supply |
 
 ## Troubleshooting

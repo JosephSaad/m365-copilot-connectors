@@ -31,6 +31,33 @@
 USE [ConnectorState];
 GO
 
+-- ---------------------------------------------------------------------------
+-- A FILTERED INDEX CANNOT BE CREATED WITH QUOTED_IDENTIFIER OFF.
+--
+-- Three of the indexes below are filtered - IX_Run_Open, IX_Item_Sweep and
+-- IX_Item_NotLive - and CREATE INDEX refuses a filtered index unless this is ON
+-- in the session doing the creating:
+--
+--   Msg 1934: CREATE INDEX failed because the following SET options have
+--   incorrect settings: 'QUOTED_IDENTIFIER'.
+--
+-- sqlcmd connects with it OFF and SSMS connects with it ON, so without this
+-- line the documented command-line deployment produced a database that LOOKED
+-- complete - all eight tables, every view and procedure, and sql/30 reporting
+-- OK, because sql/30 checks modules and an index is not a module - while three
+-- of the indexes that make the two hot paths seeks were silently absent. A
+-- failed batch does not stop the ones after it, so the three Msg 1934s scroll
+-- past in the middle of a long output and the verification query at the foot of
+-- this file still prints its eight rows with the right names.
+--
+-- The same setting matters in sql/22 to sql/24 for a different reason: there it
+-- is STORED with each module and replayed at execution, whatever the caller
+-- sets. Here it is needed only while this script runs.
+-- ---------------------------------------------------------------------------
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
+
 /* ---------------------------------------------------------------------------
    1. crawl.Connection
 

@@ -94,10 +94,12 @@ state costs one full recrawl, losing `Ops` costs the business.
   inside the new database. If a DBA holds the first and you hold the second, run
   the scripts in two sittings and split them at the line below.
 
-**Run them in this order. The order is not a convention — each script assumes
-the objects the one before it created, and `sql/25` grants `EXECUTE` on
-procedures by name, so a grant on a procedure that does not exist yet fails
-rather than being deferred.**
+**Run them in this order. The order is not a convention, and two of the
+dependencies are not deferred.** Each script assumes the objects the one before
+it created. `sql/25` grants `EXECUTE` on procedures by name, so a grant on a
+procedure that does not exist yet fails rather than being deferred. And `sql/24`
+selects a column that `sql/40` adds, which is why `sql/40` runs before it — see
+below.
 
 | # | Script | Creates | Run as | Runs in |
 |---|---|---|---|---|
@@ -105,16 +107,67 @@ rather than being deferred.**
 | 2 | `sql/21-crawl-state-tables.sql` | Eight tables and their indexes | `db_owner` on `ConnectorState` | `ConnectorState` |
 | 3 | `sql/22-crawl-state-views.sql` | Six views | `db_owner` | `ConnectorState` |
 | 4 | `sql/23-crawl-state-procedures.sql` | Nineteen procedures — the write path | `db_owner` | `ConnectorState` |
-| 5 | `sql/24-crawl-state-reporting.sql` | Seven procedures — the dashboard's read path | `db_owner` | `ConnectorState` |
-| 6 | `sql/25-crawl-state-least-privilege.sql` | Two logins, two users, two roles, the grants and the denials | `securityadmin` **and** `db_owner` — see below | `master`, then `ConnectorState` |
-| 7 | `sql/28-crawl-state-hash-version.sql` | The hash-version column and the check that escalates a run | `db_owner` | `ConnectorState` |
-| 8 | `sql/29-crawl-state-partial-status.sql` | Run status 5, `partial`, and reclassifies existing rows | `db_owner` | `ConnectorState` |
-| 9 | `sql/33-crawl-state-negative-ttl.sql` | The two principal TTL columns and the clamp in `uspCachePrincipal` | `db_owner` | `ConnectorState` |
-| 10 | `sql/34-crawl-state-live-item-ids.sql` | `uspListLiveItemIds`, read-only, for the dry-run delete preview | `db_owner` | `ConnectorState` |
-| 11 | `sql/40-crawl-state-per-type-duplicates.sql` | `ItemsDuplicate`, and **recreates a table type** — see below | `db_owner` | `ConnectorState` |
+| 5 | `sql/40-crawl-state-per-type-duplicates.sql` | `ItemsDuplicate`, and **recreates a table type** — see below. **Must run before `sql/24`** | `db_owner` | `ConnectorState` |
+| 6 | `sql/24-crawl-state-reporting.sql` | Seven procedures — the dashboard's read path | `db_owner` | `ConnectorState` |
+| 7 | `sql/25-crawl-state-least-privilege.sql` | Two logins, two users, two roles, the grants and the denials | `securityadmin` **and** `db_owner` — see below | `master`, then `ConnectorState` |
+| 8 | `sql/28-crawl-state-hash-version.sql` | The hash-version column and the check that escalates a run | `db_owner` | `ConnectorState` |
+| 9 | `sql/29-crawl-state-partial-status.sql` | Run status 5, `partial`, and reclassifies existing rows | `db_owner` | `ConnectorState` |
+| 10 | `sql/33-crawl-state-negative-ttl.sql` | The two principal TTL columns and the clamp in `uspCachePrincipal` | `db_owner` | `ConnectorState` |
+| 11 | `sql/34-crawl-state-live-item-ids.sql` | `uspListLiveItemIds`, read-only, for the dry-run delete preview | `db_owner` | `ConnectorState` |
 | 12 | `sql/41-crawl-state-compare-and-see.sql` | `uspCompareAndSee`, the one-call compare | `db_owner` | `ConnectorState` |
-| 13 | `sql/30-verify-set-options.sql` | Nothing — it checks what everything above created | any reader | `ConnectorState`, and every other database holding modules |
+| 13 | `sql/43-crawl-state-run-lock.sql` | The heartbeat lease: one live crawl per connection | `db_owner` | `ConnectorState` |
+| 14 | `sql/30-verify-set-options.sql` | Nothing — it checks what everything above created | any reader | `ConnectorState`, and every other database holding modules |
+| 15 | `sql/42-verify-least-privilege.sql` | Nothing — it exercises the roles `sql/25` created | `db_owner` | `ConnectorState` |
+| 16 | `sql/44-agent-jobs-availability-group.sql` | Nothing in `ConnectorState` — it edits the two SQL Agent job steps | `SQLAgentOperatorRole` in `msdb` | **`msdb`, on every replica** |
 
+⚠️ **Step 16 is the only one that does not run against `ConnectorState`, and the
+only one that runs more than once.** SQL Agent jobs live in `msdb`, which is not
+a user database and does **not** fail over with an Availability Group. Deploy the
+jobs on the primary alone and they vanish at the first failover, silently:
+nothing runs, nothing errors, retention stops bounding the history table and the
+trigger health check stops watching the triggers. Deploy them on every replica
+without `sql/44` and every replica runs them on schedule, so a secondary — where
+`ConnectorState` is unreadable or read-only — fails its retention job nightly and
+pages whoever wired the alerting. `sql/44` prepends a primary-replica guard to
+both job steps so the jobs can be deployed everywhere and still act in one place.
+
+It is safe and pointless on a standalone instance, which is the case it was
+verified against: `sys.fn_hadr_is_primary_replica` returns `NULL` off an
+Availability Group, the guard treats only `0` as "not my turn", and the jobs run
+as before. **The secondary path has not been exercised** — that needs a two-node
+rig, and `sql/44`'s own verification block says so rather than implying it works.
+
+Skip step 16 entirely if you have no Availability Group and never will; run
+`sql/27` and `sql/32` first if you want the jobs at all, since `sql/44` edits
+them and reports plainly when they are absent.
+
+⚠️ **`sql/40` runs at step 5, before `sql/24`, and the order is not cosmetic.**
+`sql/24` creates `uspGetRun`, which projects `t.ItemsDuplicate` from
+`crawl.RunItemType` — a column `sql/21` does not create and `sql/40` adds. SQL
+Server's deferred name resolution covers a missing *table*, so a procedure may
+reference one that does not exist yet; it does **not** cover a missing *column*
+on a table that already exists. `crawl.RunItemType` exists from step 2 onwards,
+so ordering `sql/40` after `sql/24` makes the `CREATE OR ALTER PROCEDURE` fail
+outright:
+
+```
+Msg 207, Level 16, State 1, Procedure uspGetRun
+Invalid column name 'ItemsDuplicate'.
+```
+
+**And it does not stop there.** `uspGetRun` is then absent, so `sql/25`'s
+`GRANT EXECUTE` on it fails in turn with `Msg 15151`. One ordering mistake costs
+the dashboard's drill-down page and then reports itself as a permissions problem
+rather than as a schema one, which is the wrong place to start looking.
+
+This was reproduced on a scratch database rather than reasoned about, because
+"deferred name resolution does not cover columns" is exactly the kind of claim
+that is easy to have backwards. It is invisible on an **upgrade**, where the
+column already exists by the time `sql/24` is re-run, which is why the earlier
+order survived until a new environment was stood up. `sql/40` cannot move
+earlier than `sql/23` either — it `CREATE OR ALTER`s a procedure that `sql/23`
+also defines, so running it first would have `sql/23` overwrite it with the
+older body.
 **`sql/40` recreates a table type, which destroys two grants.**
 `crawl.ItemTypeCountList` cannot be altered — only dropped — and it cannot be
 dropped while `uspRecordRunItemTypes` references it, so the script drops the
@@ -123,6 +176,9 @@ procedure, drops and recreates the type, recreates the procedure, and re-grants
 to overlook, because a table type carrying a permission at all is unusual, and
 without it the push identity is refused at the *end* of every run — after the
 crawl has already done all its work. The script verifies both grants and says so.
+At step 5 that re-grant is belt and braces, because `sql/25` runs afterwards and
+issues both grants anyway. On an **upgrade**, where `sql/25` ran long ago, it is
+the only thing putting them back.
 
 **Run `sql/30` last, and run it in `Ops` too.** It is cheap, it is read-only, and
 it catches the failure mode that costs the most to diagnose: a module created
@@ -166,12 +222,15 @@ is deployed. `sql/25` is idempotent and safe to re-run after any change to the
 roles — running it is the cheapest way to prove the permission set has not
 drifted.
 
-**Every module-creating script sets `QUOTED_IDENTIFIER ON`, and `sql/30` proves
-they took.** SQL Server stores that option *with each module* as it stood in the
-session that created it, and replays the stored value on every execution
-regardless of what the caller sets. sqlcmd connects with it OFF; SSMS connects
-with it ON. So the same file produces a working procedure from a query window
-and a broken one from the command line, with identical output both times.
+**Every script that creates a module or a filtered index sets
+`QUOTED_IDENTIFIER ON`.** It matters for two different reasons, and `sql/30`
+only checks the first.
+
+*Stored with the module.* SQL Server records that option *with each module* as
+it stood in the session that created it, and replays the stored value on every
+execution regardless of what the caller sets. sqlcmd connects with it OFF; SSMS
+connects with it ON. So the same file produces a working procedure from a query
+window and a broken one from the command line, with identical output both times.
 
 It is not cosmetic. `crawl.Item` carries a filtered index, and any `UPDATE`
 against a table with one is refused when the calling module holds
@@ -181,10 +240,38 @@ time a connector starts, which may be days after the deployment that caused it,
 in an application nobody has touched. That is how this was found: a crawl that
 could not open a run, hours after a deploy that reported success.
 
-The `SET` statements at the top of `sql/12`, `sql/22`, `sql/23`, `sql/24`,
-`sql/26` and `sql/28` make the result independent of the client. Run `sql/30`
-last, in every database holding modules; it lists any offender by name and
-throws `50030` so a pipeline stops there rather than at the connector.
+*Required to create the index at all.* `sql/21` needs the option for a second
+reason: `CREATE INDEX` refuses a **filtered** index outright unless it is ON,
+and three of that file's indexes are filtered — `IX_Run_Open`, `IX_Item_Sweep`
+and `IX_Item_NotLive`. Until `sql/21` set it, the command-line path produced a
+database that *looked* complete — eight tables, every view and procedure, and
+`sql/30` reporting OK — with those three indexes silently absent. Nothing
+caught it: a failed batch does not stop the batches after it, so the three
+`Msg 1934`s scrolled past mid-output, `sql/21`'s own verification still printed
+its eight table names, and `sql/30` checks modules, not indexes.
+
+⚠️ **Any environment deployed from the command line before this fix is missing
+those three indexes**, and it is the delete sweep and the open-run lookup that
+pay for it. Counting them is the check, and it is read-only:
+
+```sql
+SELECT i.name, i.has_filter
+FROM        sys.indexes AS i
+INNER JOIN  sys.objects AS o ON o.object_id = i.object_id
+INNER JOIN  sys.schemas AS s ON s.schema_id = o.schema_id
+WHERE       s.name = N'crawl' AND i.type = 2
+ORDER BY    i.name;
+```
+
+Six rows, three with `has_filter = 1`. Anything less means re-running `sql/21`,
+which is guarded object by object and will add only what is missing.
+
+The `SET` statements at the top of `sql/12`, `sql/21` to `sql/24`, `sql/26`,
+`sql/28`, `sql/29`, `sql/31`, `sql/33` to `sql/35` and `sql/40` to `sql/42` make
+the result independent of the client. Run `sql/30` last, in every database
+holding modules; it lists any offender by name and throws `50030` so a pipeline
+stops there rather than at the connector.
+
 **One thing to watch when re-running `sql/20`.** The `CREATE DATABASE` is
 guarded, but the three `ALTER DATABASE` statements after it are not, and the
 read-committed-snapshot one carries `WITH ROLLBACK IMMEDIATE`. Against a live
