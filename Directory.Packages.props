@@ -1,0 +1,219 @@
+<!--
+  Every package version this repository resolves, decided in one file.
+
+  Imported automatically by every project in this tree, the way
+  Directory.Build.props is, and it exists for the same class of reason: a
+  version written in more than one project file is a version that can disagree
+  with itself, and the disagreement is never visible in the file you are
+  reading. Eleven project files each naming Microsoft.Data.SqlClient is eleven
+  chances to bump ten of them.
+
+  This is not a hypothetical. CI's -warnaserror gate records having caught
+  "NuGet downgrade conflicts across the three projects", and
+  ConnectorState.Dashboard carries a long comment explaining why it pins two
+  Azure packages it never calls - it had settled on Azure.Identity's own floor
+  of 1.11.4 while the rest of the solution carried 1.21.0. Both are the same
+  failure: one package at two versions because two project files each made
+  their own decision, and neither file could see the other.
+
+  WHAT THIS FILE CHANGES ABOUT WRITING A PROJECT FILE.
+
+  A PackageReference here carries Include and its metadata and no Version. A
+  Version attribute on a PackageReference is now NU1008, an error, so the split
+  this file removes cannot be reintroduced by hand without the build saying so.
+  CentralPackageVersionOverrideEnabled is false below, which closes the other
+  door: VersionOverride would let a single project opt out silently, which is
+  precisely the arrangement being removed.
+
+  WHY TRANSITIVE PINNING IS ON.
+
+  Most of the version skew in this solution was never written down anywhere.
+  Nothing referenced Microsoft.IdentityModel.Tokens; it arrived under
+  Microsoft.Data.SqlClient in one project and under Microsoft.Graph in another,
+  at different versions, and the only place the split was visible at all was the
+  offline package set - see the identity block at the bottom of this file.
+  CentralPackageTransitivePinningEnabled makes every PackageVersion below a
+  floor for transitive arrivals too, so a package named here resolves to one
+  version across the whole solution or the restore fails.
+
+  It is a floor and never a ceiling: if some dependency requires a HIGHER
+  version than the one named here, NuGet reports NU1605 rather than quietly
+  downgrading it. That failure means "raise the entry", not "remove the pin".
+
+  WHAT IT COSTS TO GET WRONG. build/Get-OfflinePackages.ps1 is a transcript of
+  the resolved graph, checked against it in CI by build/Test-OfflinePackageList.ps1.
+  Every id resolving at two versions is two entries in that list, two nupkgs on
+  the air-gapped build machine, and two advisory trails to follow the next time
+  one of them is named in a CVE. Adding a package here is therefore a decision
+  about that list as much as about a build, and the list is regenerated in the
+  same change:
+
+      dotnet restore SqlTicketsConnector.sln
+      pwsh build/Test-OfflinePackageList.ps1 -Configuration Base -Update
+
+  on Windows - a different RID resolves a different graph.
+
+  ONE MORE PLACE THIS FILE HAS TO REACH. The release package carries a buildable
+  copy of the tree under source\, and Build.ps1 stages it by copying every file
+  that is not under bin\, obj\ or the other excluded folders - so this file
+  travels with it, and a package built today restores and builds from source\
+  exactly as a clone does. Removing it from that copy does not degrade
+  gracefully: restore stops with NU1015 naming every project and every package
+  reference in it. Build.ps1 asserts that Directory.Build.props reached the
+  staged tree, for the same reason; this file now belongs on that list too.
+-->
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+    <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
+  </PropertyGroup>
+
+  <!-- The connector contract, and the gRPC stack that carries it. -->
+  <ItemGroup>
+    <!--
+      Google.Protobuf tracks the code generator, not the newest release.
+      Grpc.Tools 2.40.0 emits code against the 3.18.0 runtime, and that pairing
+      is what the checked-in Contracts/ stubs are built from.
+
+      Serilog.Sinks.OpenTelemetry requires 3.26.1 or later, so with the exporter
+      enabled the two constraints cannot both hold at 3.18.0 and restore fails
+      with NU1605. Enabling the exporter therefore raises the protobuf runtime
+      to the current 3.x. That is safe in this direction: the C# runtime is
+      backward compatible with older generated code, and the generator itself is
+      unchanged, so the contract types are byte-identical either way.
+
+      The decision is made here rather than in SqlTicketsConnector.csproj
+      because SqlTicketsConnector is not the only project with Google.Protobuf
+      in its graph - the test project reaches it through a ProjectReference -
+      and with transitive pinning on, a version chosen in one project file and
+      not the other is a downgrade error rather than a disagreement. Both halves
+      move together because -p:EnableOtlpExporter=true is a global property and
+      is therefore visible here.
+
+      CI builds the solution in both configurations so neither can rot.
+    -->
+    <PackageVersion Include="Google.Protobuf" Version="3.18.0" Condition="'$(EnableOtlpExporter)' != 'true'" />
+    <PackageVersion Include="Google.Protobuf" Version="3.35.1" Condition="'$(EnableOtlpExporter)' == 'true'" />
+    <PackageVersion Include="Grpc.Core" Version="2.40.0" />
+    <PackageVersion Include="Grpc.Tools" Version="2.40.0" />
+  </ItemGroup>
+
+  <!-- Identity, secrets and the Graph SDK. -->
+  <ItemGroup>
+    <PackageVersion Include="Azure.Core" Version="1.54.0" />
+    <PackageVersion Include="Azure.Identity" Version="1.21.0" />
+    <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.11.0" />
+    <PackageVersion Include="Microsoft.Graph" Version="5.105.0" />
+
+    <!--
+      An advisory floor rather than a feature: GHSA-7j59-v9qr-6fq9 /
+      CVE-2026-44503 (High) in the Kiota RedirectHandler, fixed in 1.22.0, while
+      Microsoft.Graph 5.105.0 still asks for 1.21.1. Remove it once the Graph SDK
+      catches up.
+    -->
+    <PackageVersion Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
+  </ItemGroup>
+
+  <!-- Data access. -->
+  <ItemGroup>
+    <!--
+      One version, everywhere, and it is not a preference. Two SqlClients in one
+      output directory is a load conflict rather than a merge, and two in one
+      estate is two advisory trails to follow. Five project files named this
+      package before this file existed.
+    -->
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+
+    <!--
+      Cloudera's Hive and Impala drivers are ODBC drivers and there is no
+      maintained .NET client for HiveServer2's Kerberos SASL transport, so this
+      is the supported path rather than a convenience. The driver itself is an
+      operator-installed MSI under Cloudera's own licence and is never bundled.
+    -->
+    <PackageVersion Include="System.Data.Odbc" Version="9.0.0" />
+  </ItemGroup>
+
+  <!-- Logging. -->
+  <ItemGroup>
+    <PackageVersion Include="Serilog" Version="4.4.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageVersion Include="Serilog.Sinks.EventLog" Version="4.0.0" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
+
+    <!-- Only referenced under -p:EnableOtlpExporter=true; see the note above. -->
+    <PackageVersion Include="Serilog.Sinks.OpenTelemetry" Version="4.1.1" />
+  </ItemGroup>
+
+  <!--
+    Only referenced under -p:EnablePdfExtraction=true. PDF is the one common
+    format with no answer in the base class library, and adding a parser is a
+    dependency decision rather than a coding one: PdfPig is Apache-2.0, which
+    this repository can redistribute, and the copyleft and per-seat commercial
+    extractors cannot be. Regenerate the offline list in the same change that
+    turns it on.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="PdfPig" Version="0.1.11" />
+  </ItemGroup>
+
+  <!-- Test. -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+  </ItemGroup>
+
+  <!--
+    ===========================================================================
+    The identity libraries, which nothing in this repository references.
+
+    They are here because they were the largest split in the solution, and it
+    was a split no project file admitted to. Read from the restore graph before
+    this block existed:
+
+        Microsoft.Data.SqlClient 5.2.2  ->  Microsoft.IdentityModel.JsonWebTokens 6.35.0
+                                            Microsoft.IdentityModel.Protocols.OpenIdConnect 6.35.0
+        Microsoft.Graph.Core 3.2.5      ->  Microsoft.IdentityModel.Protocols.OpenIdConnect 8.15.0
+        Microsoft.Identity.Client 4.83.1 -> Microsoft.IdentityModel.Abstractions 8.14.0
+
+    Every project carries SqlClient or Azure.Identity, so every project had the
+    6.x line in its graph. The projects that also carry the Graph SDK -
+    PushCore and everything above it - had it lifted to 8.15.0 by Graph.Core;
+    the three that do not - Connector.Security, ConnectorState.Dashboard and
+    SqlTicketsConnector, the agent-hosted connector that must never gain a Graph
+    dependency - settled on SqlClient's floor and stayed at 6.35.0.
+
+    The result was seven ids resolved at two versions each, carried twice in the
+    offline package set: Abstractions (8.14.0 and 8.15.0), and JsonWebTokens,
+    Logging, Protocols, Protocols.OpenIdConnect, Tokens and
+    System.IdentityModel.Tokens.Jwt (6.35.0 and 8.15.0). Microsoft.IdentityModel.Validators
+    8.6.1 rides along on the Graph half as an eighth member of the family, at
+    one version, and is deliberately left where Graph.Core puts it.
+
+    RAISING RATHER THAN LOWERING, and the reason it is not a gamble: the
+    combination being asked for here already ships. PushCore.Sql, PushCore.State,
+    SqlGraphPush and SqlHierarchyPush each reference Microsoft.Data.SqlClient
+    5.2.2 directly and each already resolved this family at 8.15.0, because
+    Graph.Core lifted them. SqlClient's 6.35.0 is a floor it states, not a
+    ceiling it enforces, and the halves of this solution that run against 8.15.0
+    are the halves that talk to a database.
+
+    Pinning here rather than adding PackageReference lines to three project
+    files is the point of the file: nothing in those projects calls this code,
+    and a direct reference to a package a project does not use is a claim that
+    goes stale the moment the reason for it does.
+    ===========================================================================
+  -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.IdentityModel.Abstractions" Version="8.15.0" />
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.15.0" />
+    <PackageVersion Include="Microsoft.IdentityModel.Logging" Version="8.15.0" />
+    <PackageVersion Include="Microsoft.IdentityModel.Protocols" Version="8.15.0" />
+    <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.15.0" />
+    <PackageVersion Include="Microsoft.IdentityModel.Tokens" Version="8.15.0" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.15.0" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,200 @@
+# ===========================================================================
+# Retire superseded releases. Keep every tag.
+#
+# The release sequence this repository runs is four steps, and only the last of
+# them was ever done by hand in a browser:
+#
+#   1. Push vX.Y.Z on main and vX.Y.Z-net9 on release/net9. Both lines are
+#      released together and carry the same version.
+#   2. build.yml builds each tag and creates a DRAFT release with the
+#      deployment package and the offline package set attached.
+#   3. A person publishes the two drafts.
+#   4. A person deletes the releases that the new one supersedes. The policy is
+#      recorded in docs/GENESIS-PROMPT.md section 11, and it is exact: "When
+#      retiring old releases, delete the releases and keep the tags."
+#
+# This workflow is step 4, and nothing else. It does not tag, it does not
+# build, it does not publish, and it never touches a tag.
+#
+# WHY TAGS SURVIVE AND RELEASES DO NOT. A release is a page with binaries on
+# it; the tag is the commit those binaries were built from. Deleting the tag
+# would break every `git checkout vX.Y.Z` and orphan the history a support
+# question is answered from, for the sake of tidying a downloads page. That is
+# why `gh release delete` is called below WITHOUT --cleanup-tag: the absence of
+# that flag is the whole rule, so do not add it, and do not "simplify" the call
+# by letting it delete the tag as well.
+#
+# WHY IT DOES NOT DELETE ON ITS OWN WHEN A RELEASE IS PUBLISHED. build.yml
+# creates a draft deliberately, "so a person still decides what ships, and so
+# the run is not the thing that publishes". Deleting the previous release
+# unattended puts the same decision back in the runner's hands pointing the
+# other way, and a deleted release cannot be restored - the assets are gone,
+# and any link anyone has to them is dead. So the publish event reports and the
+# dispatch deletes: on `release: published` this run only lists what is now
+# eligible, and retirement happens when a person asks for it with
+# dry_run: false.
+#
+# THE ORDERING LANDMINE. Versions are compared with `sort -V`, not lexically.
+# This repository already contains the case that proves it matters: v1.2.9 and
+# v1.2.10. Sorted as text, v1.2.9 is the greater of the two, and a retention
+# rule built on that would delete v1.2.10 - the newer release - and keep the
+# older one. `sort -V` compares the digit runs as numbers and gets it right.
+#
+# THE RETENTION UNIT IS A VERSION, NOT A RELEASE. Two releases carry each
+# version: vX.Y.Z for net10.0 and vX.Y.Z-net9 for the Visual Studio 2022 line.
+# README.md points at "the latest -net9 release" as a live query rather than a
+# fixed version, so retiring one half of a pair and not the other leaves that
+# link resolving to a release built from a different commit than its partner.
+# The two are retired together or not at all.
+# ===========================================================================
+
+name: release-retire
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: "How many versions to keep, newest first. Both release lines of a kept version are kept."
+        required: false
+        default: "1"
+      dry_run:
+        description: "Report only. Set to false to actually delete the superseded releases."
+        required: false
+        default: "true"
+
+permissions:
+  contents: write
+
+# One at a time. Publishing the two halves of a version fires this twice within
+# seconds, and two runs listing releases while a third deletes them is how a
+# retention rule ends up acting on a list that was already wrong when it read it.
+concurrency:
+  group: release-retire
+  cancel-in-progress: false
+
+jobs:
+  retire:
+    name: Retire superseded releases
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Work out what is superseded, and retire it if asked
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # A publish event never deletes; see the header. Only an explicit
+          # dispatch with dry_run: false does.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'true' }}
+          KEEP: ${{ github.event_name == 'workflow_dispatch' && inputs.keep || '1' }}
+          TRIGGERING_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          case "$KEEP" in
+            ''|*[!0-9]*) echo "keep must be a whole number, not '$KEEP'." >&2; exit 1 ;;
+          esac
+          if [ "$KEEP" -lt 1 ]; then
+            echo "keep must be at least 1. Retiring every release is not a retention rule." >&2
+            exit 1
+          fi
+
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 \
+            --json tagName,isDraft > releases.json
+
+          # Drafts are excluded, and not as a nicety. build.yml creates a draft
+          # and attaches the package to it; a run that deleted drafts would
+          # delete the release currently being prepared, which is the one piece
+          # of work here that nobody has a copy of.
+          jq -r '.[] | select(.isDraft | not) | .tagName' releases.json | sort > published.txt
+
+          if [ ! -s published.txt ]; then
+            echo "No published releases. Nothing to retire." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Strip the release-line suffix to get the version, then order the
+          # versions newest first. See the note about sort -V in the header.
+          sed -E 's/-net9$//' published.txt | sort -u | sort -Vr > versions.txt
+
+          head -n "$KEEP" versions.txt > kept.txt
+          tail -n +"$((KEEP + 1))" versions.txt > superseded.txt
+
+          : > retire-tags.txt
+          while read -r version; do
+            [ -n "$version" ] || continue
+            grep -Fx -e "$version" -e "${version}-net9" published.txt >> retire-tags.txt || true
+          done < superseded.txt
+
+          # Belt and braces. The version ordering above should already have
+          # kept the release that fired this run, and if it has not then the
+          # ordering is wrong and deleting anything on the strength of it would
+          # be the expensive way to find that out.
+          if [ -n "${TRIGGERING_TAG:-}" ] && grep -Fxq "$TRIGGERING_TAG" retire-tags.txt; then
+            echo "Refusing to continue: the release just published ($TRIGGERING_TAG) came out as superseded." >&2
+            echo "That is an ordering fault, not a retention decision." >&2
+            exit 1
+          fi
+
+          {
+            echo "## Release retirement"
+            echo
+            echo "Keeping the newest **$KEEP** version(s):"
+            echo
+            sed 's/^/- /' kept.txt
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ ! -s retire-tags.txt ]; then
+            echo "Nothing is superseded. No release to retire." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "Superseded releases ($(wc -l < retire-tags.txt)); every tag below is kept either way:"
+            echo
+            sed 's/^/- /' retire-tags.txt
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$DRY_RUN" != "false" ]; then
+            {
+              echo "**Reported only. Nothing was deleted.**"
+              echo
+              echo "Run this workflow from the Actions tab with \`dry_run: false\` to retire them."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "Dry run. Nothing deleted."
+            exit 0
+          fi
+
+          while read -r tag; do
+            [ -n "$tag" ] || continue
+            # No --cleanup-tag. The release page goes; the tag stays. See the
+            # header - this is the one flag whose absence is the policy.
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes
+            echo "Deleted the release $tag. The tag $tag is untouched."
+          done < retire-tags.txt
+
+          {
+            echo "**Deleted $(wc -l < retire-tags.txt) release(s). Every tag is still present.**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Proving the claim rather than asserting it: a tag that went missing
+          # here is a broken checkout for everyone, so it is checked rather than
+          # trusted to a flag not being passed.
+          git ls-remote --tags "https://github.com/${GITHUB_REPOSITORY}.git" > remote-tags.txt
+          missing=0
+          while read -r tag; do
+            [ -n "$tag" ] || continue
+            if ! grep -q "refs/tags/${tag}\$" remote-tags.txt; then
+              echo "The tag $tag is gone from the remote. It should not be." >&2
+              missing=$((missing + 1))
+            fi
+          done < retire-tags.txt
+
+          if [ "$missing" -ne 0 ]; then
+            echo "$missing tag(s) were removed along with their releases. That is a defect in this workflow." >&2
+            exit 1
+          fi
+
+          echo "All $(wc -l < retire-tags.txt) tag(s) confirmed still present on the remote."

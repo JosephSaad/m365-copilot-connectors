@@ -30,8 +30,8 @@
     nothing. The one thing it shares with the connector is the SQL schema, and
     that is shared as SQL rather than as code.
 
-    Microsoft.Data.SqlClient is pinned to the version PushCore.Sql and
-    Connector.Security pin. Two SqlClient versions in one estate is two advisory
+    Microsoft.Data.SqlClient is at the version Directory.Packages.props decides
+    for the whole solution. Two SqlClient versions in one estate is two advisory
     trails to follow; build/Get-OfflinePackages.ps1 restores this graph offline
     and a floating version breaks that.
   -->
@@ -50,36 +50,29 @@
     file copy plus an app pool recycle.
   -->
 
+  <!--
+    Azure.Identity and Azure.Core used to be listed here too, as PackageReference
+    lines to packages this project never calls.
+
+    They had to be. SqlClient depends on Azure.Identity for its AAD
+    authentication modes; this project uses none of them - it connects with
+    Integrated Security - but the package is in the restore graph regardless, and
+    left alone NuGet resolved SqlClient's own floor of 1.11.4 here while every
+    other project in the solution carried 1.21.0. Azure.Core split the same way
+    one level down: 1.54.0 everywhere else because
+    Azure.Security.KeyVault.Secrets 4.11.0 requires it, and Azure.Identity's
+    floor of 1.53.0 here, in the one project with no vault. Two versions of one
+    identity library across a solution is what the offline restore set then has
+    to carry twice, and what CI's package guard exists to catch.
+
+    Directory.Packages.props does that job now, for transitive arrivals as well
+    as direct ones, so the workaround is gone rather than merely moved. If a
+    future change reintroduces the split it will show up as two versions in
+    build/Get-OfflinePackages.ps1 and fail the guard - which is where it was
+    always visible, and now the only place it needs to be.
+  -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
-
-    <!--
-      Not used by this project directly, and pinned anyway.
-
-      SqlClient depends on Azure.Identity for its AAD authentication modes. This
-      project uses none of them - it connects with Integrated Security - but the
-      package is in the restore graph regardless, and without this line NuGet
-      resolves SqlClient's own floor of 1.11.4 while every other project in the
-      solution carries 1.21.0. Two versions of the same identity library in one
-      solution is the situation PushCore.Sql's comment about two SqlClients
-      describes: a load conflict rather than a merge, and eight extra transitive
-      packages that the offline restore set then has to carry at versions
-      nothing else uses.
-
-      Azure.Core is pinned for the same reason one level down. Every other
-      project resolves 1.54.0 because Azure.Security.KeyVault.Secrets 4.11.0
-      requires it; this project has no vault and would otherwise settle on
-      Azure.Identity's floor of 1.53.0. One package at two versions across a
-      solution is what the offline restore set has to carry twice, and what CI's
-      package guard exists to catch.
-
-      Same versions as PushCore and Connector.Security. Move all of them
-      together, and re-run the guard: pwsh build/Test-OfflinePackageList.ps1
-      -Configuration Base -Update, on Windows - a different RID resolves a
-      different graph.
-    -->
-    <PackageReference Include="Azure.Identity" Version="1.21.0" />
-    <PackageReference Include="Azure.Core" Version="1.54.0" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
   </ItemGroup>
 
   <!--

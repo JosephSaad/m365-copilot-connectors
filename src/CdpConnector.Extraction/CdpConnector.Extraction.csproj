@@ -35,7 +35,7 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(EnablePdfExtraction)' == 'true'">
-    <PackageReference Include="PdfPig" Version="0.1.11" />
+    <PackageReference Include="PdfPig" />
   </ItemGroup>
 
   <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />

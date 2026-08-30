@@ -8,9 +8,11 @@
     isolated build machine, and restore from it with --source. The list is
     grouped into three sets, because you probably do not need all three:
 
-      Base (68 packages, about 119 MB)
+      Base (74 packages, about 119 MB)
           Everything 'dotnet build' and 'dotnet test' of the solution need,
-          across all four projects. Always downloaded.
+          across every project. Always downloaded. The count is what the list
+          below actually holds; the size is an older measurement and has not
+          been re-taken since.
 
       Runtime packs (4 packages, about 93 MB)
           Only for 'Build.ps1 -SelfContained', which is how the release package
@@ -99,17 +101,11 @@ $packages = @(
     @{ Id = 'Microsoft.Graph.Core'; Version = '3.2.5' }
     @{ Id = 'Microsoft.Identity.Client'; Version = '4.83.1' }
     @{ Id = 'Microsoft.Identity.Client.Extensions.Msal'; Version = '4.83.1' }
-    @{ Id = 'Microsoft.IdentityModel.Abstractions'; Version = '8.14.0' }
     @{ Id = 'Microsoft.IdentityModel.Abstractions'; Version = '8.15.0' }
-    @{ Id = 'Microsoft.IdentityModel.JsonWebTokens'; Version = '6.35.0' }
     @{ Id = 'Microsoft.IdentityModel.JsonWebTokens'; Version = '8.15.0' }
-    @{ Id = 'Microsoft.IdentityModel.Logging'; Version = '6.35.0' }
     @{ Id = 'Microsoft.IdentityModel.Logging'; Version = '8.15.0' }
-    @{ Id = 'Microsoft.IdentityModel.Protocols'; Version = '6.35.0' }
     @{ Id = 'Microsoft.IdentityModel.Protocols'; Version = '8.15.0' }
-    @{ Id = 'Microsoft.IdentityModel.Protocols.OpenIdConnect'; Version = '6.35.0' }
     @{ Id = 'Microsoft.IdentityModel.Protocols.OpenIdConnect'; Version = '8.15.0' }
-    @{ Id = 'Microsoft.IdentityModel.Tokens'; Version = '6.35.0' }
     @{ Id = 'Microsoft.IdentityModel.Tokens'; Version = '8.15.0' }
     @{ Id = 'Microsoft.IdentityModel.Validators'; Version = '8.6.1' }
     @{ Id = 'Microsoft.Kiota.Abstractions'; Version = '1.22.2' }
@@ -135,7 +131,6 @@ $packages = @(
     @{ Id = 'System.Data.Odbc'; Version = '9.0.0' }
     @{ Id = 'System.Diagnostics.DiagnosticSource'; Version = '10.0.3' }
     @{ Id = 'System.Diagnostics.EventLog'; Version = '8.0.0' }
-    @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '6.35.0' }
     @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '8.15.0' }
     @{ Id = 'System.IO.Pipelines'; Version = '10.0.3' }
     @{ Id = 'System.Memory'; Version = '4.5.3' }
