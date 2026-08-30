@@ -496,6 +496,30 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken)
+    {
+        (string id, _) = this.RequireOpenRun(nameof(this.GetLiveItemIdsAsync));
+
+        var ids = new List<string>();
+
+        await using SqlConnection sql = await this.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using SqlCommand command = Procedure(sql, "crawl.uspListLiveItemIds");
+
+        command.Parameters.Add(Text("@ConnectionId", id, 64));
+
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+        int itemIdColumn = reader.GetOrdinal("ItemId");
+
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            ids.Add(reader.GetString(itemIdColumn));
+        }
+
+        return ids;
+    }
     /// <inheritdoc/>
     /// <remarks>
     /// THE GUARD IS RETHROWN, NOT SWALLOWED AND NOT REWORDED. uspGetPendingDeletes

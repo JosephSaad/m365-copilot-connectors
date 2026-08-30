@@ -77,6 +77,9 @@ namespace SqlTicketsConnector.Tests.TestSupport
             double maxDeletePercent, bool overrideGuard, CancellationToken cancellationToken) =>
             this.inner.GetPendingDeletesAsync(maxDeletePercent, overrideGuard, cancellationToken);
 
+        public Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken) =>
+            this.inner.GetLiveItemIdsAsync(cancellationToken);
+
         public Task ConfirmDeletesAsync(
             IReadOnlyCollection<string> itemIds, CancellationToken cancellationToken) =>
             this.inner.ConfirmDeletesAsync(itemIds, cancellationToken);

@@ -92,6 +92,10 @@ public sealed class NullCrawlStateStore : ICrawlStateStore
         => Task.FromResult<IReadOnlyList<CrawlDeletion>>(Array.Empty<CrawlDeletion>());
 
     /// <inheritdoc/>
+    public Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
+    /// <inheritdoc/>
     public Task ConfirmDeletesAsync(
         IReadOnlyCollection<string> itemIds, CancellationToken cancellationToken)
         => Task.CompletedTask;

@@ -124,6 +124,13 @@ public sealed class PushEngine
 
     private GraphBatchWriter? batchWriter;
 
+    // Every item ID a DRY RUN has read, kept so the delete preview can diff it
+    // against what the index holds. Null on a real run, where the store's own
+    // LastSeenRunId bookkeeping answers the same question without holding
+    // 111,900 strings in memory - about 3 MB, which is affordable only because a
+    // dry run is something a person is sitting and waiting for.
+    private HashSet<string>? dryRunSeenIds;
+
     // Resolved once in the constructor. Setting() re-parses configuration on
     // every call and the byte ceiling is consulted once per row, which is a
     // needless cost 111,900 times over.
@@ -580,10 +587,16 @@ public sealed class PushEngine
             // Reached only by falling out of the loop, which means the
             // enumeration ended without throwing and every write returned.
             await source.OnCrawlCompletedAsync(cancellationToken);
-
-            // And only then may anything be concluded about what is missing.
-            await this.SweepDeletedItemsAsync(summary, cancellationToken);
         }
+
+        // Both paths, and only here. A real run sweeps; a dry run previews the
+        // same sweep and touches nothing. The precondition is identical and is
+        // the reason this sits after the loop rather than inside it: the
+        // enumeration ended without throwing, so what the source did not return
+        // is genuinely absent rather than merely not reached yet. A preview
+        // computed from a partial read would name rows the source had simply not
+        // got to, which is the one thing a delete preview must never do.
+        await this.SweepDeletedItemsAsync(summary, cancellationToken);
 
         return summary;
     }
@@ -646,6 +659,27 @@ public sealed class PushEngine
                 guard);
         }
 
+
+        // A DRY RUN PREVIEWS THE SWEEP RATHER THAN SKIPPING IT. This is the half
+        // of a preview that matters: a wrong write is additive and corrected by
+        // the next run, while a sweep takes items out of the index and a search
+        // stops answering. Being able to see the list first is the whole point of
+        // running a crawl dry.
+        //
+        // It cannot go through GetPendingDeletesAsync. That procedure mutates -
+        // it moves rows to pending and stamps PendingSinceUtc - and it returns
+        // nothing at all on a dry run, deliberately, because a dry run records no
+        // LastSeenRunId and every item would otherwise look unseen. Asking it
+        // here would either corrupt the store or answer "none", and "none" is the
+        // most dangerous wrong answer this code could give.
+        //
+        // So the diff runs the other way: what the source yielded, against what
+        // the index holds.
+        if (this.dryRun)
+        {
+            await this.PreviewDeleteSweepAsync(guard, overrideGuard, cancellationToken);
+            return;
+        }
         IReadOnlyList<CrawlDeletion> pending =
             await this.store.GetPendingDeletesAsync(guard, overrideGuard, cancellationToken);
 
@@ -746,6 +780,90 @@ public sealed class PushEngine
             envelope);
     }
 
+
+    /// <summary>Reports what a real sweep would delete, without touching anything.</summary>
+    /// <param name="guard">The MaxDeletePercent this run would apply.</param>
+    /// <param name="overrideGuard">Whether the run is configured to ignore that guard.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>A task for the operation.</returns>
+    /// <remarks>
+    /// The guard is evaluated here as well as reported. An operator running this
+    /// to decide whether a sweep is safe needs to know both numbers - how many
+    /// items would go, and whether the store would refuse to let them - because
+    /// "412 items" and "412 items, and the run will be refused" call for opposite
+    /// actions. Computing the percentage the same way the store does is what
+    /// makes the preview worth trusting; if the two ever disagree, the preview is
+    /// the one that is wrong and this comment is where to start.
+    /// </remarks>
+    private async Task PreviewDeleteSweepAsync(
+        double guard, bool overrideGuard, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<string> live = await this.store.GetLiveItemIdsAsync(cancellationToken);
+
+        if (live.Count == 0)
+        {
+            // Absent and empty are different, and saying which is which is the
+            // difference between "nothing would be deleted" and "this preview
+            // could not see the index".
+            this.log.Information(
+                "Delete preview: the index holds no live items for this connection, so nothing would be removed.");
+
+            return;
+        }
+
+        HashSet<string> seen = this.dryRunSeenIds ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var wouldDelete = new List<string>();
+
+        foreach (string itemId in live)
+        {
+            if (!seen.Contains(itemId))
+            {
+                wouldDelete.Add(itemId);
+            }
+        }
+
+        if (wouldDelete.Count == 0)
+        {
+            this.log.Information(
+                "Delete preview: the source returned every one of the {Live} live item(s). " +
+                "A real run would delete nothing.",
+                live.Count);
+
+            return;
+        }
+
+        double percent = (double)wouldDelete.Count / live.Count * 100.0;
+        bool refused = !overrideGuard && percent > guard;
+
+        this.log.Warning(
+            "Delete preview: a real run would remove {Count} of {Live} live item(s) ({Percent:F2}% of the corpus). " +
+            "The guard is {Guard}%{Verdict}.",
+            wouldDelete.Count,
+            live.Count,
+            percent,
+            guard,
+            refused
+                ? ", so the sweep WOULD BE REFUSED and the run would exit 4"
+                : overrideGuard ? ", and Settings:OverrideDeleteGuard is set, so it would proceed regardless"
+                : ", so the sweep would proceed");
+
+        // Capped, and the cap is announced. A corpus-wide false positive would
+        // otherwise put 111,900 lines in front of somebody who needed the first
+        // twenty to recognise the pattern.
+        const int Sample = 20;
+
+        foreach (string itemId in wouldDelete.Take(Sample))
+        {
+            this.log.Information("Would DELETE {ItemId}.", itemId);
+        }
+
+        if (wouldDelete.Count > Sample)
+        {
+            this.log.Information(
+                "...and {Remaining} more not listed. Query crawl.vwItemInventory for the full set.",
+                wouldDelete.Count - Sample);
+        }
+    }
     /// <summary>Deletes one item, with the same backoff a write gets.</summary>
     /// <param name="itemId">The item to remove.</param>
     /// <param name="summary">The run's counters.</param>
@@ -1387,23 +1505,51 @@ public sealed class PushEngine
         {
             return;
         }
-
         if (this.dryRun)
         {
             foreach (Prepared prepared in chunk)
             {
+                // WOULD WRITE, OR WOULD SKIP. The store was consulted for this
+                // window - a read, which a dry run is allowed to make - so the
+                // preview can now say which of the two an item would be rather
+                // than calling every row a write.
+                //
+                // That distinction is the point of the item. On a steady-state
+                // corpus almost nothing changes between runs, so a preview that
+                // reported 111,900 writes when the real run would perform four
+                // overstated the work by four orders of magnitude, and was
+                // useless for the one question it gets asked: how long will
+                // this take and how much will it touch.
+                bool skip = unchanged.Contains(prepared.Mapped.Id);
+
+                // Recorded for the delete preview at the end of the run. BOTH
+                // arms, because an unchanged item is still an item the source
+                // returned - recording only the writes would have the preview
+                // announce that the sweep was about to delete the whole
+                // unchanged corpus.
+                (this.dryRunSeenIds ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase))
+                    .Add(prepared.Mapped.Id);
+
+                if (skip)
+                {
+                    summary.CountUnchanged(prepared.Mapped.ItemType);
+                }
+                else
+                {
+                    summary.Count(prepared.Mapped.ItemType);
+                }
+
                 // Item ID, type and sizes only. The content is customer data and
                 // does not go to the console any more than it goes to the log.
                 this.log.Information(
-                    "Would write {ItemId} ({ItemType}): {PropertyCount} properties, {ContentBytes} content bytes, " +
+                    "Would {Verb} {ItemId} ({ItemType}): {PropertyCount} properties, {ContentBytes} content bytes, " +
                     "{AclCount} ACL entr(y/ies).",
+                    skip ? "SKIP" : "write",
                     prepared.Mapped.Id,
                     prepared.Mapped.ItemType,
                     prepared.Mapped.Properties.Count,
                     prepared.ContentBytes,
                     prepared.Item.Acl?.Count ?? 0);
-
-                summary.Count(prepared.Mapped.ItemType);
 
                 // Measured like any other row. A dry run writes nothing, so what
                 // it reports IS the whole non-Graph cost of the pipeline - the
@@ -1414,7 +1560,8 @@ public sealed class PushEngine
 
             // No commit callbacks and no state recorded: a dry run writes
             // nothing, so it must leave both the watermark and the store exactly
-            // where it found them.
+            // where it found them. Reading the hashes above changed nothing;
+            // uspGetItemState is a SELECT.
             return;
         }
 

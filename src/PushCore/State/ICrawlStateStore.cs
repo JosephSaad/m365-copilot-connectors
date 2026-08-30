@@ -166,6 +166,23 @@ public interface ICrawlStateStore : IAsyncDisposable
         IReadOnlyCollection<string> itemIds,
         CancellationToken cancellationToken);
 
+
+    /// <summary>Lists every live item ID the index holds for this connection.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The IDs, ascending. Empty when the store is disabled.</returns>
+    /// <remarks>
+    /// Read-only, and it exists for the dry-run delete preview. The sweep's own
+    /// GetPendingDeletesAsync cannot answer that question: it mutates - moving
+    /// rows to pending and stamping PendingSinceUtc - and it deliberately returns
+    /// nothing on a dry run, because a dry run records no item state and every
+    /// item would therefore look unseen. So the preview is computed the other way
+    /// round, by diffing what the source yielded against what this returns.
+    ///
+    /// Items already pending delete are excluded. They are reported by the sweep
+    /// as a retry, and counting them here would show one item twice to somebody
+    /// trying to judge whether the number is alarming.
+    /// </remarks>
+    Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken);
     /// <summary>Reads where the last run got to.</summary>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>The marker, or null when there is none and a full read is required.</returns>
