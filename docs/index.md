@@ -35,6 +35,8 @@ documentation that ships with it.
 | [Crawl state database](CRAWL-STATE-DEPLOYMENT.md) | Standing up `ConnectorState`: the six state-database scripts in order, the two service accounts, retention, and the delete guard an operator has to know before the first refusal — plus `sql/26`, the seventh, which changes the source rather than the state |
 | [App registration](APP-REGISTRATION.md) | Entra setup, certificate auth, and the permissions each path actually needs |
 | [Runbook](RUNBOOK.md) | Scheduling, certificate rotation, the ACL staleness bound, and what each exit code means |
+| [**Disaster recovery**](DISASTER-RECOVERY.md) | What is actually lost per table and the RPO that supports, why the recovery objective here is a *security* number rather than an availability one, rebuilding on a replacement host, re-provisioning the Entra credential that no backup contains — and the record of the restore rehearsal |
+| [**Upgrade and rollback**](UPGRADE-RUNBOOK.md) | v1.4 → v1.5 script by script, how to back out, and the additive-only rule that makes rollback possible — including the one migration that currently breaks it |
 
 ## Reviewing
 
