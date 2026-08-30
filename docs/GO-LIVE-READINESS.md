@@ -11,13 +11,15 @@ supported service rather than a release that builds.
 
 It is deliberately blunt about the gap between *built* and *verified*, because
 that gap is the whole risk right now: 17 features are implemented, 4 more are
-part-built, 312 tests pass, and **most of it has still never been exercised
-outside a test harness**. What has: blocker 1 on a scratch SQL instance, and
-blocker 5 against a real tenant and a real connection. Both earned their place
-immediately — `sql/26` carried two defects, one silent, and the first live
-`$batch` run wrote 441 of 1,118 items and refused the other 677. Neither was
-findable by reading the code, and both are fixed. Every go-live blocker below is
-a verification task. None of them is construction.
+part-built, 312 tests pass, and **three of the six blockers are now closed and a
+fourth is part-done** — against one closed at the last revision. Every one that
+ran found something. Blocker 1
+found two defects in `sql/26`, one of them silent. Blockers 2 and 5 found the
+shared ACL that wrote 441 of 1,118 items and refused the other 677. None was
+findable by reading the code; all are fixed. What remains is one rehearsal
+(deletion, row 4), one smoke test (the dashboard, row 6), and the parts no quiet
+tenant can prove: the engine's backoff has still never answered a real 429. Every
+go-live blocker below is a verification task. None of them is construction.
 
 **What this document does not cover.** Every task here is engineering: run it,
 watch it, prove it. None of it establishes who owns the connection, who is woken
@@ -35,15 +37,29 @@ then what is cheap now and expensive later, then what can follow go-live.
 
 ## 1. The six blockers
 
-All six are an afternoon's work on one machine. They are blockers because each
-one is a claim the release currently makes and cannot support.
+They are blockers because each one is a claim the release makes and cannot yet
+support. Three are now closed and row 1 is part-done. The two untouched are an
+afternoon's work on one machine, and what follows is how to build that machine —
+kept in full, because the rig has to be rebuilt for the customer environment
+anyway.
+
+**Crawl state is now enabled, and rows 2 and 3 closed with it.** Every run before
+that logged "No crawl state store configured", wrote all 1,118 items each time,
+and recorded nothing — which is also why the dashboard read empty. It was
+reporting an empty database accurately. With the store enabled, three runs read
+1,117 / 1,118 / 1,119 and wrote 1,117 / 1 / 3, in 77s / 10s / 3s.
+
+Note *where* the connection string is: the `bin` copy only, never a tracked
+`appsettings.json`. The secret-hygiene scan rejects that key by name and excludes
+`bin/**`, so this touches no gate — but a rebuild wipes it, which makes it a
+demonstration rather than a deployment. Section 3 carries the permanent decision.
 
 | # | Feature | What it means | Status |
 |---|---|---|---|
 | 1 | **SQL scripts executed** | Run `sql/20`–`25` against a real instance and read the verification block each one prints. A syntax error in a `CREATE OR ALTER` batch would leave a procedure absent and only fail later, at the `GRANT`. **Partially done.** `sql/02`, `10`–`13`, `20`–`26` have now been run once against a scratch SQL Server 2025 instance, and `ConnectorState` built out — 8 tables, 6 views, 19 write and 7 reporting procedures. It paid for itself immediately: `sql/26` carried two defects, one of them silent, both fixed in `eb94ab1`. It stays open on three counts. `sql/20` ran from an edited copy, not the repo file, its `D:` paths being placeholders. `sql/01`, `13` and `25` created no principals at all — their `CONTOSO\` logins cannot exist on that machine, and local accounts stood in, so the least-privilege model is deployed but has never been exercised by the accounts it is written for. And the run is reported rather than witnessed. Re-run it where the accounts are real | ⚠️ |
-| 2 | **Live tenant pilot run** | One full crawl of the timesheet fixture against a real connection. Validates the retry removal, `$batch`, hashing and the state store in a single pass, and produces the first attribution table anyone has seen | ❌ |
-| 3 | **Second-run validation** | Re-run immediately and check `UnchangedPercent` in `crawl.vwRunHistory` climbs. Stuck near zero means item IDs are not deterministic and the corpus is being rewritten every run — see [`SOURCE-CONTRACT.md`](SOURCE-CONTRACT.md) | ❌ |
-| 4 | **Delete detection rehearsal** | Remove a fixture row, run a full crawl, watch the sweep remove it from the index and `crawl.vwPendingDeletes` drain. The most dangerous feature in the release must be seen working before it guards anything | ❌ |
+| 2 | **Live tenant pilot run** | One full crawl of the timesheet fixture against a real connection. Validates the retry removal, `$batch`, hashing and the state store in a single pass, and produces the first attribution table anyone has seen. **Done**, and it validated three of the four: `$batch` (row 5), hashing and the state store (row 3). Attribution tables exist — the first measurements of this pipeline that are not a guess. One item failed in run 1 and *run 2 rewrote it without any source change*, because the store had never recorded a confirmation for it. That is the "record the hash only after Graph confirms" rule working, observed rather than argued. **The retry removal remains unproven**: `throttleWaits=0` across every run, so the engine-owned backoff has still never answered a real 429 | ✅ |
+| 3 | **Second-run validation** | Re-run immediately and check `UnchangedPercent` in `crawl.vwRunHistory` climbs. Stuck near zero means item IDs are not deterministic and the corpus is being rewritten every run — see [`SOURCE-CONTRACT.md`](SOURCE-CONTRACT.md). **Done, and it climbed to 99.9%.** Run 2 read 1,118 and wrote 1; run 3, after one time entry was inserted, read 1,119 and wrote 3. The item IDs are deterministic and the corpus is not being rewritten. The 3 is the part worth reading twice: the inserted entry, its parent engagement and its grandparent customer, because the `sql/12` views roll `TotalHours` and `ChildCount` upward, so one insert genuinely changes three items. The engine knows nothing of the hierarchy — it hashed all 1,119 and found the three that differed. Wall clock fell 77s → 10s → 3s as the work shrank to what had actually changed | ✅ |
+| 4 | **Delete detection rehearsal** | Remove a fixture row, run a full crawl, watch the sweep remove it from the index and `crawl.vwPendingDeletes` drain. The most dangerous feature in the release must be seen working before it guards anything. **No longer blocked, and now the more interesting of the two left.** The store that rows 2 and 3 proved is the same store the sweep diffs against, and an insert has been rehearsed — a deletion has not. Note it needs a *full* crawl: the sweep refuses an incremental run outright, so this is not something a routine run will demonstrate by accident | ❌ |
 | 5 | **`$batch` live validation** | **Done.** The default write path has now spoken to Graph: 1,118 items in 56 batches, zero failures, at 8 writers and again at 16. It did not pass first time — the run it was meant to validate is the one that exposed the shared-ACL defect fixed in `44e464f`, writing 441 and refusing 677, which is the whole argument for this row existing. One clause of it is still untested: `Settings:Batch = false` is named here as the rehearsed fallback and has not actually been rehearsed. Also note `throttleWaits=0` throughout, so the backoff path is unexercised — 16 writers × 20 sub-requests is nominally far above the 25 concurrent operations per connection the clamp's own warning cites, and a quiet tenant is not evidence that a busy one will agree | ✅ |
 | 6 | **Dashboard smoke test** | Deploy to IIS, confirm Windows authentication and that all seven pages render against real rows. It compiles and every route resolves; no page has ever displayed data | ❌ |
 
@@ -81,10 +97,21 @@ re-run and read `UnchangedPercent` (3) → delete a row and run again (4) →
 publish the dashboard to IIS (6). Optionally then `sql/26`, rename a fixture
 customer, and confirm every descendant's `EffectiveLastModified` moves.
 
+This order has now been walked as far as row 3. Only row 4, the delete
+rehearsal, and row 6, the dashboard against real rows, remain — and the state
+database they both read from is populated, so neither is waiting on anything but
+someone doing it.
+
 **What this rig cannot prove**, so the pilot's scope stays honest: production
 scale, the locked-down network path (`Settings:GraphProxy` against a real
-proxy), domain accounts rather than local ones, and IIS on Windows Server rather
-than on 11. Those four carry forward to the customer environment.
+proxy), domain accounts rather than local ones, IIS on Windows Server rather
+than on 11, TLS trust (the rig runs `Environment: Development` because
+`SqlConnectionStringFactory` rejects `TrustServerCertificate=true` in
+Production, so no certificate has ever been validated), and throttling headroom
+— the pilot saw `throttleWaits=0` at 16 writers × 20 sub-requests, nominally far
+above the 25 concurrent operations per connection the clamp warns about, which
+says something about that tenant on that day and nothing about a busy one. Those
+six carry forward to the customer environment.
 
 ---
 
@@ -121,6 +148,7 @@ Cheap to do now, materially more expensive afterwards. None blocks a pilot.
 | Feature | Description | Status |
 |---|---|---|
 | **Hash version stamp** | A version recorded beside each stored hash, so a future change to the hash framing is a detected migration rather than a silent overnight rewrite of the whole corpus | ❌ |
+| **`StateConnectionString` given a home** | The setting that enables everything rows 2 and 3 proved currently lives in the `bin` copy of `appsettings.json`, which a rebuild deletes. It cannot live in a tracked one: `SecretHygiene.targets` rejects any key matching `connectionstring`, and rightly. Three ways out, in the order I would take them — deploy from a published folder outside the repository, where no build-time scan reaches and the shipped placeholder stays clean; or build the rig with the documented `-p:SkipAppSettingsSecretScan=true`; or add the key to `AppSettingsSecretScanAllowedPaths`, which permanently widens a shipped control and should be paired with a startup check, as the `Auth:ClientSecretCredentialTarget` precedent in that file says. `CrawlStateWiring` already refuses a value containing a password, though by substring rather than by parsing — see the last row of section 4 | ❌ |
 | **CI integration job** | LocalDB on the Windows runner executing `sql/20`–`25` and driving the state store end to end, making blocker 1 permanent instead of a one-off | ❌ |
 | **Dashboard authorisation** | Group membership, not merely authentication. Any authenticated user can currently read crawl metadata | ❌ |
 | **Run identifier in logs** | Stamp the run identifier on the logging context so a log file correlates to a dashboard row without a timestamp hunt | ❌ |
