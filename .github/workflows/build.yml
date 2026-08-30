@@ -620,10 +620,15 @@ jobs:
               'sql/21-crawl-state-tables.sql',
               'sql/22-crawl-state-views.sql',
               'sql/23-crawl-state-procedures.sql',
-              'sql/24-crawl-state-reporting.sql')) {
+              'sql/24-crawl-state-reporting.sql',
+              'sql/28-crawl-state-hash-version.sql')) {
             Write-Host "== $f =="
             sqlcmd -S $server -d ConnectorState -i $f -b
           }
+
+      # sql/27 is not run here. It writes to msdb and needs SQL Agent, which
+      # LocalDB does not have, so executing it would prove nothing and fail for
+      # the wrong reason. Retention scheduling stays a deployment step.
 
       # Syntax only, and allowed to fail. Every principal in this file is a
       # domain account, so the grants cannot be applied on a runner. Running it
@@ -692,6 +697,22 @@ jobs:
           if ($tables -ne 8) { $failures += "expected 8 crawl tables, found $tables" }
           if ($views -ne 6) { $failures += "expected 6 crawl views, found $views" }
           if ($procs -lt 26) { $failures += "expected at least 26 crawl procedures, found $procs" }
+
+          # sql/28's migration. The column has to exist and carry a default, or
+          # a connector on a database that skipped it would compare against a
+          # version nothing recorded.
+          $hv = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'[crawl].[Connection]') AND name = N'HashVersion';"
+          Write-Host "crawl.Connection.HashVersion present: $hv (expected 1)"
+          if ($hv -ne 1) { $failures += 'sql/28 did not add crawl.Connection.HashVersion' }
+
+          # And the contract that matters: a change is reported ONCE. Reporting
+          # it twice would rewrite a corpus the previous run already rewrote.
+          sqlcmd -S $server -d ConnectorState -b -Q "EXEC crawl.uspRegisterConnection @ConnectionId = N'ci-hash', @ConnectorKey = N'ci', @DisplayName = N'CI hash version check';"
+          $first  = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; DECLARE @t TABLE (WasChanged BIT, PreviousVersion TINYINT, CurrentVersion TINYINT); INSERT INTO @t EXEC crawl.uspCheckHashVersion @ConnectionId = N'ci-hash', @HashVersion = 2; SELECT CAST(WasChanged AS INT) FROM @t;"
+          $second = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; DECLARE @t TABLE (WasChanged BIT, PreviousVersion TINYINT, CurrentVersion TINYINT); INSERT INTO @t EXEC crawl.uspCheckHashVersion @ConnectionId = N'ci-hash', @HashVersion = 2; SELECT CAST(WasChanged AS INT) FROM @t;"
+          Write-Host "hash version change reported: first=$first second=$second (expected 1 then 0)"
+          if ($first -ne 1)  { $failures += "uspCheckHashVersion did not report the change (got $first)" }
+          if ($second -ne 0) { $failures += "uspCheckHashVersion reported the same change twice (got $second)" }
 
           if ($failures.Count -gt 0) {
             $failures | ForEach-Object { Write-Host "::error::$_" }

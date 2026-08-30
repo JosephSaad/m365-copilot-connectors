@@ -33,9 +33,31 @@
     enumeration, and the List parameter set on Get-MgExternalConnectionItem is
     generated from OData metadata rather than an implemented operation), so
     orphans are found the only way they can be: by reading the source for rows
-    that are gone or soft-deleted and asking Graph about each ID directly. An
-    item whose source row was hard-deleted outside the ID range this sees cannot
-    be found by any client — that gap is reported, not hidden.
+    that are gone or soft-deleted and asking Graph about each ID directly.
+
+    THE INVENTORY CLOSES THE GAP THIS SCRIPT USED TO REPORT AND LIVE WITH. An
+    item whose source row was hard-deleted has an ID no client can guess: the
+    source has forgotten it, and Graph will not enumerate. That item stayed
+    indexed and citeable, and the honest thing this script could do was say so.
+
+    crawl.vwItemInventory is the enumeration, kept by the connector rather than
+    by the platform. Every item it ever wrote is on record, so an item held as
+    live in the inventory whose ID the source no longer returns is an orphan,
+    found without the source needing to remember anything. Where the inventory
+    is available this is the authoritative pass and the source-derived one is a
+    cross-check; where it is not, the behaviour and the gap are exactly as
+    before, and both are stated at the end of the run rather than implied.
+
+.PARAMETER StateConnectionString
+    Connection string for the ConnectorState database. Falls back to
+    Settings:StateConnectionString in the configuration file, and when neither
+    is present the script runs its original source-derived comparison and
+    reports what that cannot see.
+
+    Note this needs a login with SELECT on the crawl views. The connector's own
+    crawl_writer is DENYed exactly that by sql/25, so running this with the push
+    host's credentials fails on purpose; use the dashboard's crawl_reader or
+    another read-only principal.
 
 .PARAMETER MaxItems
     Cap on Graph GETs, default 500 — one request per row adds up, and this is
@@ -60,7 +82,8 @@ param(
     [switch]$Detail,
     [System.Management.Automation.PSCredential]$SqlCredential,
     [System.Security.SecureString]$ClientSecret,
-    [int]$TimeoutSeconds = 30
+    [int]$TimeoutSeconds = 30,
+    [string]$StateConnectionString
 )
 
 $ErrorActionPreference = 'Stop'
@@ -129,6 +152,101 @@ Write-Host "$($rows.Rows.Count) row(s): $($live.Count) live, $($tombstones.Count
 if (-not $softDelete) {
     Note 'DataSource:SoftDeleteEnabled is false, so the source cannot say which rows were deleted. Orphans from'
     Note 'hard-deleted rows are invisible to this script and to every other client — see the gap note at the end.'
+}
+
+# ---------------------------------------------------------------------------
+# The inventory
+#
+# This is the enumeration the header says does not exist. It did not, when this
+# script was written: Graph has no list-items API, so the only way to ask about
+# an item was to already know its ID, and the only source of IDs was the source
+# table. An item whose row was hard-deleted therefore could not be found by this
+# script or by any other client, and the script said so and moved on.
+#
+# crawl.vwItemInventory is a list of every item the connector has written,
+# maintained by the connector itself. It closes exactly that gap: an item
+# recorded as live in the inventory whose ID the source no longer returns is an
+# orphan, and it is found without the source needing to remember it.
+#
+# Read-only, and through the view rather than the tables. This script runs on
+# the push host, whose crawl_writer login is DENYed SELECT on the crawl schema -
+# so with the connector's own credentials this read fails by design and the
+# script says so rather than appearing to find nothing.
+# ---------------------------------------------------------------------------
+
+$inventory = @{}
+$inventoryRead = $false
+$inventoryError = $null
+
+if (-not $StateConnectionString) {
+    $StateConnectionString = $config.Settings.StateConnectionString
+}
+
+if ($StateConnectionString) {
+    $stateConnection = New-Object System.Data.SqlClient.SqlConnection $StateConnectionString
+    try {
+        $stateConnection.Open()
+        $stateCommand = $stateConnection.CreateCommand()
+        $stateCommand.CommandText = @'
+SELECT  ItemId, ItemType, State, LastWrittenUtc
+FROM    crawl.vwItemInventory
+WHERE   ConnectionId = @ConnectionId;
+'@
+        $stateCommand.CommandTimeout = $TimeoutSeconds
+        $null = $stateCommand.Parameters.Add(
+            (New-Object System.Data.SqlClient.SqlParameter('@ConnectionId', $ConnectionId)))
+
+        $stateRows = New-Object System.Data.DataTable
+        $stateAdapter = New-Object System.Data.SqlClient.SqlDataAdapter $stateCommand
+        $null = $stateAdapter.Fill($stateRows)
+
+        foreach ($r in $stateRows.Rows) {
+            $inventory[[string]$r.ItemId] = [pscustomobject]@{
+                ItemType        = [string]$r.ItemType
+                State           = [int]$r.State
+                LastWrittenUtc  = $r.LastWrittenUtc
+            }
+        }
+
+        $inventoryRead = $true
+        $liveInInventory = @($inventory.Values | Where-Object { $_.State -eq 1 }).Count
+        Write-Host "Inventory: $($inventory.Count) item(s) on record, $liveInInventory live"
+    }
+    catch {
+        $inventoryError = $_.Exception.Message
+        Write-Host "Could not read crawl.vwItemInventory: $inventoryError" -ForegroundColor Yellow
+        Note 'Falling back to the source-derived comparison, which cannot see hard-deleted rows.'
+        Note 'A permission error here is expected with the connector''s own login: sql/25 DENYs it SELECT.'
+    }
+    finally {
+        $stateConnection.Close()
+        $stateConnection.Dispose()
+    }
+}
+else {
+    Note 'No Settings:StateConnectionString and no -StateConnectionString, so there is no inventory to read.'
+    Note 'The comparison below is source-derived and carries the hard-delete gap described at the end.'
+}
+
+# Items the inventory holds as live that the source no longer returns at all.
+# The source-derived pass cannot produce these: it only ever asks about IDs the
+# source still knows, and these are precisely the IDs it has forgotten.
+$inventoryOnly = @()
+if ($inventoryRead) {
+    $sourceIds = New-Object 'System.Collections.Generic.HashSet[string]' (
+        [string[]]@($rows.Rows | ForEach-Object { "ticket$([int]$_.TicketId)" }))
+
+    $inventoryOnly = @(
+        $inventory.Keys |
+            Where-Object { $inventory[$_].State -eq 1 -and -not $sourceIds.Contains($_) } |
+            Sort-Object)
+
+    if ($inventoryOnly.Count -gt 0) {
+        Write-Host ''
+        Write-Host "  $($inventoryOnly.Count) item(s) are live in the inventory and absent from the source." -ForegroundColor Red
+        Note 'These are the orphans a source-derived comparison cannot find. Each was written by the connector'
+        Note 'and its row has since been removed outright rather than soft-deleted.'
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -362,11 +480,32 @@ if ($errors.Count -eq 0 -and $orphans.Count -eq 0 -and $missing.Count -eq 0) {
     Write-Host '  Nothing to do: the index matches the source.' -ForegroundColor Green
 }
 
-if ($softDelete) {
-    Write-Host ''
-    Note 'One gap remains, and no script can close it: a row HARD-deleted from dbo.Tickets leaves no trace to look up,'
-    Note 'so its item cannot be found by this or any other client — there is no list-items API to enumerate against.'
-    Note 'If hard deletes have happened, the only reliable repair is to delete the connection and push again.'
+Write-Host ''
+if ($inventoryRead) {
+    Note 'The hard-delete gap is CLOSED for this run. crawl.vwItemInventory enumerated every item the connector has'
+    Note 'written, so an item whose row was removed outright was found by its absence from the source rather than by'
+    Note 'the source remembering it. The old advice - delete the connection and push again - is not needed here.'
+
+    if ($inventoryOnly.Count -gt 0) {
+        Write-Host ''
+        Write-Host "  $($inventoryOnly.Count) item(s) live in the inventory and absent from the source:" -ForegroundColor Red
+        foreach ($id in $inventoryOnly | Select-Object -First 40) {
+            Write-Host "    Invoke-MgGraphRequest -Method DELETE -Uri 'v1.0/external/connections/$ConnectionId/items/$id'" -ForegroundColor DarkGray
+        }
+        if ($inventoryOnly.Count -gt 40) {
+            Write-Host "    … and $($inventoryOnly.Count - 40) more" -ForegroundColor DarkGray
+        }
+        Write-Host ''
+        Note 'Printed, not run, for the same reason as the orphans above. And prefer the connector to this list:'
+        Note 'a FULL crawl with a state store performs exactly this reconciliation itself, fenced by MaxDeletePercent,'
+        Note 'which is a guard these hand-run DELETEs do not have.'
+    }
+}
+elseif ($softDelete) {
+    Note 'One gap is open on this run: a row HARD-deleted from dbo.Tickets leaves no trace to look up, so its item'
+    Note 'cannot be found from the source alone — there is no list-items API to enumerate against.'
+    Note 'It is closable. Point -StateConnectionString at ConnectorState and re-run: the inventory knows every item'
+    Note 'the connector wrote, which is precisely what the source has forgotten.'
 }
 
 if ($errors.Count -gt 0) { exit 1 }

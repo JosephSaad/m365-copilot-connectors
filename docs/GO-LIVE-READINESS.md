@@ -10,9 +10,10 @@ as a whole — what exists, what does not, and what has to happen before it is a
 supported service rather than a release that builds.
 
 It is deliberately blunt about the gap between *built* and *verified*, because
-that gap is the whole risk right now: 17 features are implemented, 4 more are
-part-built, 312 tests pass, and **five of the six blockers are closed, with the
-sixth part-done** — against none at all a few days ago. Every blocker that ran
+that gap is the whole risk right now: 17 features are implemented, 3 more are
+part-built, 316 tests pass, **five of the six blockers are closed with the sixth
+part-done**, and **ten of the eleven pre-go-live recommendations are done** — the
+eleventh being the one nobody but the customer can close. Every blocker that ran
 found something. Blocker 1 found two defects in
 `sql/26`, one of them silent. Blockers 2 and 5 found the shared ACL that wrote
 441 of 1,118 items and refused the other 677. None was findable by reading the
@@ -92,7 +93,7 @@ accept in writing, and this is what it buys.
 
 A single Windows 11 box hosting both the code and SQL Server clears every one of
 them, and is a better rig than a Mac: it builds the gRPC connector project
-(`Grpc.Tools` ships an x64 `protoc`, so all 312 tests run rather than 239), and
+(`Grpc.Tools` ships an x64 `protoc`, so all 316 tests run rather than 239), and
 it is closer to the production Windows Server than anything that has touched
 this code.
 
@@ -174,19 +175,30 @@ The foundation. All of it rides on the verification above.
 
 Cheap to do now, materially more expensive afterwards. None blocks a pilot.
 
+**Ten of the eleven are done.** The one left is `MaxDeletePercent`, which is a
+number about the customer's source rather than anything in this repository — the
+measurement that informs it now exists, the decision does not.
+
+Three of the ten need something a build cannot give them, and are listed here so
+they are not read as finished when they are only shipped: `sql/27` has to be
+deployed to an instance with SQL Agent, `CrawlState:ReaderGroups` has to be given
+real group names, and the published-folder route for `StateConnectionString` has
+to be the one actually used. Each is a deployment step; §5 of this document
+carries the live tests that confirm them.
+
 | Feature | Description | Status |
 |---|---|---|
-| **Hash version stamp** | A version recorded beside each stored hash, so a future change to the hash framing is a detected migration rather than a silent overnight rewrite of the whole corpus | ❌ |
-| **`StateConnectionString` given a home** | The setting that enables everything rows 2 and 3 proved currently lives in the `bin` copy of `appsettings.json`, which a rebuild deletes. It cannot live in a tracked one: `SecretHygiene.targets` rejects any key matching `connectionstring`, and rightly. Three ways out, in the order I would take them — deploy from a published folder outside the repository, where no build-time scan reaches and the shipped placeholder stays clean; or build the rig with the documented `-p:SkipAppSettingsSecretScan=true`; or add the key to `AppSettingsSecretScanAllowedPaths`, which permanently widens a shipped control and should be paired with a startup check, as the `Auth:ClientSecretCredentialTarget` precedent in that file says. `CrawlStateWiring` already refuses a value containing a password, though by substring rather than by parsing — see the last row of section 4 | ❌ |
-| **CI integration job** | LocalDB on the Windows runner executing `sql/20`–`25` and driving the state store end to end, making blocker 1 permanent instead of a one-off | ❌ |
-| **Dashboard authorisation** | Group membership, not merely authentication. Any authenticated user can currently read crawl metadata | ❌ |
-| **Run identifier in logs** | Stamp the run identifier on the logging context so a log file correlates to a dashboard row without a timestamp hunt | ❌ |
-| **Retention scheduled** | A deployable SQL Agent job for `crawl.uspPurgeHistory`. The procedure and its arguments are documented; nothing ships the job | ⚠️ |
-| **Control evidence registered** | Pin the hash determinism, ordered-commit and retry-handler tests in the protected list, so they cannot be renamed or deleted without failing the control check | ❌ |
-| **Drift detection updated** | Rewrite `deploy/Compare-SourceToIndex.ps1` against `crawl.vwItemInventory`. It predates the inventory and still reconstructs by re-reading the source | ❌ |
-| **Concurrency × batching test** | Several writers each flushing batches, with a mid-batch refusal. The one interaction no test currently pins | ❌ |
-| **Delete threshold agreed** | `Settings:MaxDeletePercent` defaults to 10. Set it against the source's real daily deletion volume — a configuration decision, not code | ❌ |
-| **Security evidence script** | One script running every control verification query, so the review is reproducible rather than a list of queries to paste | ❌ |
+| **Hash version stamp** | A version recorded beside each stored hash, so a future change to the hash framing is a detected migration rather than a silent overnight rewrite of the whole corpus. **Done**, in `sql/28` and `ItemHasher.HashVersion` - recorded per connection rather than per item, because the hashes reach `crawl.Item` through a table type and SQL Server cannot ALTER one, and because within a connection the version is a property of the writer and not of the row. A change escalates the run to full and says so. What that gives up is gradual rehashing: a version change is one deliberate full rewrite | ✅ |
+| **`StateConnectionString` given a home** | The setting that enables everything rows 2 and 3 proved currently lives in the `bin` copy of `appsettings.json`, which a rebuild deletes. It cannot live in a tracked one: `SecretHygiene.targets` rejects any key matching `connectionstring`, and rightly. Three ways out, in the order I would take them — deploy from a published folder outside the repository, where no build-time scan reaches and the shipped placeholder stays clean; or build the rig with the documented `-p:SkipAppSettingsSecretScan=true`; or add the key to `AppSettingsSecretScanAllowedPaths`, which permanently widens a shipped control and should be paired with a startup check, as the `Auth:ClientSecretCredentialTarget` precedent in that file says. `CrawlStateWiring` already refuses a value containing a password, though by substring rather than by parsing — see the last row of section 4 **Route chosen and documented** in CRAWL-STATE-DEPLOYMENT.md section 11: deploy from a published folder outside the repository, where no build-time scan reaches and the shipped placeholder stays clean. The gate is not widened. The allowlist remains an option and is the wrong one to take before the parsed connection-string check in section 4 lands | ✅ |
+| **CI integration job** | LocalDB on the Windows runner executing `sql/20`–`25` and driving the state store end to end, making blocker 1 permanent instead of a one-off. **Done** - the `state-database` job builds `ConnectorState` and the fixture on LocalDB, asserts the counts the scripts themselves state, proves the set is idempotent by running it twice, and checks that a hash version change is reported exactly once. `sql/25` is parsed and not applied, because its principals are domain accounts; `sql/27` is not run at all, because LocalDB has no SQL Agent | ✅ |
+| **Dashboard authorisation** | Group membership, not merely authentication. Any authenticated user can currently read crawl metadata. **Done**: `CrawlState:ReaderGroups`, empty by default so the site behaves as it did until somebody sets it. Membership is read from the Windows token, so a user added to a group has to sign in again | ✅ |
+| **Run identifier in logs** | Stamp the run identifier on the logging context so a log file correlates to a dashboard row without a timestamp hunt. **Done** - pushed for the life of the run, so the batch writer's own events carry it too. The file template shows it and the console one does not: the file is what gets read beside a dashboard row hours later, the console is watched by somebody who already knows. Empty without a state store, because a log full of "run 0" reads as a real run | ✅ |
+| **Retention scheduled** | A deployable SQL Agent job for `crawl.uspPurgeHistory`. The procedure and its arguments are documented; nothing ships the job. **Done**: `sql/27` ships it, idempotently, refusing early and distinctly when `ConnectorState` is absent or SQL Agent is not running. Deploying it is still a deployment step - CI cannot run it, because LocalDB has no Agent | ✅ |
+| **Control evidence registered** | Pin the hash determinism, ordered-commit and retry-handler tests in the protected list, so they cannot be renamed or deleted without failing the control check. **Done** - six tests pinned across the three | ✅ |
+| **Drift detection updated** | Rewrite `deploy/Compare-SourceToIndex.ps1` against `crawl.vwItemInventory`. It predates the inventory and still reconstructs by re-reading the source. **Done**, and it closes a gap the script previously reported and lived with: with no enumeration API, an item whose source row was HARD-deleted had an ID nothing could guess, so it stayed indexed and citeable. The inventory is that enumeration. Where it is unavailable the old source-derived pass and its gap are unchanged, and the run says which of the two it did | ✅ |
+| **Concurrency × batching test** | Several writers each flushing batches, with a mid-batch refusal. The one interaction no test currently pins. **Done** - eighty items, eight writers, two refusals in different chunks, reconciling to exactly 78 written and 2 failed | ✅ |
+| **Delete threshold agreed** | `Settings:MaxDeletePercent` defaults to 10. Set it against the source's real daily deletion volume — a configuration decision, not code, and the only row here nobody but the customer can close. What has been done is the measurement: CRAWL-STATE-DEPLOYMENT.md section 12 carries the query that reports deletions per day as a percentage of the live corpus, and the two facts that make a low threshold misbehave - at 1,118 items one deletion is already 0.09%, and on a weekly full crawl the figure to compare is a week's churn rather than a day's | ❌ |
+| **Security evidence script** | One script running every control verification query, so the review is reproducible rather than a list of queries to paste. **Done**: `deploy/Invoke-SecurityEvidence.ps1`, one verdict per control and a non-zero exit if any failed. SKIPPED is reported apart from PASS, because a machine without gitleaks has no history evidence and should say so | ✅ |
 
 ---
 
@@ -218,7 +230,57 @@ Cheap to do now, materially more expensive afterwards. None blocks a pilot.
 
 ---
 
-## 5. What is not in this repository
+## 5. Live tests to perform
+
+Everything in sections 1 and 3 that a build can settle has been settled. What is
+left needs a server, a tenant or a directory, and this is that list.
+
+It is ordered so that a failure stops you before the next test wastes its setup,
+and each row says what a pass looks like — because the recurring failure in this
+project has not been a test that failed, it has been a test that passed while
+proving nothing. Two of the defects found so far were silent: a view that
+returned zero rows without erroring, and a guard whose entire message was empty.
+Both looked like passes.
+
+### Blocking — these close row 1, the last open blocker
+
+| # | Test | Pass looks like | Why it cannot be done here |
+|---|---|---|---|
+| L1 | Run `sql/25` where the `CONTOSO\` principals are real, then run a crawl as `crawl_writer` and open the dashboard as `crawl_reader` | The crawl writes and the dashboard reads, and *nothing else works*: `crawl_writer` must fail a direct `SELECT` on `crawl.Item`, and `crawl_reader` must fail every write procedure | Domain accounts. CI substitutes nothing and says so; a grant nobody has authenticated against is a claim, not a control |
+| L2 | Run `sql/20` **unedited** on an instance that has the `D:` volumes it names | It creates the database without the placeholder edit every run so far has made | The rig has no `D:`, so every execution to date used a modified copy |
+| L3 | Deploy `sql/27`, then `sp_start_job` it once | `run_status = 1`, and the step history names each connection it purged | LocalDB has no SQL Agent |
+
+### Confirming the three shipped-but-not-deployed items from section 3
+
+| # | Test | Pass looks like |
+|---|---|---|
+| L4 | Set `CrawlState:ReaderGroups` to a real group, then open the dashboard as a member and as a non-member | The member sees pages; the non-member is refused. **Test the non-member** — an empty list silently permits everyone, and that is the state this shipped in |
+| L5 | Publish to a folder outside the repository, put the real `StateConnectionString` in *that* `appsettings.json`, and rebuild the repository | The connector still runs, and the rebuild did not wipe the setting. This is the route section 11 of the deployment guide recommends, and it is untested |
+| L6 | Re-run `Invoke-SecurityEvidence.ps1` on a machine with `gitleaks` and `pre-commit` installed | Zero SKIPPED. Every run so far has skipped most of the controls, which is not the same as passing them |
+
+### The two things no quiet tenant has been able to prove
+
+| # | Test | Pass looks like |
+|---|---|---|
+| L7 | Provoke throttling — a corpus large enough, or a tenant busy enough, to return a real `429` | `throttleWaits > 0`, the run still completes, and the backoff honours `Retry-After`. **Unproven today**: every run has seen `throttleWaits=0`, so the engine's own retry path has never executed against a real refusal |
+| L8 | Fail a run deliberately — `MaxDeletePercent = 0` with one row missing trips `THROW 50007` | The Runs page shows a failed run, the connection health badge flips, and the Overview shows "needs attention". No page has rendered any of those three |
+
+### Worth doing while the fixture is in the right state
+
+| # | Test | Pass looks like |
+|---|---|---|
+| L9 | Set `IsDeleted = 0` on the tombstoned time entry and run a full crawl | The item returns and `crawl.Item` moves from state 3 back to live. Resurrection is what `@KeepTombstoneDays` exists for and it has never been exercised |
+| L10 | Set `Settings:Incremental = true` and run twice inside `FullEveryHours` | The second run reads incrementally and performs **no** delete sweep, logging "Incremental run; no delete sweep". Every run so far has been full, so the mode gate has only ever been observed in one direction |
+| L11 | Deploy `sql/28` to the live `ConnectorState`, then run the connector | No migration is reported, because the framing has not changed. Then set `ItemHasher.HashVersion` to 2 in a scratch build and confirm the next run escalates to full, says so, and reports it only once |
+
+Two notes on the order. L1 first, because it is the only one still holding a
+blocker open. L7 last, because it is the only one that cannot be scheduled —
+throttling happens when the service decides it does, and the honest plan is to
+watch for it in the pilot rather than to wait for it.
+
+---
+
+## 6. What is not in this repository
 
 Sample data throughout this repository is fictional — Contoso, Northwind and
 Consultco names, `corp.example` hosts. Nothing here describes a real customer's

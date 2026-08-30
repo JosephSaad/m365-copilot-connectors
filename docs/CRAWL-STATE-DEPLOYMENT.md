@@ -897,6 +897,107 @@ radius. It is a deliberate deferral, not a defect in `sql/26`.
 
 ---
 
+## 11. Where `Settings:StateConnectionString` is allowed to live
+
+Everything in this document is inert until the connector is told where the state
+database is, and that one setting has nowhere obvious to go. The build refuses
+it in a tracked `appsettings.json` — `SecretHygiene.targets` fails on any key
+matching `connectionstring`, and rightly, since that is the key shape a password
+arrives in. `PushOptions.Load` reads exactly one JSON file and layers nothing, so
+there is no environment variable or user-secrets provider to fall back on.
+
+Three routes. They are not equivalent, and the differences are about what each
+one costs the build gate rather than about convenience.
+
+**Put the real file in the published output, and leave the tracked one alone.**
+This is the one to take. Configuration is read from `AppContext.BaseDirectory` —
+beside the executable, not from the source tree — so a published folder outside
+the repository is where the deployed `appsettings.json` already belongs. No
+build-time scan reaches it, the shipped placeholder stays clean, and the setting
+survives a rebuild because nothing rebuilds into that folder.
+
+```powershell
+dotnet publish src\SqlGraphPush -c Release -o C:\Connectors\SqlGraphPush
+# then edit C:\Connectors\SqlGraphPush\appsettings.json
+```
+
+**Build the rig with the scan switched off for that build.** Documented at the
+head of `SecretHygiene.targets` and deliberately noisy in the log:
+
+```powershell
+dotnet build SqlTicketsConnector.sln -p:SkipAppSettingsSecretScan=true
+```
+
+Per-build, leaves the shipped control alone, and is the right answer when you
+genuinely want the value in the source tree during development. It is not a
+deployment.
+
+**Add the key to the allowlist.** `AppSettingsSecretScanAllowedPaths` in
+`build/SecretHygiene.targets`. This permanently widens a shipped security
+control, so take it only if the setting must be a normal committed key forever —
+and note the precedent that file sets for itself: `Auth:ClientSecretCredentialTarget`
+is allowlisted *and* paired with a startup check that rejects a value of the
+wrong shape, because an allowlist entry without one is a hole. The equivalent
+check here already exists — `CrawlStateWiring` refuses a connection string
+containing a password — but it matches by substring rather than by parsing, and
+tightening that is an open item in the readiness document. Widening the gate
+before closing that is the wrong order.
+
+Whichever route, the connection string is Integrated Security. A password in it
+is refused at startup, so there is no secret in this value to protect — which is
+what makes the first route sufficient rather than a compromise.
+
+---
+
+## 12. Choosing `Settings:MaxDeletePercent`
+
+The default is 10, and it is a placeholder rather than a recommendation. The
+guard exists to catch a *correct* run that read too little — a dropped view, a
+revoked permission, a filter that stopped matching, a source restored to last
+month — and the threshold that does that is a property of the source, not of the
+connector. Set too high it never fires; set below the source's normal daily
+churn it fires every day until somebody disables it, which is worse than not
+having it.
+
+Measure before choosing. Against the source, over a period long enough to
+include a month-end:
+
+```sql
+-- Deletions per day as a percentage of the live corpus, highest first.
+-- Run against the SOURCE database. Substitute the real table and its
+-- soft-delete column; on a source that hard-deletes, this cannot be measured
+-- retrospectively at all and the number has to come from whoever owns it.
+SELECT   TOP (30)
+         CAST(DeletedUtc AS DATE)                                   AS Day,
+         COUNT(*)                                                   AS Deleted,
+         CAST(100.0 * COUNT(*)
+              / NULLIF((SELECT COUNT(*) FROM dbo.Tickets WHERE IsDeleted = 0), 0)
+              AS DECIMAL(5, 2))                                     AS PercentOfLive
+FROM     dbo.Tickets
+WHERE    IsDeleted = 1
+  AND    DeletedUtc >= DATEADD(DAY, -90, SYSUTCDATETIME())
+GROUP BY CAST(DeletedUtc AS DATE)
+ORDER BY PercentOfLive DESC;
+```
+
+Take the highest legitimate day, and leave headroom above it — a threshold set
+exactly at the observed maximum fires the first time the business has a slightly
+bigger day than it has ever had. If the answer is under 1%, the default of 10 is
+already generous and there is nothing to do but record that it was checked.
+
+Two things worth knowing before setting it low. The guard compares against the
+live corpus at sweep time, so a small source has coarse granularity: at 1,118
+items every single deletion is 0.09%, and a threshold under 1 is a threshold that
+cannot distinguish nine deletions from ninety. And the sweep runs only on a full
+crawl, so on a weekly full-crawl cadence the percentage is a week's deletions,
+not a day's — the number to compare is `FullEveryHours` worth of churn.
+
+`Settings:OverrideDeleteGuard` is the deliberate bypass for the day the guard is
+right to fire and you have verified the source anyway. It is a per-run decision
+and belongs in a runbook step, never in a configuration file.
+
+---
+
 ## Where to look next
 
 | | |

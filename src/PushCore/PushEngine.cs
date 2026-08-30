@@ -263,6 +263,21 @@ public sealed class PushEngine
             ? CrawlMode.Incremental
             : CrawlMode.Full;
 
+        // Asked before the run opens, because the answer changes what kind of
+        // run this should be. A changed hash framing makes every stored hash
+        // stale at once, and an incremental run against stale hashes rewrites
+        // the whole corpus while reporting an ordinary success - the same cost
+        // as a full crawl, with none of the explanation. Escalating says what is
+        // happening in the run's own mode.
+        //
+        // The store reports this exactly once and adopts the new version as it
+        // does, so acting on it here is the only chance to act on it at all.
+        if (await this.store.CheckHashVersionAsync(
+                this.options.Graph.ConnectionId, ItemHasher.HashVersion, cancellationToken))
+        {
+            requested = CrawlMode.Full;
+        }
+
         var connection = new CrawlConnectionInfo(
             this.options.Graph.ConnectionId,
             this.connector.Key,

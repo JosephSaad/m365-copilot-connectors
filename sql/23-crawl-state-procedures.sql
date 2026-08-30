@@ -534,10 +534,23 @@ BEGIN
 
     IF @OverrideGuard = 0 AND @MissingPercent > @MaxDeletePercent
     BEGIN
+        -- THE PERCENT SIGNS ARE DOUBLED, AND THEY HAVE TO BE. An error message
+        -- is a format string, so a lone % is read as a specifier: it is
+        -- swallowed, and a sequence like '%)' destroys the rest of the message.
+        -- This message is almost nothing but percentages, so undoubled it
+        -- arrives EMPTY - the exception raises, the guard holds, and the
+        -- operator is told only that error 50007 happened.
+        --
+        -- That is the worst message in this file to lose. Every other THROW
+        -- here is a literal with no % in it; this is the only one that needs
+        -- the doubling, and it is the one refusal whose whole value is the two
+        -- numbers it carries. It was found by tripping the guard deliberately
+        -- and reading what came back, which is the only way it could be found:
+        -- the SQL is valid, the exception is correct, and the text is empty.
         DECLARE @Message NVARCHAR(2000) =
             CONCAT(N'Delete sweep refused. It would remove ', @MissingCount, N' of ', @LiveCount,
-                   N' live items (', @MissingPercent, N'%), above the ', @MaxDeletePercent,
-                   N'% guard. This is far more likely to be a source that returned too few rows - ',
+                   N' live items (', @MissingPercent, N'%%), above the ', @MaxDeletePercent,
+                   N'%% guard. This is far more likely to be a source that returned too few rows - ',
                    N'a dropped view, a revoked permission, a filter that matched nothing - than a ',
                    N'real deletion of that size. Verify the source count, then re-run with the ',
                    N'guard raised deliberately.');

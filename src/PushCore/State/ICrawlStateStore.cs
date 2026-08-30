@@ -69,6 +69,35 @@ public interface ICrawlStateStore : IAsyncDisposable
         int fullEveryHours,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Compares the hash framing this build produces against the one that
+    /// produced the hashes on record, and adopts this build's on the way past.
+    /// </summary>
+    /// <param name="connectionId">The connection whose hashes are in question.</param>
+    /// <param name="hashVersion">This build's <see cref="ItemHasher.HashVersion"/>.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>True when the version moved, and every stored hash is therefore stale.</returns>
+    /// <remarks>
+    /// Called once, before the run opens, because the answer decides what kind
+    /// of run it should be: a changed framing makes every stored hash useless,
+    /// and an incremental run against useless hashes rewrites the whole corpus
+    /// while reporting a routine success. Escalating to full costs the same
+    /// writes and says what it is doing.
+    ///
+    /// TRUE IS RETURNED EXACTLY ONCE PER CHANGE. The store adopts the new
+    /// version as it reports it, so a caller that ignores the answer has spent
+    /// the only notice it was going to get. That is deliberate: reporting it
+    /// again next run would rewrite a corpus the first run already rewrote.
+    ///
+    /// A connection the store has never seen returns false. Its first run
+    /// writes everything regardless, and reporting a migration there would be
+    /// reporting one that is not happening.
+    /// </remarks>
+    Task<bool> CheckHashVersionAsync(
+        string connectionId,
+        int hashVersion,
+        CancellationToken cancellationToken);
+
     /// <summary>Looks up what is on record for a batch of item IDs.</summary>
     /// <param name="itemIds">The IDs about to be considered.</param>
     /// <param name="cancellationToken">Cancellation.</param>
