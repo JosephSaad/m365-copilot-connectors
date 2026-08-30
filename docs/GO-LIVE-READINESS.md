@@ -5,7 +5,7 @@ description: Every feature in the direct-push path, what is built and what is no
 
 # Go-live readiness
 
-Current release: **v1.3.1**. This document is the state of the direct-push path
+Current release: **v1.4.0**. This document is the state of the direct-push path
 as a whole — what exists, what does not, and what has to happen before it is a
 supported service rather than a release that builds.
 
