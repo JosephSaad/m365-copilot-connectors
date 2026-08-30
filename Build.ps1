@@ -50,7 +50,18 @@ param(
     # is how the wrong one reaches a server.
     [string]$TargetFramework = '',
 
-    [string]$OutputRoot = "$PSScriptRoot\artifacts"
+    [string]$OutputRoot = "$PSScriptRoot\artifacts",
+
+    # Thumbprint of a code signing certificate in Cert:\CurrentUser\My or
+    # Cert:\LocalMachine\My. Supplied, the package is Authenticode signed and a
+    # signed file catalog is produced over the whole tree. Omitted, the package
+    # is unsigned and the build says so at the end.
+    [string]$CertificateThumbprint = '',
+
+    # Permits signing with a certificate that does not chain to a trusted root.
+    # For rehearsing the signing step against a self-signed certificate. A
+    # package produced this way must not be released.
+    [switch]$AllowUntrustedSigningCertificate
 )
 
 $ErrorActionPreference = 'Stop'
@@ -258,6 +269,99 @@ if ($forbidden) {
     throw 'Refusing to package certificate or key material.'
 }
 
+# ---------------------------------------------------------------------------
+# Software bill of materials.
+#
+# Written INTO the package, before signing, for two reasons that both matter.
+# It has to be inside so the customer's change advisory board gets it with the
+# thing it describes rather than as a separate download that goes missing; and
+# it has to precede signing so the catalog covers it, since a bill of materials
+# nobody can verify is a claim rather than evidence.
+#
+# There is no single SBOM for this repository. Directory.Packages.props pins two
+# different Google.Protobuf versions either side of EnableOtlpExporter, and the
+# OTLP build pulls a second gRPC stack besides, so two builds of one commit ship
+# genuinely different components. The generator records the build configuration
+# in the document and in its file name for exactly that reason.
+# ---------------------------------------------------------------------------
+
+Write-Host '== Software bill of materials ==' -ForegroundColor Cyan
+
+$sbomArgs = @{
+    SolutionRoot  = $PSScriptRoot
+    OutputPath    = (Join-Path $OutputRoot 'sbom.cdx.json')
+    Runtime       = $Runtime
+    Configuration = $Configuration
+}
+if ($TargetFramework) { $sbomArgs['TargetFramework'] = $TargetFramework }
+if ($EnableOtlpExporter) { $sbomArgs['EnableOtlpExporter'] = $true }
+if ($SelfContained) { $sbomArgs['SelfContained'] = $true }
+
+# Checked by the artefact, NOT by $LASTEXITCODE. $LASTEXITCODE is set by native
+# executables only; after a PowerShell script it still holds whatever the last
+# dotnet invocation left there, so a gate reading it would pass on the strength
+# of a successful 'dotnet test' regardless of what happened here. That is the
+# same fail-open shape the dependency audit above already guards against.
+& (Join-Path $PSScriptRoot 'build\New-Sbom.ps1') @sbomArgs | Out-Null
+
+$sbomPath = Join-Path $OutputRoot 'sbom.cdx.json'
+if (-not (Test-Path $sbomPath)) {
+    throw 'The software bill of materials was not produced. A release package without one cannot be accepted by a change advisory board.'
+}
+
+# Present is not the same as populated. An SBOM listing no components would
+# validate as JSON, look plausible, and answer "are we exposed to this advisory"
+# with silence.
+$sbomDoc = Get-Content $sbomPath -Raw | ConvertFrom-Json
+if (-not $sbomDoc.components -or @($sbomDoc.components).Count -lt 10) {
+    throw "The software bill of materials lists $(@($sbomDoc.components).Count) component(s), which cannot be right for this solution. Check that the restore completed."
+}
+Write-Host "  $(@($sbomDoc.components).Count) component(s) recorded in sbom.cdx.json"
+
+# ---------------------------------------------------------------------------
+# Code signing.
+#
+# Optional by thumbprint rather than mandatory, because most builds on an
+# engineer's machine have no code signing certificate and failing them would
+# make the build unusable for the people who run it most. What is NOT optional
+# is honesty about which kind of package this is: an unsigned package says so,
+# loudly, at the end of the run and in its own name.
+#
+# -SkipTests already renames the package to -diagnostic so it cannot reach a
+# change advisory board by accident. Unsigned packages get the same treatment
+# through the warning below rather than a second name, because the two
+# conditions are independent and a name carrying both becomes unreadable.
+# ---------------------------------------------------------------------------
+
+$signed = $false
+if ($CertificateThumbprint) {
+    Write-Host '== Code signing ==' -ForegroundColor Cyan
+    # The result object is checked rather than $LASTEXITCODE, for the reason
+    # given above the SBOM gate. Invoke-CodeSigning.ps1 throws on any failure
+    # and $ErrorActionPreference is Stop, so reaching the next line means it
+    # signed something; the assertions confirm it signed what was expected.
+    $signing = & (Join-Path $PSScriptRoot 'build\Invoke-CodeSigning.ps1') `
+        -Path $OutputRoot `
+        -CertificateThumbprint $CertificateThumbprint `
+        -RequireTrustedCertificate:(-not $AllowUntrustedSigningCertificate)
+
+    if (-not $signing -or $signing.SignedFiles -lt 1) {
+        throw 'Signing reported no files signed. The package has not been produced.'
+    }
+    if (-not (Test-Path (Join-Path $OutputRoot 'package.cat'))) {
+        throw 'Signing produced no catalog, so the package could not be verified after transfer.'
+    }
+    if ($signing.TestCertificate) {
+        Write-Warning 'Signed with a self-signed test certificate. This package must not be released.'
+    }
+
+    Write-Host "  signed $($signing.SignedFiles) file(s) with $($signing.Thumbprint)"
+    $signed = $true
+}
+else {
+    Write-Warning 'No -CertificateThumbprint supplied, so the package is UNSIGNED and carries no catalog. It cannot be verified after transfer. Supply a code signing certificate for anything that will be released.'
+}
+
 $stamp = Get-Date -Format 'yyyyMMdd-HHmm'
 $zipPath = Join-Path $PSScriptRoot "$packagePrefix-$stamp.zip"
 
@@ -267,6 +371,14 @@ Compress-Archive -Path (Join-Path $OutputRoot '*') -DestinationPath $zipPath
 Write-Host ''
 Write-Host 'Build complete.' -ForegroundColor Green
 Write-Host "Deployment package: $zipPath"
+if ($signed) {
+    Write-Host 'Signed, with a catalog covering the whole package. On the target host, verify before installing:' -ForegroundColor Green
+    Write-Host '  Test-FileCatalog -Path . -CatalogFilePath .\package.cat -FilesToSkip package.cat -Detailed'
+    Write-Host '  Get-Content .\signing-manifest.json'
+}
+else {
+    Write-Warning 'UNSIGNED package. Nothing on the target host can establish that what was unpacked is what was built.'
+}
 Write-Host ''
 Write-Host 'Upload that zip to SharePoint, download it on the agent server, then run:'
 Write-Host '  Unblock-File .\SqlTicketsConnector-deploy-*.zip'
