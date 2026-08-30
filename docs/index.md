@@ -35,6 +35,7 @@ documentation that ships with it.
 | [Crawl state database](CRAWL-STATE-DEPLOYMENT.md) | Standing up `ConnectorState`: the six state-database scripts in order, the two service accounts, retention, and the delete guard an operator has to know before the first refusal — plus `sql/26`, the seventh, which changes the source rather than the state |
 | [App registration](APP-REGISTRATION.md) | Entra setup, certificate auth, and the permissions each path actually needs |
 | [Runbook](RUNBOOK.md) | Scheduling, certificate rotation, the ACL staleness bound, and what each exit code means |
+| [**Scheduling**](SCHEDULING.md) | How to schedule incremental crawls and what they cost in deletion latency; several connectors on one host serialised behind one queue so their crawls cannot stack; and the weekly reconciliation, with the exit codes that page and the one that must not |
 
 ## Reviewing
 
@@ -42,6 +43,7 @@ documentation that ships with it.
 |---|---|
 | [Security control mapping](SECURITY.md) | Every control, where it is implemented, and the test that proves it |
 | [Crawl state reference](CRAWL-STATE-REFERENCE.md) | Every table, view and procedure in the state database, with columns, parameters and error numbers |
+| [**Capacity planning**](CAPACITY-PLANNING.md) | Will this still work at ten times the corpus? Graph's published ceilings and the one it does not publish, this rig's measured throughput and storage per item, what scales linearly and what has stopped, and the five queries that produce another estate's own version of these numbers |
 | [Adding a connector](ADDING-A-PUSH-CONNECTOR.md) | The source seam, and what a new source has to supply |
 
 ## Troubleshooting
