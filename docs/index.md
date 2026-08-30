@@ -20,7 +20,7 @@ documentation that ships with it.
 | [**Copilot Router**](copilot-router.html) | Nineteen questions that route one source to one delivery path — synced or federated connector, one of the three Power BI storage modes, a live call, or an application you host — with the cost and the warnings attached. Self-contained: no build step, no network calls |
 | [**Routing: own it or call it**](COPILOT-ROUTING.md) | Why ownership decides the architecture before cost does, why residency then picks the storage mode, and the decision tree in full |
 | [**Assumptions**](ASSUMPTIONS.md) | Every decision taken on the reader's behalf, and what would change if it were wrong |
-| [**Go-live readiness**](GO-LIVE-READINESS.md) | Every feature in the direct-push path at v1.4.0 — what is built, what is part-built, what is not — and the six verification tasks between the current release and a supported service |
+| [**Go-live readiness**](GO-LIVE-READINESS.md) | Every feature in the direct-push path at v1.5.0 — what is built, what is part-built, what is not — and the six verification tasks between the current release and a supported service |
 
 ## Deploying
 

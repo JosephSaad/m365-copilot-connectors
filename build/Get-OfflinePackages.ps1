@@ -8,12 +8,15 @@
     isolated build machine, and restore from it with --source. The list is
     grouped into three sets, because you probably do not need all three:
 
-      Base (81 packages, about 132 MB)
+      Base
           Everything 'dotnet build' and 'dotnet test' of the solution need,
-          across all four projects. Always downloaded. Twelve more than main's
-          list: net9.0 needs System.Text.Json, System.IO.Pipelines and their
-          neighbours as packages, where net10.0 has them in the shared
-          framework.
+          across every project. Always downloaded. This branch's list is
+          larger than main's: net9.0 needs System.Text.Json,
+          System.IO.Pipelines and their neighbours as packages, where net10.0
+          has them in the shared framework. The count is whatever the list
+          below actually holds - a number in this sentence went stale twice,
+          once on each line, and Test-OfflinePackageList.ps1 is the thing that
+          actually checks.
 
       Runtime packs (4 packages, about 92 MB)
           Only for 'Build.ps1 -SelfContained', which is how the release package
@@ -102,17 +105,11 @@ $packages = @(
     @{ Id = 'Microsoft.Graph.Core'; Version = '3.2.5' }
     @{ Id = 'Microsoft.Identity.Client'; Version = '4.83.1' }
     @{ Id = 'Microsoft.Identity.Client.Extensions.Msal'; Version = '4.83.1' }
-    @{ Id = 'Microsoft.IdentityModel.Abstractions'; Version = '8.14.0' }
     @{ Id = 'Microsoft.IdentityModel.Abstractions'; Version = '8.15.0' }
-    @{ Id = 'Microsoft.IdentityModel.JsonWebTokens'; Version = '6.35.0' }
     @{ Id = 'Microsoft.IdentityModel.JsonWebTokens'; Version = '8.15.0' }
-    @{ Id = 'Microsoft.IdentityModel.Logging'; Version = '6.35.0' }
     @{ Id = 'Microsoft.IdentityModel.Logging'; Version = '8.15.0' }
-    @{ Id = 'Microsoft.IdentityModel.Protocols'; Version = '6.35.0' }
     @{ Id = 'Microsoft.IdentityModel.Protocols'; Version = '8.15.0' }
-    @{ Id = 'Microsoft.IdentityModel.Protocols.OpenIdConnect'; Version = '6.35.0' }
     @{ Id = 'Microsoft.IdentityModel.Protocols.OpenIdConnect'; Version = '8.15.0' }
-    @{ Id = 'Microsoft.IdentityModel.Tokens'; Version = '6.35.0' }
     @{ Id = 'Microsoft.IdentityModel.Tokens'; Version = '8.15.0' }
     @{ Id = 'Microsoft.IdentityModel.Validators'; Version = '8.6.1' }
     @{ Id = 'Microsoft.Kiota.Abstractions'; Version = '1.22.2' }
@@ -138,7 +135,6 @@ $packages = @(
     @{ Id = 'System.Data.Odbc'; Version = '9.0.0' }
     @{ Id = 'System.Diagnostics.DiagnosticSource'; Version = '10.0.3' }
     @{ Id = 'System.Diagnostics.EventLog'; Version = '8.0.0' }
-    @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '6.35.0' }
     @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '8.15.0' }
     @{ Id = 'System.IO.Pipelines'; Version = '10.0.3' }
     @{ Id = 'System.Memory'; Version = '4.5.3' }

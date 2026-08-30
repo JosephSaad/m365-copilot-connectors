@@ -496,6 +496,64 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> CompareAndSeeAsync(
+        IReadOnlyCollection<CrawlItemState> candidates,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+
+        var toWrite = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (candidates.Count == 0)
+        {
+            return toWrite;
+        }
+
+        (string id, long run) = this.RequireOpenRun(nameof(this.CompareAndSeeAsync));
+
+        await using SqlConnection sql = await this.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using SqlCommand command = Procedure(sql, "crawl.uspCompareAndSee");
+
+        command.Parameters.Add(Text("@ConnectionId", id, 64));
+        command.Parameters.Add(new SqlParameter("@RunId", SqlDbType.BigInt) { Value = run });
+        command.Parameters.Add(TableValued("@Candidates", "crawl.ItemStateList", ItemStateRows(candidates)));
+
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+        int itemIdColumn = reader.GetOrdinal("ItemId");
+
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            toWrite.Add(reader.GetString(itemIdColumn));
+        }
+
+        return toWrite;
+    }
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken)
+    {
+        (string id, _) = this.RequireOpenRun(nameof(this.GetLiveItemIdsAsync));
+
+        var ids = new List<string>();
+
+        await using SqlConnection sql = await this.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using SqlCommand command = Procedure(sql, "crawl.uspListLiveItemIds");
+
+        command.Parameters.Add(Text("@ConnectionId", id, 64));
+
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+        int itemIdColumn = reader.GetOrdinal("ItemId");
+
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            ids.Add(reader.GetString(itemIdColumn));
+        }
+
+        return ids;
+    }
     /// <inheritdoc/>
     /// <remarks>
     /// THE GUARD IS RETHROWN, NOT SWALLOWED AND NOT REWORDED. uspGetPendingDeletes
@@ -765,7 +823,7 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
     public async Task CachePrincipalAsync(
         PrincipalGrant grant,
         string sourceType,
-        TimeSpan ttl,
+        TimeSpan? ttl,
         CancellationToken cancellationToken)
     {
         (string id, _) = this.RequireOpenRun(nameof(this.CachePrincipalAsync));
@@ -1433,6 +1491,7 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
             new SqlMetaData("ItemsDeleted", SqlDbType.Int),
             new SqlMetaData("ItemsSkipped", SqlDbType.Int),
             new SqlMetaData("ItemsFailed", SqlDbType.Int),
+            new SqlMetaData("ItemsDuplicate", SqlDbType.Int),
             new SqlMetaData("BytesWritten", SqlDbType.BigInt),
         };
 
@@ -1454,7 +1513,8 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
             record.SetInt32(3, totals.ItemsDeleted);
             record.SetInt32(4, totals.ItemsSkipped);
             record.SetInt32(5, totals.ItemsFailed);
-            record.SetInt64(6, totals.BytesWritten);
+            record.SetInt32(6, totals.ItemsDuplicate);
+            record.SetInt64(7, totals.BytesWritten);
 
             yield return record;
         }
@@ -1607,9 +1667,31 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
     }
 
     /// <summary>Converts a TTL to the whole minutes uspCachePrincipal takes.</summary>
+    /// <param name="ttl">The caller's TTL, or null to defer to the connection's policy.</param>
+    /// <returns>At least one minute, or DBNull when the caller stated no preference.</returns>
+    /// <remarks>
+    /// NULL IS A REAL ANSWER HERE, not a missing one. uspCachePrincipal reads
+    /// crawl.Connection.PrincipalTtlMinutes when this is null, which is how an
+    /// operator lowering that column actually lowers it. While this parameter
+    /// was a non-nullable TimeSpan the store always sent a number, so the column
+    /// governed nothing for positive answers and sql/33's clamp - which only
+    /// touches negatives - was the sole thing the database controlled. A policy
+    /// column no caller can defer to is a setting that does nothing.
+    /// </remarks>
+    private static object TtlMinutes(TimeSpan? ttl)
+    {
+        if (ttl is null)
+        {
+            return DBNull.Value;
+        }
+
+        return TtlMinutesOf(ttl.Value);
+    }
+
+    /// <summary>The arithmetic, once the caller has stated a TTL.</summary>
     /// <param name="ttl">The caller's TTL.</param>
     /// <returns>At least one minute.</returns>
-    private static int TtlMinutes(TimeSpan ttl)
+    private static int TtlMinutesOf(TimeSpan ttl)
     {
         double minutes = Math.Ceiling(ttl.TotalMinutes);
 

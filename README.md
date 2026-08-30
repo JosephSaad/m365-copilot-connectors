@@ -103,6 +103,8 @@ build/
   SecretHygiene.proj                   Repository-wide entry point for the same scan
   Get-OfflinePackages.ps1              Downloads every NuGet package, for an air-gapped build
   Test-OfflinePackageList.ps1          CI check: that list against the real restore graph
+  Sync-HarnessFixtures.ps1             The connector ID, port, data source and auth mode are written down
+                                       in several files; this derives them all from appsettings.json
   NuGet.offline.config                 Copy to the root as NuGet.config to stop restore using the network
 deploy/
   Install-Connector.ps1                Server-side install, run elevated
@@ -220,7 +222,7 @@ hadoop/
   03-Start-LocalWebHdfsStub.ps1        A loopback-only WebHDFS test double, for a laptop with no cluster
   04-create-atlas-test-metadata.sh     Descriptions, owners, classifications and terms for the catalogue to find
 tests/
-  SqlTicketsConnector.Tests/           326 tests, no live tenant, vault, database or cluster
+  SqlTicketsConnector.Tests/           432 tests, no live tenant, vault, database or cluster
     CdpAclMaskTests.cs                 The POSIX ACL mask, where this connector's worst over-grant lived
     CdpRangerFidelityTests.cs          Reading a Ranger policy the way Ranger reads it
     CdpHiveWatermarkTests.cs           The Hive marker, round tripped through a checkpoint into the next query
@@ -556,12 +558,28 @@ touching the Microsoft index.
 
 1. Copy `Manifest.json` and `ConnectionInfo.json` from the package into
    `C:\Program Files\Graph connector agent\TestApp\Config\`.
-2. Edit `ConnectionInfo.json` if your server or database differ. **Do not put
-   credentials in it**: SQL access comes from `appsettings.json` on the host, and
-   anything typed into the credential fields is logged as ignored and discarded.
+2. Edit the copy under `TestApp\Config\` if your server or database differ. **Do
+   not put credentials in it**: SQL access comes from `appsettings.json` on the
+   host, and anything typed into the credential fields is logged as ignored and
+   discarded.
 3. Run `C:\Program Files\Graph connector agent\TestApp\GraphConnectorAgentTest.exe`.
 
 Iterate freely here. Nothing reaches the tenant.
+
+`Manifest.json`, `ConnectionInfo.json` and `CustomConnectorPortMap.json` are
+reference copies: every value in them that is not prose is derived from
+`src/SqlTicketsConnector/appsettings.json`, which is the file the connector
+itself reads. So if the difference in step 2 is permanent rather than a one-off
+test, do not fix it by editing the copy in this repository — change
+`DataSource:Server` and `DataSource:Database` in `appsettings.json` and run:
+
+```powershell
+pwsh build/Sync-HarnessFixtures.ps1 -Update
+```
+
+That rewrites the derived values in place and leaves the explanatory prose in
+`ConnectionInfo.json` untouched. Run it without `-Update` to compare instead;
+CI does that on every build and fails on any copy that has drifted.
 
 ---
 
@@ -604,11 +622,24 @@ is why it deliberately does no I/O.
   at startup. Symptom is "connector unavailable on specified port" even though
   the process is listening.
 - **Each connector needs its own port.** Two entries pointing at 30303 will not
-  both work.
+  both work. The port is written down in four places that have to agree:
+  `Connector:Port` in `appsettings.json` decides it, and
+  `deploy/CustomConnectorPortMap.json`, the `-Port` default in
+  `deploy/Install-Connector.ps1` and the fallback port in
+  `deploy/Test-ConnectorHost.ps1` all follow it.
 - **Connector ID is permanent.** Changing it after connections exist breaks every
-  one of them. It appears in `appsettings.json`, `Manifest.json` and
-  `CustomConnectorPortMap.json`; the connector warns at startup if the configured
-  ID differs from the one this build was created for.
+  one of them. It is written down in six places that have to move together:
+  `src/SqlTicketsConnector/appsettings.json` (`Connector:Id` — the one that
+  decides), `ConnectorInfoServiceImpl.DefaultConnectorId`,
+  `deploy/Manifest.json`, `deploy/ConnectionInfo.json`,
+  `deploy/CustomConnectorPortMap.json` and the `-ConnectorId` default in
+  `deploy/Install-Connector.ps1`. The connector does warn at startup when the
+  configured ID differs from `DefaultConnectorId`, but it only warns and starts
+  anyway, on an on-premises host whose log nobody is reading at the time.
+- **Do not sync those copies by hand.** `build/Sync-HarnessFixtures.ps1` derives
+  all of them from `appsettings.json`: run it to compare, which is what CI does
+  on every build, or with `-Update` to rewrite them after a change. It reports
+  every value that has drifted, not just the first.
 - **Placeholders fail startup by design.** Exit code 2 with every invalid field
   listed at once, not one per restart.
 - **The ACL is not optional.** No `Acl:GrantGroupObjectIds` means the service

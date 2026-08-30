@@ -196,6 +196,7 @@ public readonly record struct RunTotals(
 /// <param name="ItemsDeleted">Items of this type removed.</param>
 /// <param name="ItemsSkipped">Candidates of this type declined.</param>
 /// <param name="ItemsFailed">Writes of this type that gave up.</param>
+/// <param name="ItemsDuplicate">Item IDs of this type that repeated an earlier row's.</param>
 /// <param name="BytesWritten">Content bytes sent for this type.</param>
 /// <remarks>
 /// The grain the dashboard drills down to. A run that wrote 1,118 items and a
@@ -209,6 +210,13 @@ public readonly record struct ItemTypeTotals(
     int ItemsDeleted,
     int ItemsSkipped,
     int ItemsFailed,
+
+    // Appended before BytesWritten rather than after ItemsFailed for no reason
+    // beyond matching crawl.ItemTypeCountList, whose columns SqlDataRecord binds
+    // BY POSITION. The two orders have to agree and neither is checked by the
+    // compiler, so they are kept adjacent in the mind by being adjacent in the
+    // file - see sql/40.
+    int ItemsDuplicate,
     long BytesWritten);
 
 /// <summary>One refusal from Graph, buffered until the run closes.</summary>

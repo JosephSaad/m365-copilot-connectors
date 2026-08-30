@@ -5,11 +5,15 @@
 //
 // THAT IS THE POINT OF THE FILE. A reviewer asking "what can the dashboard do
 // to the crawl-state database" reads one file and is finished. There are eight
-// SQL objects below: the seven reporting procedures from sql/24, and one SELECT
-// against crawl.vwConnectionHealth to populate the connection filter controls.
-// All eight are things sql/25 grants crawl_reader. Nothing here writes, and
-// there is no code path in this project that could - not a hit counter, not a
-// last-viewed timestamp, not a cache warm.
+// SQL objects below: the seven reporting procedures from sql/24, and
+// crawl.vwConnectionHealth, which is read by two SELECTs - one for two columns
+// to populate the connection filter controls, one for the whole row to serve
+// GET /health. All eight are things sql/25 grants crawl_reader, so neither of
+// those SELECTs needed a permission this application did not already hold: the
+// grant is `GRANT SELECT ON OBJECT::[crawl].[vwConnectionHealth]`, on the view
+// and not on a column list. Nothing here writes, and there is no code path in
+// this project that could - not a hit counter, not a last-viewed timestamp, not
+// a cache warm.
 //
 // The enforcement is NOT this file. It is sql/25: the IIS application pool
 // identity has EXECUTE on those seven procedures, SELECT on the six views, no
@@ -349,12 +353,19 @@ public sealed class CrawlStateQueries
     }
 
     /* =======================================================================
-       8. crawl.vwConnectionHealth - the connection filter control.
+       8. crawl.vwConnectionHealth - the connection filter control, and /health.
 
-       The only statement in this project that is not a procedure call. It reads
-       two columns from a view sql/25 grants crawl_reader SELECT on, because the
-       alternative is calling uspDashboardSummary - four result sets and the
-       aggregate over crawl.Item - to populate a dropdown.
+       The only two statements in this project that are not procedure calls.
+       Both read a view sql/25 grants crawl_reader SELECT on, and both exist for
+       the same reason: the alternative is calling uspDashboardSummary - four
+       result sets, the aggregate over crawl.Item, a thirty-day trend series and
+       ten rows of run history - to answer something much smaller than the front
+       page.
+
+       For the dropdown that reasoning was about a page load. For the health
+       endpoint it is about a poll interval: whatever monitors this asks every
+       minute, forever, and three of those four result sets would be work
+       nothing on the other end ever looks at.
        ======================================================================= */
 
     /// <summary>Reads the connection identifiers and names, for filter controls.</summary>
@@ -379,6 +390,49 @@ public sealed class CrawlStateQueries
             reader,
             row => new ConnectionRef(row.Text("ConnectionId"), row.Text("DisplayName")),
             cancellationToken);
+    }
+
+    /// <summary>Reads every connection's health row, for the monitoring endpoint.</summary>
+    /// <param name="cancellationToken">Cancels with the request.</param>
+    /// <returns>One row per registered connection, ordered by identifier.</returns>
+    /// <remarks>
+    /// SELECT *, and that is the same choice sql/24 makes against this view in
+    /// both uspDashboardSummary and uspGetConnectionDetail. Naming nineteen
+    /// columns here would be a second copy of MapConnectionHealth's column list,
+    /// kept in step by hand; with a star, the mapper is the only list, and
+    /// RowSet throws by NAME - naming the missing column and listing what did
+    /// come back - if the deployed view and this build ever disagree. On a
+    /// monitoring endpoint that is the failure worth having: a health payload
+    /// that quietly lost a column is a payload a check keeps parsing and keeps
+    /// finding nothing wrong in.
+    ///
+    /// This does not widen what the dashboard can read. The star is over a view
+    /// whose shape sql/22 already asks to be kept stable because a monitoring
+    /// system polls it, and the grant behind it is on the view rather than on
+    /// any column list.
+    ///
+    /// Ordered here as well as in HealthProjection, which sorts whatever it is
+    /// handed. The projection has to, because it cannot assume a caller ordered
+    /// its input; the ORDER BY is so that a reviewer running this statement by
+    /// hand gets the same order the payload has, instead of whatever the plan
+    /// happened to produce.
+    /// </remarks>
+    public async Task<IReadOnlyList<ConnectionHealthRow>> ListConnectionHealthAsync(
+        CancellationToken cancellationToken)
+    {
+        const string Sql =
+            "SELECT * FROM [crawl].[vwConnectionHealth] ORDER BY ConnectionId;";
+
+        await using SqlConnection connection = await this.OpenAsync(cancellationToken);
+        await using var command = new SqlCommand(Sql, connection)
+        {
+            CommandType = CommandType.Text,
+            CommandTimeout = this.options.CommandTimeoutSeconds,
+        };
+
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        return await ReadSetAsync(reader, MapConnectionHealth, cancellationToken);
     }
 
     /* =======================================================================
@@ -510,6 +564,7 @@ public sealed class CrawlStateQueries
         ItemsDeleted = row.Int32("ItemsDeleted"),
         ItemsSkipped = row.Int32("ItemsSkipped"),
         ItemsFailed = row.Int32("ItemsFailed"),
+        ItemsDuplicate = row.Int32("ItemsDuplicate"),
         BytesWritten = row.Int64("BytesWritten"),
         UnchangedPercent = row.DecimalOrNull("UnchangedPercent"),
     };

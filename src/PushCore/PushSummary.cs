@@ -141,8 +141,10 @@ public sealed class PushSummary
     }
 
     /// <summary>Records one item ID that repeated an earlier row's.</summary>
-    internal void CountDuplicate()
+    /// <param name="itemType">The item's declared type.</param>
+    internal void CountDuplicate(string itemType)
     {
+        this.Tally(itemType, tally => tally.Duplicates++);
         Interlocked.Increment(ref this.duplicates);
     }
 
@@ -223,6 +225,7 @@ public sealed class PushSummary
                     pair.Value.Deleted,
                     pair.Value.Skipped,
                     pair.Value.Failed,
+                    pair.Value.Duplicates,
                     pair.Value.Bytes))
                 .ToList();
         }
@@ -293,6 +296,14 @@ public sealed class PushSummary
         public int Skipped { get; set; }
 
         public int Failed { get; set; }
+
+        /// <summary>IDs of this kind that repeated an earlier row's.</summary>
+        /// <remarks>
+        /// Per kind because the run-level count cannot say which join is wrong.
+        /// "Three customers repeated" and "three time entries repeated" send
+        /// somebody to two completely different parts of the source query.
+        /// </remarks>
+        public int Duplicates { get; set; }
 
         public long Bytes { get; set; }
     }

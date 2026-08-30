@@ -2,6 +2,7 @@
 @model ConnectorState.Dashboard.Pages.Runs.IndexModel
 @{
     ViewData["Title"] = "Runs";
+    DisplayZone zone = DisplayZoneRequest.For(this.ViewContext.HttpContext);
 }
 
 <h1>Runs</h1>
@@ -43,6 +44,12 @@
             }
         </select>
     </div>
+    @* THESE TWO STAY UTC WHATEVER THE DISPLAY ZONE IS, and their labels say so
+       rather than following @zone.Label like the column headers do. They are
+       bounds that go to uspListRuns as typed: reinterpreting them in a viewer's
+       zone would move the filter by hours without saying so, and would make a
+       URL pasted into a ticket mean two different things for the two people
+       reading it. A displayed time is a rendering; a filter is a query. *@
     <div class="field">
         <label for="from">Started from (UTC)</label>
         <input type="date" id="from" name="from" value="@(Model.From?.ToString("yyyy-MM-dd"))" />
@@ -78,7 +85,7 @@
                         <th>Connection</th>
                         <th>Status</th>
                         <th>Mode</th>
-                        <th class="num">Started (UTC)</th>
+                        <th class="num">Started (@zone.Label)</th>
                         <th class="num">Duration</th>
                         <th class="num">Read</th>
                         <th class="num">Written</th>
@@ -104,7 +111,7 @@
                             </td>
                             <td><partial name="_ConnectionPill" model="run.Status ?? string.Empty" /></td>
                             <td class="dim">@(run.Mode ?? Format.None)</td>
-                            <td class="num nowrap">@Format.TimestampShort(run.StartedUtc)</td>
+                            <td class="num nowrap">@Format.TimestampShort(run.StartedUtc, zone)</td>
                             <td class="num">@Format.Duration(run.DurationSeconds)</td>
                             <td class="num dim">@Format.Count(run.ItemsRead)</td>
                             <td class="num">@Format.Count(run.ItemsWritten)</td>

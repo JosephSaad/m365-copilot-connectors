@@ -38,7 +38,7 @@ using Serilog;
 using Serilog.Context;
 
 /// <summary>Runs one connector against one connection.</summary>
-public sealed class PushEngine
+public sealed partial class PushEngine
 {
     private const int MaxWriteAttempts = 5;
 
@@ -53,15 +53,52 @@ public sealed class PushEngine
     // stalled run is obvious, rare enough that the line is not on the per-row
     // critical path.
     private const int ProgressEvery = 250;
-
     // How many items are prepared before the engine asks the state store what it
     // already has and writes what moved.
     //
-    // Twenty, because that is Graph's hard ceiling on a $batch and there is no
-    // value in a chunk larger than the largest request that can carry it. It is
-    // also the granularity of the state store's round trips: one lookup and at
-    // most two recording calls per chunk, rather than three per item.
-    private const int ChunkSize = 20;
+    // TWENTY WAS TWO DECISIONS WEARING ONE NUMBER. Graph's hard ceiling on a
+    // $batch is twenty requests, and this constant was also the granularity of
+    // every state-store round trip - one lookup and at most two recording calls
+    // per chunk. Tying them together meant the store paid Graph's limit: a
+    // 111,900-row crawl made 5,595 lookups, each returning at most twenty rows,
+    // when the store is perfectly willing to answer about two hundred at once.
+    //
+    // They are now separate. GraphBatchWriter.WriteAsync already splits a list
+    // of any length into service-legal batches of twenty, so a larger chunk here
+    // changes what the STORE is asked and leaves what GRAPH is asked exactly as
+    // it was.
+    private const int DefaultLookupChunkSize = 200;
+
+    // ...but a count alone is not a safe bound, and this is the reason the
+    // ceiling below exists. A chunk holds a fully built ExternalItem per row,
+    // and one item may carry DataSource:MaxContentBytes of content - 3.5 MB by
+    // default, and up to the platform's 30 MB. Two hundred of those is several
+    // gigabytes of live objects, which is a memory profile nobody asked for and
+    // an out-of-memory nobody could explain from the setting that caused it.
+    //
+    // So the chunk closes on whichever it reaches first, exactly as the batch
+    // writer closes a batch on requests-or-bytes. On this rig's corpus - p50
+    // 491 content bytes, max 904 - the count closes every chunk and this
+    // ceiling never fires; on a corpus of large documents the ceiling closes
+    // them and the count never fires. Both stay correct without being tuned.
+    private const long DefaultLookupChunkBytes = 16 * 1024 * 1024;
+
+    // The floor is one: a chunk of one is legal, and forcing a minimum above it
+    // would silently overrule an operator debugging a specific row. The ceiling
+    // is a guard against a typo turning a crawl into one enormous chunk.
+    private const int MaxLookupChunkSize = 2000;
+
+    // What one write actually carries, and the unit the writer channel moves.
+    //
+    // Kept at Graph's $batch ceiling and kept SEPARATE from the lookup window
+    // above, because the two numbers answer to different services. Raising the
+    // lookup window is free; raising this is not permitted by Graph. And the
+    // first attempt at this change used one number for both, which quietly
+    // starved the writer pool: the channel moves chunks, so a window of two
+    // hundred handed one writer two hundred rows and left the other fifteen
+    // idle. The concurrency tests caught it, which is the only reason this
+    // comment can be specific about it.
+    private const int WriteChunkSize = 20;
 
     // The share of the live corpus a single sweep may remove before the state
     // store refuses it. Ten percent, because a real day's deletions in a
@@ -86,6 +123,25 @@ public sealed class PushEngine
     private readonly ICrawlStateStore store;
 
     private GraphBatchWriter? batchWriter;
+
+    // Every item ID a DRY RUN has read, kept so the delete preview can diff it
+    // against what the index holds. Null on a real run, where the store's own
+    // LastSeenRunId bookkeeping answers the same question without holding
+    // 111,900 strings in memory - about 3 MB, which is affordable only because a
+    // dry run is something a person is sitting and waiting for.
+    private HashSet<string>? dryRunSeenIds;
+
+    // Resolved once in the constructor. Setting() re-parses configuration on
+    // every call and the byte ceiling is consulted once per row, which is a
+    // needless cost 111,900 times over.
+    private readonly int lookupChunkSize;
+    private readonly long lookupChunkBytes;
+
+    // The rescue path's stand-in for a lookup that cannot be made. See its use
+    // in the reader's catch: static, immutable, and shared because nothing ever
+    // writes to it.
+    private static readonly IReadOnlySet<string> EmptyUnchanged =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     // What kind of read this run is making. Full unless the state store said an
     // incremental one was safe, and consulted by exactly one thing: the delete
@@ -137,6 +193,28 @@ public sealed class PushEngine
         this.log = log;
         this.dryRun = dryRun;
         this.store = store ?? NullCrawlStateStore.Instance;
+
+        // Clamped, and the clamp is announced. A silently-honoured 100,000 would
+        // read every row into memory before writing one, and the operator who
+        // typed it would be looking at a memory graph rather than at the setting
+        // that caused it. This matches how Settings:Writers reports its own
+        // clamp - "was 99; using 16" - because a limit nobody is told about is
+        // indistinguishable from a limit that did not work.
+        int requested = this.options.Setting("LookupChunkSize", DefaultLookupChunkSize);
+        this.lookupChunkSize = Math.Clamp(requested, 1, MaxLookupChunkSize);
+
+        if (this.lookupChunkSize != requested)
+        {
+            this.log.Warning(
+                "Settings:LookupChunkSize was {Requested}; using {Used}. The permitted range is 1 to {Max}.",
+                requested,
+                this.lookupChunkSize,
+                MaxLookupChunkSize);
+        }
+
+        this.lookupChunkBytes = this.options.Setting("LookupChunkBytes", 0) > 0
+            ? this.options.Setting("LookupChunkBytes", 0)
+            : DefaultLookupChunkBytes;
     }
 
     /// <summary>Creates the connection and schema if needed, then pushes every item.</summary>
@@ -238,112 +316,6 @@ public sealed class PushEngine
 
             throw;
         }
-    }
-
-    /// <summary>Registers the connection with the state store and opens a run.</summary>
-    /// <param name="context">What the connector needs to open its source.</param>
-    /// <param name="cancellationToken">Cancellation.</param>
-    /// <returns>What the store said about this run.</returns>
-    /// <remarks>
-    /// Also decides the mode, and the decision is deliberately the store's
-    /// rather than the operator's. A connector may ask for an incremental run;
-    /// the store escalates it to full when there has never been a successful
-    /// full crawl, when the last one has aged out, or when there is no
-    /// checkpoint to start from. That third case is the one worth naming: an
-    /// incremental read with no marker reads from the beginning of time, which
-    /// is a full crawl that has told the delete sweep it was not one.
-    ///
-    /// The resume marker is put on the context here, before the source is
-    /// created, which is the only moment a connector can act on it.
-    /// </remarks>
-    private async Task<CrawlRunStart> OpenRunAsync(
-        PushSourceContext context, CancellationToken cancellationToken)
-    {
-        CrawlMode requested = this.options.Setting("Incremental", false)
-            ? CrawlMode.Incremental
-            : CrawlMode.Full;
-
-        // Asked before the run opens, because the answer changes what kind of
-        // run this should be. A changed hash framing makes every stored hash
-        // stale at once, and an incremental run against stale hashes rewrites
-        // the whole corpus while reporting an ordinary success - the same cost
-        // as a full crawl, with none of the explanation. Escalating says what is
-        // happening in the run's own mode.
-        //
-        // The store reports this exactly once and adopts the new version as it
-        // does, so acting on it here is the only chance to act on it at all.
-        if (await this.store.CheckHashVersionAsync(
-                this.options.Graph.ConnectionId, ItemHasher.HashVersion, cancellationToken))
-        {
-            requested = CrawlMode.Full;
-        }
-
-        var connection = new CrawlConnectionInfo(
-            this.options.Graph.ConnectionId,
-            this.connector.Key,
-            this.connector.DisplayName,
-            this.options.Setting("ExpectedIntervalMinutes", 0) > 0
-                ? this.options.Setting("ExpectedIntervalMinutes", 0)
-                : null);
-
-        CrawlRunStart run = await this.store.BeginRunAsync(
-            connection,
-            requested,
-            this.dryRun,
-            this.options.Setting("FullEveryHours", DefaultFullEveryHours),
-            cancellationToken);
-
-        this.crawlMode = run.Mode;
-
-        if (run.AbandonedRunsReaped > 0)
-        {
-            this.log.Warning(
-                "{Count} previous run(s) were closed as abandoned. Those processes stopped without reporting; " +
-                "check whether the host is being restarted mid-crawl.",
-                run.AbandonedRunsReaped);
-        }
-
-        if (requested == CrawlMode.Incremental && run.Mode == CrawlMode.Full)
-        {
-            this.log.Information(
-                "An incremental run was requested; reading in full instead. " +
-                "Last successful full crawl: {LastFull}.",
-                run.LastFullSuccessUtc?.ToString("o") ?? "never");
-        }
-
-        if (run.Mode == CrawlMode.Incremental)
-        {
-            context.ResumeFrom = await this.store.GetCheckpointAsync(cancellationToken);
-        }
-
-        return run;
-    }
-
-    /// <summary>Collects the run's totals for the state store.</summary>
-    /// <param name="summary">The run's counters.</param>
-    /// <returns>The totals, in the shape the store records.</returns>
-    private RunTotals Totals(PushSummary summary)
-    {
-        return new RunTotals(
-            summary.Total + summary.Unchanged + summary.Skipped,
-            summary.Total,
-            summary.Unchanged,
-            summary.Deleted,
-            summary.Skipped,
-            summary.Duplicates,
-            summary.Failed,
-            summary.ThrottleWaits,
-            summary.Batches,
-            summary.BytesWritten);
-    }
-
-    /// <summary>Shortens a message to what the store's column can hold.</summary>
-    /// <param name="text">The message.</param>
-    /// <param name="limit">The column's width.</param>
-    /// <returns>The message, cut on a character boundary, with an ellipsis when cut.</returns>
-    private static string Truncate(string text, int limit)
-    {
-        return text.Length <= limit ? text : text.Substring(0, limit - 3) + "...";
     }
 
     /// <summary>Creates the external connection. Idempotent.</summary>
@@ -509,111 +481,18 @@ public sealed class PushEngine
             // Reached only by falling out of the loop, which means the
             // enumeration ended without throwing and every write returned.
             await source.OnCrawlCompletedAsync(cancellationToken);
-
-            // And only then may anything be concluded about what is missing.
-            await this.SweepDeletedItemsAsync(summary, cancellationToken);
         }
+
+        // Both paths, and only here. A real run sweeps; a dry run previews the
+        // same sweep and touches nothing. The precondition is identical and is
+        // the reason this sits after the loop rather than inside it: the
+        // enumeration ended without throwing, so what the source did not return
+        // is genuinely absent rather than merely not reached yet. A preview
+        // computed from a partial read would name rows the source had simply not
+        // got to, which is the one thing a delete preview must never do.
+        await this.SweepDeletedItemsAsync(summary, cancellationToken);
 
         return summary;
-    }
-
-    /// <summary>Removes items the source has stopped returning.</summary>
-    /// <param name="summary">The run's counters.</param>
-    /// <param name="cancellationToken">Cancellation.</param>
-    /// <returns>A task for the operation.</returns>
-    /// <remarks>
-    /// The second of the ten agent features, and the one that can do the most
-    /// damage if it is wrong, so it is fenced on four sides.
-    ///
-    /// It runs only after a FULL crawl that enumerated to the end without
-    /// throwing - the caller reaches it only on that path, and the store refuses
-    /// an incremental RunId outright rather than trusting that. Absence from a
-    /// partial read means nothing at all.
-    ///
-    /// It runs only with a state store. Without one there is no inventory to
-    /// diff against, and "the source returned fewer items than I remember" is
-    /// not a sentence a run with no memory can say.
-    ///
-    /// The store's percentage guard refuses a sweep that would remove more than
-    /// Settings:MaxDeletePercent of the live corpus. That guard is aimed at a
-    /// CORRECT full run that read the wrong thing: a dropped view, a revoked
-    /// permission, a filter that matched nothing, a source restored to last
-    /// month. All four present identically as a clean run that read too little.
-    ///
-    /// And a delete Graph refuses is left pending rather than forgotten, so it
-    /// is retried on the next run. A 404 counts as success: an item Graph says
-    /// is not there is not there, and treating that as a failure would keep it
-    /// in the pending list for ever.
-    ///
-    /// The source is never consulted. It is not asked whether a record was
-    /// deleted and it needs no soft-delete column - see docs/SOURCE-CONTRACT.md.
-    /// A hard DELETE, a row falling out of the query, an archived record and a
-    /// permission change that hides it are all "the source stopped returning
-    /// it", which is the only question being asked.
-    /// </remarks>
-    private async Task SweepDeletedItemsAsync(PushSummary summary, CancellationToken cancellationToken)
-    {
-        if (!this.store.IsEnabled)
-        {
-            return;
-        }
-
-        if (this.crawlMode != CrawlMode.Full)
-        {
-            this.log.Debug("Incremental run; no delete sweep. Absence from a partial read means nothing.");
-            return;
-        }
-
-        double guard = this.options.Setting("MaxDeletePercent", DefaultMaxDeletePercent);
-        bool overrideGuard = this.options.Setting("OverrideDeleteGuard", false);
-
-        if (overrideGuard)
-        {
-            this.log.Warning(
-                "Settings:OverrideDeleteGuard is set. The {Guard}% delete guard is disabled for this run, " +
-                "so a source that returned too few rows will have the difference removed from the index.",
-                guard);
-        }
-
-        IReadOnlyList<CrawlDeletion> pending =
-            await this.store.GetPendingDeletesAsync(guard, overrideGuard, cancellationToken);
-
-        if (pending.Count == 0)
-        {
-            return;
-        }
-
-        this.log.Information(
-            "Delete sweep: {Count} item(s) the source no longer returns will be removed from the index.",
-            pending.Count);
-
-        var confirmed = new List<string>(pending.Count);
-
-        foreach (CrawlDeletion deletion in pending)
-        {
-            if (await this.TryDeleteAsync(deletion.ItemId, summary, cancellationToken))
-            {
-                confirmed.Add(deletion.ItemId);
-                summary.CountDeleted(deletion.ItemType);
-            }
-        }
-
-        if (confirmed.Count > 0)
-        {
-            await this.store.ConfirmDeletesAsync(confirmed, cancellationToken);
-        }
-
-        if (confirmed.Count < pending.Count)
-        {
-            // Left pending on purpose. The next run retries them, and
-            // crawl.vwPendingDeletes shows anything that keeps failing - which
-            // is an item still answering searches for a record that is gone.
-            this.log.Warning(
-                "{Failed} of {Total} deletions were refused and remain pending. They will be retried next run; " +
-                "until then those items still answer searches.",
-                pending.Count - confirmed.Count,
-                pending.Count);
-        }
     }
 
     /// <summary>Builds the batch writer once, or returns null when batching is off.</summary>
@@ -641,67 +520,40 @@ public sealed class PushEngine
             return null;
         }
 
+        // Settings:MaxBatchContentBytes, because the header on
+        // DefaultMaxBatchContentBytes says to raise it "with the constructor once
+        // a tenant's real behaviour is known" - and until now the only way to do
+        // that was to rebuild. A tenant's real behaviour is learned in
+        // production, by the operator, not by whoever compiled the binary.
+        //
+        // Left at the default here on purpose. This rig's measured corpus is p50
+        // 491 content bytes and max 904, so twenty requests is 18 KB and the
+        // REQUEST COUNT closed all 5,608 batches; the byte ceiling has never
+        // fired once. There is therefore no measurement on this corpus that
+        // would justify moving it, and moving it anyway would be tuning against
+        // a number nobody has observed.
+        long envelope = this.options.Setting(
+            "MaxBatchContentBytes", GraphBatchWriter.DefaultMaxBatchContentBytes);
+
+        if (envelope <= 0)
+        {
+            this.log.Warning(
+                "Settings:MaxBatchContentBytes was {Requested}, which is not a size; using {Used}.",
+                envelope,
+                GraphBatchWriter.DefaultMaxBatchContentBytes);
+
+            envelope = GraphBatchWriter.DefaultMaxBatchContentBytes;
+        }
+
         return this.batchWriter ??= new GraphBatchWriter(
             this.graph,
             this.options.Graph.ConnectionId,
             summary,
             this.log,
-            throttle => this.store.RecordThrottle(throttle));
+            throttle => this.store.RecordThrottle(throttle),
+            envelope);
     }
 
-    /// <summary>Deletes one item, with the same backoff a write gets.</summary>
-    /// <param name="itemId">The item to remove.</param>
-    /// <param name="summary">The run's counters.</param>
-    /// <param name="cancellationToken">Cancellation.</param>
-    /// <returns>True when the item is gone from the index.</returns>
-    /// <remarks>
-    /// Unlike a write, a terminal failure here does NOT end the run. One item
-    /// that cannot be deleted should not abandon the other nine hundred, and the
-    /// store keeps it pending so nothing is lost by carrying on.
-    /// </remarks>
-    private async Task<bool> TryDeleteAsync(
-        string itemId, PushSummary summary, CancellationToken cancellationToken)
-    {
-        for (int attempt = 1; ; attempt++)
-        {
-            try
-            {
-                await this.graph.External.Connections[this.options.Graph.ConnectionId]
-                    .Items[itemId].DeleteAsync(cancellationToken: cancellationToken);
-
-                return true;
-            }
-            catch (ODataError ex) when (ex.ResponseStatusCode == 404)
-            {
-                // Already absent. That is the state we were asking for, so it
-                // counts - anything else keeps it pending for ever.
-                return true;
-            }
-            catch (ODataError ex) when (
-                ex.ResponseStatusCode is 429 or 502 or 503 or 504 && attempt < MaxWriteAttempts)
-            {
-                TimeSpan wait = GraphThrottling.RetryAfter(ex) ?? GraphThrottling.Backoff(attempt);
-
-                if (ex.ResponseStatusCode == 429)
-                {
-                    summary.CountThrottleWait();
-                    this.store.RecordThrottle(new ThrottleEvent(
-                        DateTime.UtcNow, 429, (int)wait.TotalSeconds, "delete", attempt));
-                }
-
-                await Task.Delay(wait, cancellationToken);
-            }
-            catch (ODataError ex)
-            {
-                this.log.Error(
-                    "Delete of {ItemId} failed with status {Status}. It stays pending and will be retried.",
-                    itemId,
-                    ex.ResponseStatusCode);
-
-                return false;
-            }
-        }
-    }
 
     /// <summary>Decides how many writers this run may use.</summary>
     /// <param name="source">The opened source.</param>
@@ -755,7 +607,8 @@ public sealed class PushEngine
         IPushSource source, PushSummary summary, CancellationToken cancellationToken)
     {
         var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var chunk = new List<Prepared>(ChunkSize);
+        var chunk = new List<Prepared>(this.lookupChunkSize);
+        long chunkBytes = 0;
         string lastItemId = "(none)";
         int rowOrdinal = 0;
 
@@ -803,11 +656,16 @@ public sealed class PushEngine
 
                 lastItemId = mapped.Id;
                 chunk.Add(prepared.Value);
+                chunkBytes += prepared.Value.ContentBytes;
 
-                if (chunk.Count >= ChunkSize)
+                // Whichever comes first. See DefaultLookupChunkBytes: the count
+                // closes the chunk on small rows, the ceiling closes it on large
+                // ones, and neither has to be tuned for the other's corpus.
+                if (chunk.Count >= this.lookupChunkSize || chunkBytes >= this.lookupChunkBytes)
                 {
-                    await this.FlushChunkAsync(source, chunk, summary, cancellationToken);
+                    await this.FlushWindowAsync(source, chunk, summary, cancellationToken);
                     chunk.Clear();
+                    chunkBytes = 0;
                 }
             }
         }
@@ -816,7 +674,7 @@ public sealed class PushEngine
         {
             try
             {
-                await this.FlushChunkAsync(source, chunk, summary, CancellationToken.None);
+                await this.FlushWindowAsync(source, chunk, summary, CancellationToken.None);
             }
             catch (Exception flushFailure)
             {
@@ -836,7 +694,7 @@ public sealed class PushEngine
         // The tail. Without this a corpus smaller than one chunk writes nothing
         // at all - the kind of defect that passes every test written against a
         // round number of rows and fails on the first real source.
-        await this.FlushChunkAsync(source, chunk, summary, cancellationToken);
+        await this.FlushWindowAsync(source, chunk, summary, cancellationToken);
     }
 
     /// <summary>Reads the source on one thread and writes on several.</summary>
@@ -863,7 +721,7 @@ public sealed class PushEngine
         IPushSource source, PushSummary summary, int writers, CancellationToken cancellationToken)
     {
         var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var queue = Channel.CreateBounded<List<Prepared>>(new BoundedChannelOptions(writers * 2)
+        var queue = Channel.CreateBounded<WriteChunk>(new BoundedChannelOptions(writers * 2)
         {
             SingleReader = false,
             SingleWriter = true,
@@ -880,7 +738,8 @@ public sealed class PushEngine
             {
                 // Declared outside the try so the catch can hand over whatever
                 // was already read before the source failed.
-                var chunk = new List<Prepared>(ChunkSize);
+                var chunk = new List<Prepared>(this.lookupChunkSize);
+                long chunkBytes = 0;
 
                 try
                 {
@@ -916,22 +775,24 @@ public sealed class PushEngine
 
                         lastItemId = mapped.Id;
                         chunk.Add(prepared.Value);
+                        chunkBytes += prepared.Value.ContentBytes;
 
-                        if (chunk.Count >= ChunkSize)
+                        if (chunk.Count >= this.lookupChunkSize || chunkBytes >= this.lookupChunkBytes)
                         {
                             // A fresh list per chunk. Handing the same one to the
                             // channel and clearing it would let a writer read a
                             // chunk the reader is already refilling - a data race
                             // whose symptom is items silently written twice or not
                             // at all, depending on timing.
-                            await queue.Writer.WriteAsync(chunk, failed.Token);
-                            chunk = new List<Prepared>(ChunkSize);
+                            await this.PublishWindowAsync(queue.Writer, chunk, failed.Token);
+                            chunk = new List<Prepared>(this.lookupChunkSize);
+                            chunkBytes = 0;
                         }
                     }
 
                     if (chunk.Count > 0)
                     {
-                        await queue.Writer.WriteAsync(chunk, failed.Token);
+                        await this.PublishWindowAsync(queue.Writer, chunk, failed.Token);
                     }
 
                     queue.Writer.Complete();
@@ -944,7 +805,15 @@ public sealed class PushEngine
                     // successfully produced.
                     if (chunk.Count > 0)
                     {
-                        queue.Writer.TryWrite(chunk);
+                        // An EMPTY unchanged set, and deliberately so. Resolving
+                        // the window needs an async store call and this is a
+                        // synchronous best-effort rescue inside a catch, with a
+                        // source that has already died. An empty set means every
+                        // buffered row is treated as changed and written, which
+                        // costs a few redundant writes and cannot lose one -
+                        // whereas skipping the rescue to keep the lookup would
+                        // lose rows the source had already handed over.
+                        queue.Writer.TryWrite(new WriteChunk(chunk, EmptyUnchanged));
                     }
 
                     // Complete WITH the fault, so every writer's ReadAllAsync ends
@@ -961,9 +830,10 @@ public sealed class PushEngine
             {
                 try
                 {
-                    await foreach (List<Prepared> batch in queue.Reader.ReadAllAsync(failed.Token))
+                    await foreach (WriteChunk batch in queue.Reader.ReadAllAsync(failed.Token))
                     {
-                        await this.FlushChunkAsync(source, batch, summary, failed.Token);
+                        await this.FlushChunkAsync(
+                            source, batch.Rows, batch.Unchanged, summary, failed.Token);
                     }
                 }
                 catch (Exception)
@@ -1096,7 +966,7 @@ public sealed class PushEngine
             // a source that reaches the same item twice through two paths writes
             // it once. It is kept on the reading thread, which is why duplicate
             // detection stays correct however many writers are running.
-            summary.CountDuplicate();
+            summary.CountDuplicate(mapped.ItemType);
             this.log.Warning(
                 "Item {ItemId} appeared more than once (row {RowOrdinal}); the later row overwrote the earlier item.",
                 mapped.Id,
@@ -1106,329 +976,17 @@ public sealed class PushEngine
         return new Prepared(mapped, item, contentHash, aclHash, contentBytes, rowStarted);
     }
 
-    /// <summary>Decides what in this chunk actually needs writing, writes it, and commits.</summary>
-    /// <param name="source">The opened source.</param>
-    /// <param name="chunk">Prepared items, in the order the source yielded them.</param>
-    /// <param name="summary">The run's counters.</param>
-    /// <param name="cancellationToken">Cancellation.</param>
-    /// <returns>A task for the operation.</returns>
+
+
+    /// <summary>One write's worth of rows, and the lookup answer they came with.</summary>
     /// <remarks>
-    /// FOUR STEPS, AND THE ORDER IS THE WHOLE CORRECTNESS ARGUMENT.
-    ///
-    /// 1. Ask the store what it already holds for these IDs. One round trip for
-    ///    the chunk, not one per item.
-    ///
-    /// 2. Write only the items whose content or ACL hash moved. This is the
-    ///    saving: on a steady-state run most items are already correct, and the
-    ///    write that is skipped is the expensive one.
-    ///
-    /// 3. Record what happened - AFTER Graph confirmed, never before. A hash
-    ///    written ahead of the PUT means the next run sees the item as unchanged
-    ///    and skips it, so one failure becomes an item that is permanently stale
-    ///    and permanently invisible.
-    ///
-    ///    Both halves are recorded. Marking the unchanged items SEEN is not
-    ///    bookkeeping: the delete sweep diffs on exactly that, so skipping the
-    ///    mark would have the next full crawl conclude the source had dropped
-    ///    every item that did not change and remove them from the index.
-    ///
-    /// 4. Count and commit in the order the source yielded, which is what the
-    ///    watermark rests on. Anything that throws above this point leaves the
-    ///    checkpoint where it was, because this step is simply not reached.
-    ///
-    /// The checkpoint moves once per chunk rather than once per item, using the
-    /// last item's marker. Every item in the chunk has been confirmed by then,
-    /// so the position is honest, and it costs one round trip instead of twenty.
+    /// The channel carries this rather than a bare list because the reader now
+    /// resolves a whole window against the state store before cutting it up, and
+    /// the answer has to travel with the pieces. Every chunk cut from one window
+    /// shares one set; it is read-only from the moment it is published, so the
+    /// sharing needs no lock.
     /// </remarks>
-    private async Task FlushChunkAsync(
-        IPushSource source,
-        List<Prepared> chunk,
-        PushSummary summary,
-        CancellationToken cancellationToken)
-    {
-        if (chunk.Count == 0)
-        {
-            return;
-        }
-
-        if (this.dryRun)
-        {
-            foreach (Prepared prepared in chunk)
-            {
-                // Item ID, type and sizes only. The content is customer data and
-                // does not go to the console any more than it goes to the log.
-                this.log.Information(
-                    "Would write {ItemId} ({ItemType}): {PropertyCount} properties, {ContentBytes} content bytes, " +
-                    "{AclCount} ACL entr(y/ies).",
-                    prepared.Mapped.Id,
-                    prepared.Mapped.ItemType,
-                    prepared.Mapped.Properties.Count,
-                    prepared.ContentBytes,
-                    prepared.Item.Acl?.Count ?? 0);
-
-                summary.Count(prepared.Mapped.ItemType);
-
-                // Measured like any other row. A dry run writes nothing, so what
-                // it reports IS the whole non-Graph cost of the pipeline - the
-                // cheapest way to find out how much of a slow run is not Graph's
-                // fault, and it needs no tenant at all.
-                summary.Timing.RowTotal.Add(PushTiming.MicrosecondsSince(prepared.StartedAt));
-            }
-
-            // No commit callbacks and no state recorded: a dry run writes
-            // nothing, so it must leave both the watermark and the store exactly
-            // where it found them.
-            return;
-        }
-
-        // 1. What is already on record for these items?
-        var unchanged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        if (this.store.IsEnabled)
-        {
-            IReadOnlyDictionary<string, CrawlItemState> known = await this.store.GetItemStatesAsync(
-                chunk.Select(prepared => prepared.Mapped.Id).ToList(), cancellationToken);
-
-            foreach (Prepared prepared in chunk)
-            {
-                if (known.TryGetValue(prepared.Mapped.Id, out CrawlItemState state) &&
-                    state.Matches(prepared.ContentHash, prepared.AclHash))
-                {
-                    unchanged.Add(prepared.Mapped.Id);
-                }
-            }
-        }
-
-        // 2. Write what moved, in the order the source yielded, remembering how
-        //    far the chunk actually got.
-        //
-        //    THE PREFIX IS THE WHOLE POINT. A failure on the fifth item of
-        //    twenty must not discard the four that landed - they are in the
-        //    index, and a watermark that pretended otherwise would have the next
-        //    run re-read them, which is merely wasteful, while a store that
-        //    pretended otherwise would have the next SWEEP delete them, which is
-        //    not. So the walk stops at the failure and everything before it is
-        //    recorded and committed exactly as though the chunk had ended there.
-        int landed = 0;
-        Exception? failure = null;
-        var refused = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        List<Prepared> toWrite = chunk
-            .Where(prepared => !unchanged.Contains(prepared.Mapped.Id))
-            .ToList();
-
-        GraphBatchWriter? batch = this.ResolveBatchWriter(summary);
-
-        if (batch is not null && toWrite.Count > 1)
-        {
-            // One round trip for up to twenty items instead of twenty. A batch
-            // can return 200 overall while individual sub-responses carry a
-            // refusal, so the result is per item and one refused item does not
-            // abandon the other nineteen - which is the behaviour that makes
-            // batching worth having rather than merely faster.
-            BatchWriteResult result = await batch.WriteAsync(
-                toWrite.Select(prepared => (prepared.Mapped.Id, prepared.Item)).ToList(),
-                cancellationToken);
-
-            for (int round = 0; round < result.RoundTrips; round++)
-            {
-                summary.CountBatch();
-            }
-
-            foreach (BatchItemResult item in result.Failed)
-            {
-                refused.Add(item.ItemId);
-            }
-
-            // The commit prefix ends at the first refusal in yielded order. Items
-            // after it may well have landed and are recorded as such, but the
-            // source's marker must not pass a gap.
-            landed = chunk.FindIndex(prepared => refused.Contains(prepared.Mapped.Id));
-            landed = landed < 0 ? chunk.Count : landed;
-
-            if (result.FailedCount > 0)
-            {
-                this.log.Warning(
-                    "{Failed} of {Total} items in this batch were refused: {Detail}",
-                    result.FailedCount,
-                    result.Items.Count,
-                    result.Describe());
-            }
-        }
-        else
-        {
-            // One at a time: the original path, and the only one a chunk of one
-            // ever takes. A terminal refusal here throws and ends the run, which
-            // is the pre-existing contract for a single write.
-            try
-            {
-                foreach (Prepared prepared in chunk)
-                {
-                    if (!unchanged.Contains(prepared.Mapped.Id))
-                    {
-                        await this.WriteWithRetryAsync(
-                            prepared.Mapped.Id, prepared.Item, summary, cancellationToken);
-                    }
-
-                    landed++;
-                }
-            }
-            catch (Exception ex)
-            {
-                failure = ex;
-            }
-        }
-
-        // Recording the prefix must survive the cancellation a failure triggers
-        // in the sibling writers, or the run loses its record of items that are
-        // genuinely in the index - the one thing the store exists to prevent.
-        // Bounded work: at most two calls over at most ChunkSize rows.
-        CancellationToken recording = failure is null ? cancellationToken : CancellationToken.None;
-        List<Prepared> confirmed = landed == chunk.Count ? chunk : chunk.GetRange(0, landed);
-
-        // 3. Record, now that Graph has confirmed.
-        //
-        //    Recorded from what LANDED, not from the commit prefix. The store is
-        //    keyed by item ID and knows nothing about order, so an item written
-        //    after a refusal is genuinely in the index and must be recorded as
-        //    such - otherwise the next sweep sees it unseen and deletes it. Only
-        //    the source's marker cares about the prefix.
-        List<Prepared> stored = chunk
-            .Where(prepared => !refused.Contains(prepared.Mapped.Id))
-            .ToList();
-
-        if (failure is not null)
-        {
-            stored = confirmed;
-        }
-
-        if (this.store.IsEnabled && stored.Count > 0)
-        {
-            List<CrawlItemState> justWritten = stored
-                .Where(prepared => !unchanged.Contains(prepared.Mapped.Id))
-                .Select(prepared => new CrawlItemState(
-                    prepared.Mapped.Id,
-                    prepared.Mapped.ItemType,
-                    prepared.ContentHash,
-                    prepared.AclHash,
-                    prepared.ContentBytes,
-                    0))
-                .ToList();
-
-            if (justWritten.Count > 0)
-            {
-                await this.store.RecordWrittenAsync(justWritten, recording);
-            }
-
-            List<string> seen = stored
-                .Where(prepared => unchanged.Contains(prepared.Mapped.Id))
-                .Select(prepared => prepared.Mapped.Id)
-                .ToList();
-
-            if (seen.Count > 0)
-            {
-                await this.store.RecordUnchangedAsync(seen, recording);
-            }
-        }
-
-        foreach (Prepared prepared in chunk.Where(p => refused.Contains(p.Mapped.Id)))
-        {
-            // Counted, not thrown. crawl.Run.ItemsFailed carries it and the
-            // dashboard shows it, so a run that wrote 1,117 of 1,118 reports
-            // exactly that rather than reporting success or dying outright.
-            summary.CountFailed(prepared.Mapped.ItemType);
-        }
-
-        // 4. Count what LANDED - not the commit prefix.
-        //
-        //    These two differ whenever a batch refused something in the middle,
-        //    and counting the prefix would have the run under-report its own
-        //    work: nineteen items reach Graph, RecordWrittenAsync writes
-        //    nineteen item rows, and the run row would claim four. The same
-        //    database disagreeing with itself is worse than either number.
-        foreach (Prepared prepared in stored)
-        {
-            if (unchanged.Contains(prepared.Mapped.Id))
-            {
-                summary.CountUnchanged(prepared.Mapped.ItemType);
-                this.log.Debug(
-                    "Unchanged {ItemId} ({ItemType}); already correct in the index.",
-                    prepared.Mapped.Id,
-                    prepared.Mapped.ItemType);
-            }
-            else
-            {
-                int total = summary.Count(prepared.Mapped.ItemType);
-                summary.CountBytes(prepared.Mapped.ItemType, prepared.ContentBytes);
-
-                // Debug, not Information, for two reasons that point the same
-                // way. The runbook already documents the per-item line as what
-                // raising the level to Debug BUYS you. And at Information it is
-                // a console write plus a file write per row, on the critical
-                // path of every row, for a line nobody reads on a healthy run.
-                this.log.Debug("Indexed {ItemId} ({ItemType}).", prepared.Mapped.Id, prepared.Mapped.ItemType);
-
-                if (total % ProgressEvery == 0)
-                {
-                    this.log.Information("Indexed {Count} items so far.", total);
-                }
-            }
-
-            summary.Timing.RowTotal.Add(PushTiming.MicrosecondsSince(prepared.StartedAt));
-        }
-
-        // 5. Move the marker, over the unbroken prefix only, and never once this
-        //    run has left a gap behind it.
-        if (!this.markerBlocked)
-        {
-            foreach (Prepared prepared in confirmed)
-            {
-                long commitStarted = PushTiming.Now();
-                await source.OnItemCommittedAsync(prepared.Mapped, recording);
-                summary.Timing.Commit.Add(PushTiming.MicrosecondsSince(commitStarted));
-            }
-        }
-
-        if (!this.markerBlocked && confirmed.Count < chunk.Count)
-        {
-            // Set after this chunk's own prefix has been committed, so the
-            // marker still reaches the last good item before the gap.
-            this.markerBlocked = true;
-
-            this.log.Warning(
-                "An item in this chunk was not written, so the checkpoint stops here for the rest of the run. " +
-                "Later items are still indexed and recorded; the next run resumes from before the gap and " +
-                "retries what was refused. Re-reading what was already written costs time and nothing else.");
-        }
-
-        // The checkpoint, once, from the last item that carried a marker. Every
-        // item in the prefix is confirmed by the time this runs, so the position
-        // is honest; doing it per item would put a database round trip beside
-        // every Graph write for a value only the next run reads.
-        if (this.store.IsEnabled && confirmed.Count > 0 && !this.markerBlocked)
-        {
-            Prepared? marked = confirmed
-                .Where(prepared => prepared.Mapped.LastModifiedUtc.HasValue)
-                .Cast<Prepared?>()
-                .LastOrDefault();
-
-            if (marked is not null)
-            {
-                await this.store.SaveCheckpointAsync(
-                    new CrawlMarker(marked.Value.Mapped.LastModifiedUtc!.Value, marked.Value.Mapped.Id),
-                    recording);
-            }
-        }
-
-        if (failure is not null)
-        {
-            // Rethrown with its stack intact, after everything that landed has
-            // been recorded. The run still fails; it just does not lie about
-            // what reached the index before it did.
-            ExceptionDispatchInfo.Capture(failure).Throw();
-        }
-    }
-
+    private readonly record struct WriteChunk(List<Prepared> Rows, IReadOnlySet<string> Unchanged);
     /// <summary>One item, mapped, resolved, hashed and waiting for a writer.</summary>
     /// <param name="Mapped">The row as the source yielded it.</param>
     /// <param name="Item">The item to write.</param>

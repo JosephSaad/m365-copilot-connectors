@@ -2,6 +2,7 @@
 @model ConnectorState.Dashboard.Pages.Items.IndexModel
 @{
     ViewData["Title"] = "Inventory";
+    DisplayZone zone = DisplayZoneRequest.For(this.ViewContext.HttpContext);
 }
 
 <h1>Inventory</h1>
@@ -80,7 +81,7 @@ else
                             <th>State</th>
                             <th class="num">Content size</th>
                             <th class="num">Streak</th>
-                            <th class="num">Last written (UTC)</th>
+                            <th class="num">Last written (@zone.Label)</th>
                             <th class="num">Age</th>
                             <th class="num">Written by</th>
                             <th class="num">Last seen</th>
@@ -97,7 +98,7 @@ else
                                 <td><partial name="_ConnectionPill" model="item.State ?? string.Empty" /></td>
                                 <td class="num dim">@Format.Bytes(item.ContentBytes)</td>
                                 <td class="num">@Format.Count(item.UnchangedStreak)</td>
-                                <td class="num nowrap">@Format.TimestampShort(item.LastWrittenUtc)</td>
+                                <td class="num nowrap">@Format.TimestampShort(item.LastWrittenUtc, zone)</td>
                                 <td class="num dim">@Format.Count(item.DaysSinceLastWrite)d</td>
                                 <td class="num"><a href="/Runs/@item.LastWrittenRunId">@item.LastWrittenRunId</a></td>
                                 <td class="num dim"><a href="/Runs/@item.LastSeenRunId">@item.LastSeenRunId</a></td>

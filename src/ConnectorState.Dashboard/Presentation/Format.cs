@@ -4,12 +4,26 @@
 //
 // This is a monitoring dashboard, so the formatting rules are not cosmetic.
 //
-//   EVERY TIMESTAMP IS UTC AND SAYS SO. The database stores UTC throughout -
-//   DATETIME2(3), SYSUTCDATETIME(), no offsets anywhere - and the connector runs
-//   on servers whose local time an operator may not know. Rendering in the
-//   browser's zone would mean a run in a ticket and the same run on this page
-//   showing different times, which is how a wrong conclusion gets written down.
-//   The pages label the columns UTC rather than converting.
+//   EVERY TIMESTAMP SAYS WHICH ZONE IT IS IN, WHICH IS WHY IT CAN BE CONVERTED
+//   AT ALL. The database stores UTC throughout - DATETIME2(3),
+//   SYSUTCDATETIME(), no offsets anywhere - and the connector runs on servers
+//   whose local time an operator may not know.
+//
+//   This file used to say that rendering in the browser's zone would mean a run
+//   in a ticket and the same run on this page showing different times, which is
+//   how a wrong conclusion gets written down. That is true of an UNLABELLED
+//   local time and it is the reason the zone is now named in the masthead, in
+//   the colophon and in every column header that carries a timestamp, and the
+//   reason UTC is one click away and stays one click away with JavaScript
+//   disabled. The formatters below therefore REQUIRE a DisplayZone: there is no
+//   overload that renders a timestamp without one, so a page added later cannot
+//   print a bare time that a reader has to guess the meaning of. That is the
+//   whole enforcement, and it is a compile error rather than a review comment.
+//
+//   Date() takes no zone, and that is deliberate rather than an omission - see
+//   the header of DisplayZone.cs. It renders the UTC dates vwDailyActivity
+//   grouped by, and shifting a bucket's label into a viewer's zone would put a
+//   bar dated the 14th over a day the database computed for the 15th.
 //
 //   NULL IS NOT ZERO. A null UnchangedPercent means the run touched nothing;
 //   showing 0% would say the change detection failed. Every formatter here takes
@@ -113,28 +127,41 @@ public static class Format
         return value.ToString(value >= 100 ? "0" : "0.0", CultureInfo.InvariantCulture) + " " + units[unit];
     }
 
-    /// <summary>Formats a UTC timestamp. The pages label the column UTC; this does not convert.</summary>
-    /// <param name="value">The timestamp, or null.</param>
+    /// <summary>Formats a UTC timestamp in the page's display zone.</summary>
+    /// <param name="value">The timestamp as the store holds it, in UTC, or null.</param>
+    /// <param name="zone">The zone this page is rendering in. Required, on purpose.</param>
     /// <returns>The formatted timestamp, or an em dash.</returns>
-    public static string Timestamp(DateTime? value)
+    /// <remarks>
+    /// The zone is a parameter rather than ambient state, and there is no
+    /// one-argument overload. Both halves matter: ambient state would make the
+    /// same call render differently depending on what ran before it, and an
+    /// overload would let a new page print an unlabelled time by writing the
+    /// shorter thing.
+    /// </remarks>
+    public static string Timestamp(DateTime? value, DisplayZone zone)
     {
+        ArgumentNullException.ThrowIfNull(zone);
+
         return value.HasValue
-            ? value.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+            ? zone.ConvertFromUtc(value.Value).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
             : None;
     }
 
-    /// <summary>Formats a UTC timestamp to the minute, for dense tables.</summary>
-    /// <param name="value">The timestamp, or null.</param>
+    /// <summary>Formats a UTC timestamp to the minute, in the page's display zone.</summary>
+    /// <param name="value">The timestamp as the store holds it, in UTC, or null.</param>
+    /// <param name="zone">The zone this page is rendering in.</param>
     /// <returns>The formatted timestamp, or an em dash.</returns>
-    public static string TimestampShort(DateTime? value)
+    public static string TimestampShort(DateTime? value, DisplayZone zone)
     {
+        ArgumentNullException.ThrowIfNull(zone);
+
         return value.HasValue
-            ? value.Value.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+            ? zone.ConvertFromUtc(value.Value).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
             : None;
     }
 
-    /// <summary>Formats a date.</summary>
-    /// <param name="value">The date.</param>
+    /// <summary>Formats a UTC date. Takes no zone; see the file header.</summary>
+    /// <param name="value">The date, as the database grouped it.</param>
     /// <returns>The formatted date.</returns>
     public static string Date(DateTime value) => value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 

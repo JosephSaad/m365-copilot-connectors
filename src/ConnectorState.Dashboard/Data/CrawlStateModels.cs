@@ -371,6 +371,15 @@ public sealed record RunItemTypeRow
     /// <summary>Gets the items of this type that failed to write.</summary>
     public int ItemsFailed { get; init; }
 
+    /// <summary>Gets the IDs of this type that repeated an earlier row's.</summary>
+    /// <remarks>
+    /// Per kind because the run-level total cannot say which join is wrong.
+    /// A repeated ID is an upsert overwriting an earlier item while the count
+    /// claims both, so a non-zero here is a defect in the source query rather
+    /// than a fact about the corpus.
+    /// </remarks>
+    public int ItemsDuplicate { get; init; }
+
     /// <summary>Gets the bytes written for this type.</summary>
     public long BytesWritten { get; init; }
 

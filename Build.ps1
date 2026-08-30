@@ -237,7 +237,11 @@ foreach ($item in $sourceItems) {
 # Directory.Build.props is where the target framework lives; a source tree
 # without it builds every project with an empty TargetFramework and fails in a
 # way that names nothing useful.
-foreach ($required in @('SqlTicketsConnector.sln', 'Directory.Build.props', 'build\SecretHygiene.targets', 'src\SqlTicketsConnector\SqlTicketsConnector.csproj')) {
+# Directory.Packages.props carries every package VERSION, since no csproj states
+# one any more. Without it restore fails with NU1015 naming all twelve projects -
+# loud, but only if its absence is caught here rather than on the air-gapped
+# machine that unpacked the zip.
+foreach ($required in @('SqlTicketsConnector.sln', 'Directory.Build.props', 'Directory.Packages.props', 'build\SecretHygiene.targets', 'src\SqlTicketsConnector\SqlTicketsConnector.csproj')) {
     if (-not (Test-Path (Join-Path $sourceRoot $required))) {
         throw "The staged source tree is missing $required, so it would not build."
     }

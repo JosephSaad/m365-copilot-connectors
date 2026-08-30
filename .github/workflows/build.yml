@@ -111,6 +111,22 @@ jobs:
         shell: pwsh
         run: ./build/Test-OfflinePackageList.ps1 -Configuration Base
 
+      # The same shape of check one file over: deploy/Manifest.json,
+      # deploy/ConnectionInfo.json and deploy/CustomConnectorPortMap.json are
+      # reference copies - two of them say so in their own text - of values that
+      # live in src/SqlTicketsConnector/appsettings.json. ConnectionInfo.json is
+      # the input to the agent's local test harness, so a stale copy means a
+      # harness run that validates a connector ID nobody is about to deploy, and
+      # a stale port map means "connector unavailable on specified port" from a
+      # process that is demonstrably listening.
+      #
+      # Nothing in a build reads those files, so like the package list they rot
+      # silently and the first person to find out is holding a wizard. The
+      # command to regenerate them is in the failure message.
+      - name: Verify the harness reference copies
+        shell: pwsh
+        run: ./build/Sync-HarnessFixtures.ps1
+
       # dotnet list exits 0 whether or not it finds anything, so the output has
       # to be inspected. This is the check that would have caught the Kiota
       # header-leak advisory before it reached a release.

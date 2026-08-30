@@ -289,7 +289,7 @@ public static class PushHost
                     "will be deleted - see docs/CRAWL-STATE-DEPLOYMENT.md.");
             }
 
-            var context = new PushSourceContext(options, credential, secrets, Log.Logger);
+            var context = new PushSourceContext(options, credential, secrets, Log.Logger) { IsDryRun = dryRun };
             var engine = new PushEngine(connector, options, graph, Log.Logger, dryRun, store);
 
             // Ctrl+C cancels cleanly: the token reaches every Graph call and
@@ -303,6 +303,19 @@ public static class PushHost
             };
 
             PushSummary summary = await engine.RunAsync(context, cancellation.Token);
+            // ROWS READ, not rows written, and the distinction is not pedantic.
+            // This is the same figure PushEngine.Totals records as ItemsRead, and
+            // the two must agree or the log and the run row describe different
+            // crawls.
+            //
+            // "Distinct" used to be Total - Duplicates, which is only right while
+            // Total is the larger of the two. It stopped being right the moment a
+            // dry run learned to report unchanged items as skipped rather than
+            // written: a corpus where nothing had changed gave Total = 0 against
+            // 5 duplicates and announced "-5 distinct item(s)". A count of things
+            // cannot be negative, and a log line that says it is teaches whoever
+            // reads it to stop believing the rest of the line.
+            int rowsRead = summary.Total + summary.Unchanged + summary.Skipped;
 
             Log.Information(
                 "{Verb} complete. {Total} row(s) processed ({Breakdown}) for connection {ConnectionId}; " +
@@ -313,7 +326,7 @@ public static class PushHost
                 summary.Total,
                 summary.Describe(),
                 options.Graph.ConnectionId,
-                summary.Total - summary.Duplicates,
+                rowsRead - summary.Duplicates,
                 summary.Unchanged,
                 summary.Deleted,
                 summary.Failed,

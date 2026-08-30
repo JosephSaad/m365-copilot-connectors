@@ -77,6 +77,13 @@ namespace SqlTicketsConnector.Tests.TestSupport
             double maxDeletePercent, bool overrideGuard, CancellationToken cancellationToken) =>
             this.inner.GetPendingDeletesAsync(maxDeletePercent, overrideGuard, cancellationToken);
 
+        public Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken) =>
+            this.inner.GetLiveItemIdsAsync(cancellationToken);
+
+        public Task<IReadOnlySet<string>> CompareAndSeeAsync(
+            IReadOnlyCollection<CrawlItemState> candidates, CancellationToken cancellationToken) =>
+            this.inner.CompareAndSeeAsync(candidates, cancellationToken);
+
         public Task ConfirmDeletesAsync(
             IReadOnlyCollection<string> itemIds, CancellationToken cancellationToken) =>
             this.inner.ConfirmDeletesAsync(itemIds, cancellationToken);
@@ -96,7 +103,7 @@ namespace SqlTicketsConnector.Tests.TestSupport
         public Task CachePrincipalAsync(
             PrincipalGrant grant,
             string sourceType,
-            TimeSpan ttl,
+            TimeSpan? ttl,
             CancellationToken cancellationToken) =>
             this.inner.CachePrincipalAsync(grant, sourceType, ttl, cancellationToken);
 
