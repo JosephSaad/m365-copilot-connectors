@@ -53,15 +53,52 @@ public sealed class PushEngine
     // stalled run is obvious, rare enough that the line is not on the per-row
     // critical path.
     private const int ProgressEvery = 250;
-
     // How many items are prepared before the engine asks the state store what it
     // already has and writes what moved.
     //
-    // Twenty, because that is Graph's hard ceiling on a $batch and there is no
-    // value in a chunk larger than the largest request that can carry it. It is
-    // also the granularity of the state store's round trips: one lookup and at
-    // most two recording calls per chunk, rather than three per item.
-    private const int ChunkSize = 20;
+    // TWENTY WAS TWO DECISIONS WEARING ONE NUMBER. Graph's hard ceiling on a
+    // $batch is twenty requests, and this constant was also the granularity of
+    // every state-store round trip - one lookup and at most two recording calls
+    // per chunk. Tying them together meant the store paid Graph's limit: a
+    // 111,900-row crawl made 5,595 lookups, each returning at most twenty rows,
+    // when the store is perfectly willing to answer about two hundred at once.
+    //
+    // They are now separate. GraphBatchWriter.WriteAsync already splits a list
+    // of any length into service-legal batches of twenty, so a larger chunk here
+    // changes what the STORE is asked and leaves what GRAPH is asked exactly as
+    // it was.
+    private const int DefaultLookupChunkSize = 200;
+
+    // ...but a count alone is not a safe bound, and this is the reason the
+    // ceiling below exists. A chunk holds a fully built ExternalItem per row,
+    // and one item may carry DataSource:MaxContentBytes of content - 3.5 MB by
+    // default, and up to the platform's 30 MB. Two hundred of those is several
+    // gigabytes of live objects, which is a memory profile nobody asked for and
+    // an out-of-memory nobody could explain from the setting that caused it.
+    //
+    // So the chunk closes on whichever it reaches first, exactly as the batch
+    // writer closes a batch on requests-or-bytes. On this rig's corpus - p50
+    // 491 content bytes, max 904 - the count closes every chunk and this
+    // ceiling never fires; on a corpus of large documents the ceiling closes
+    // them and the count never fires. Both stay correct without being tuned.
+    private const long DefaultLookupChunkBytes = 16 * 1024 * 1024;
+
+    // The floor is one: a chunk of one is legal, and forcing a minimum above it
+    // would silently overrule an operator debugging a specific row. The ceiling
+    // is a guard against a typo turning a crawl into one enormous chunk.
+    private const int MaxLookupChunkSize = 2000;
+
+    // What one write actually carries, and the unit the writer channel moves.
+    //
+    // Kept at Graph's $batch ceiling and kept SEPARATE from the lookup window
+    // above, because the two numbers answer to different services. Raising the
+    // lookup window is free; raising this is not permitted by Graph. And the
+    // first attempt at this change used one number for both, which quietly
+    // starved the writer pool: the channel moves chunks, so a window of two
+    // hundred handed one writer two hundred rows and left the other fifteen
+    // idle. The concurrency tests caught it, which is the only reason this
+    // comment can be specific about it.
+    private const int WriteChunkSize = 20;
 
     // The share of the live corpus a single sweep may remove before the state
     // store refuses it. Ten percent, because a real day's deletions in a
@@ -86,6 +123,18 @@ public sealed class PushEngine
     private readonly ICrawlStateStore store;
 
     private GraphBatchWriter? batchWriter;
+
+    // Resolved once in the constructor. Setting() re-parses configuration on
+    // every call and the byte ceiling is consulted once per row, which is a
+    // needless cost 111,900 times over.
+    private readonly int lookupChunkSize;
+    private readonly long lookupChunkBytes;
+
+    // The rescue path's stand-in for a lookup that cannot be made. See its use
+    // in the reader's catch: static, immutable, and shared because nothing ever
+    // writes to it.
+    private static readonly IReadOnlySet<string> EmptyUnchanged =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     // What kind of read this run is making. Full unless the state store said an
     // incremental one was safe, and consulted by exactly one thing: the delete
@@ -137,6 +186,28 @@ public sealed class PushEngine
         this.log = log;
         this.dryRun = dryRun;
         this.store = store ?? NullCrawlStateStore.Instance;
+
+        // Clamped, and the clamp is announced. A silently-honoured 100,000 would
+        // read every row into memory before writing one, and the operator who
+        // typed it would be looking at a memory graph rather than at the setting
+        // that caused it. This matches how Settings:Writers reports its own
+        // clamp - "was 99; using 16" - because a limit nobody is told about is
+        // indistinguishable from a limit that did not work.
+        int requested = this.options.Setting("LookupChunkSize", DefaultLookupChunkSize);
+        this.lookupChunkSize = Math.Clamp(requested, 1, MaxLookupChunkSize);
+
+        if (this.lookupChunkSize != requested)
+        {
+            this.log.Warning(
+                "Settings:LookupChunkSize was {Requested}; using {Used}. The permitted range is 1 to {Max}.",
+                requested,
+                this.lookupChunkSize,
+                MaxLookupChunkSize);
+        }
+
+        this.lookupChunkBytes = this.options.Setting("LookupChunkBytes", 0) > 0
+            ? this.options.Setting("LookupChunkBytes", 0)
+            : DefaultLookupChunkBytes;
     }
 
     /// <summary>Creates the connection and schema if needed, then pushes every item.</summary>
@@ -641,12 +712,38 @@ public sealed class PushEngine
             return null;
         }
 
+        // Settings:MaxBatchContentBytes, because the header on
+        // DefaultMaxBatchContentBytes says to raise it "with the constructor once
+        // a tenant's real behaviour is known" - and until now the only way to do
+        // that was to rebuild. A tenant's real behaviour is learned in
+        // production, by the operator, not by whoever compiled the binary.
+        //
+        // Left at the default here on purpose. This rig's measured corpus is p50
+        // 491 content bytes and max 904, so twenty requests is 18 KB and the
+        // REQUEST COUNT closed all 5,608 batches; the byte ceiling has never
+        // fired once. There is therefore no measurement on this corpus that
+        // would justify moving it, and moving it anyway would be tuning against
+        // a number nobody has observed.
+        long envelope = this.options.Setting(
+            "MaxBatchContentBytes", GraphBatchWriter.DefaultMaxBatchContentBytes);
+
+        if (envelope <= 0)
+        {
+            this.log.Warning(
+                "Settings:MaxBatchContentBytes was {Requested}, which is not a size; using {Used}.",
+                envelope,
+                GraphBatchWriter.DefaultMaxBatchContentBytes);
+
+            envelope = GraphBatchWriter.DefaultMaxBatchContentBytes;
+        }
+
         return this.batchWriter ??= new GraphBatchWriter(
             this.graph,
             this.options.Graph.ConnectionId,
             summary,
             this.log,
-            throttle => this.store.RecordThrottle(throttle));
+            throttle => this.store.RecordThrottle(throttle),
+            envelope);
     }
 
     /// <summary>Deletes one item, with the same backoff a write gets.</summary>
@@ -755,7 +852,8 @@ public sealed class PushEngine
         IPushSource source, PushSummary summary, CancellationToken cancellationToken)
     {
         var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var chunk = new List<Prepared>(ChunkSize);
+        var chunk = new List<Prepared>(this.lookupChunkSize);
+        long chunkBytes = 0;
         string lastItemId = "(none)";
         int rowOrdinal = 0;
 
@@ -803,11 +901,16 @@ public sealed class PushEngine
 
                 lastItemId = mapped.Id;
                 chunk.Add(prepared.Value);
+                chunkBytes += prepared.Value.ContentBytes;
 
-                if (chunk.Count >= ChunkSize)
+                // Whichever comes first. See DefaultLookupChunkBytes: the count
+                // closes the chunk on small rows, the ceiling closes it on large
+                // ones, and neither has to be tuned for the other's corpus.
+                if (chunk.Count >= this.lookupChunkSize || chunkBytes >= this.lookupChunkBytes)
                 {
-                    await this.FlushChunkAsync(source, chunk, summary, cancellationToken);
+                    await this.FlushWindowAsync(source, chunk, summary, cancellationToken);
                     chunk.Clear();
+                    chunkBytes = 0;
                 }
             }
         }
@@ -816,7 +919,7 @@ public sealed class PushEngine
         {
             try
             {
-                await this.FlushChunkAsync(source, chunk, summary, CancellationToken.None);
+                await this.FlushWindowAsync(source, chunk, summary, CancellationToken.None);
             }
             catch (Exception flushFailure)
             {
@@ -836,7 +939,7 @@ public sealed class PushEngine
         // The tail. Without this a corpus smaller than one chunk writes nothing
         // at all - the kind of defect that passes every test written against a
         // round number of rows and fails on the first real source.
-        await this.FlushChunkAsync(source, chunk, summary, cancellationToken);
+        await this.FlushWindowAsync(source, chunk, summary, cancellationToken);
     }
 
     /// <summary>Reads the source on one thread and writes on several.</summary>
@@ -863,7 +966,7 @@ public sealed class PushEngine
         IPushSource source, PushSummary summary, int writers, CancellationToken cancellationToken)
     {
         var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var queue = Channel.CreateBounded<List<Prepared>>(new BoundedChannelOptions(writers * 2)
+        var queue = Channel.CreateBounded<WriteChunk>(new BoundedChannelOptions(writers * 2)
         {
             SingleReader = false,
             SingleWriter = true,
@@ -880,7 +983,8 @@ public sealed class PushEngine
             {
                 // Declared outside the try so the catch can hand over whatever
                 // was already read before the source failed.
-                var chunk = new List<Prepared>(ChunkSize);
+                var chunk = new List<Prepared>(this.lookupChunkSize);
+                long chunkBytes = 0;
 
                 try
                 {
@@ -916,22 +1020,24 @@ public sealed class PushEngine
 
                         lastItemId = mapped.Id;
                         chunk.Add(prepared.Value);
+                        chunkBytes += prepared.Value.ContentBytes;
 
-                        if (chunk.Count >= ChunkSize)
+                        if (chunk.Count >= this.lookupChunkSize || chunkBytes >= this.lookupChunkBytes)
                         {
                             // A fresh list per chunk. Handing the same one to the
                             // channel and clearing it would let a writer read a
                             // chunk the reader is already refilling - a data race
                             // whose symptom is items silently written twice or not
                             // at all, depending on timing.
-                            await queue.Writer.WriteAsync(chunk, failed.Token);
-                            chunk = new List<Prepared>(ChunkSize);
+                            await this.PublishWindowAsync(queue.Writer, chunk, failed.Token);
+                            chunk = new List<Prepared>(this.lookupChunkSize);
+                            chunkBytes = 0;
                         }
                     }
 
                     if (chunk.Count > 0)
                     {
-                        await queue.Writer.WriteAsync(chunk, failed.Token);
+                        await this.PublishWindowAsync(queue.Writer, chunk, failed.Token);
                     }
 
                     queue.Writer.Complete();
@@ -944,7 +1050,15 @@ public sealed class PushEngine
                     // successfully produced.
                     if (chunk.Count > 0)
                     {
-                        queue.Writer.TryWrite(chunk);
+                        // An EMPTY unchanged set, and deliberately so. Resolving
+                        // the window needs an async store call and this is a
+                        // synchronous best-effort rescue inside a catch, with a
+                        // source that has already died. An empty set means every
+                        // buffered row is treated as changed and written, which
+                        // costs a few redundant writes and cannot lose one -
+                        // whereas skipping the rescue to keep the lookup would
+                        // lose rows the source had already handed over.
+                        queue.Writer.TryWrite(new WriteChunk(chunk, EmptyUnchanged));
                     }
 
                     // Complete WITH the fault, so every writer's ReadAllAsync ends
@@ -961,9 +1075,10 @@ public sealed class PushEngine
             {
                 try
                 {
-                    await foreach (List<Prepared> batch in queue.Reader.ReadAllAsync(failed.Token))
+                    await foreach (WriteChunk batch in queue.Reader.ReadAllAsync(failed.Token))
                     {
-                        await this.FlushChunkAsync(source, batch, summary, failed.Token);
+                        await this.FlushChunkAsync(
+                            source, batch.Rows, batch.Unchanged, summary, failed.Token);
                     }
                 }
                 catch (Exception)
@@ -1106,6 +1221,127 @@ public sealed class PushEngine
         return new Prepared(mapped, item, contentHash, aclHash, contentBytes, rowStarted);
     }
 
+
+
+    /// <summary>Resolves a window and publishes its write-chunks to the writers.</summary>
+    /// <param name="queue">The channel the writers read.</param>
+    /// <param name="window">The accumulated window, in source order.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>A task for the operation.</returns>
+    /// <remarks>
+    /// The lookup happens HERE, on the reading thread, and that is a deliberate
+    /// move rather than a side effect. It was previously on the writer threads,
+    /// once per twenty rows; doing it once per window instead takes a tenth of
+    /// the round trips off the write path entirely, at the cost of the reader
+    /// pausing on one store call per window. The reader was never the bottleneck
+    /// - the timing table puts source read at 0.1% of per-row time - so that is
+    /// a good trade, and it is stated here so the next person profiling a run
+    /// knows where the call went.
+    /// </remarks>
+    private async Task PublishWindowAsync(
+        ChannelWriter<WriteChunk> queue,
+        List<Prepared> window,
+        CancellationToken cancellationToken)
+    {
+        if (window.Count == 0)
+        {
+            return;
+        }
+
+        IReadOnlySet<string> unchanged = await this.ResolveUnchangedAsync(window, cancellationToken);
+
+        foreach (List<Prepared> chunk in CutIntoWriteChunks(window))
+        {
+            await queue.WriteAsync(new WriteChunk(chunk, unchanged), cancellationToken);
+        }
+    }
+    /// <summary>Looks a window up once, then writes it as chunks of twenty.</summary>
+    /// <param name="source">The opened source.</param>
+    /// <param name="window">The accumulated window, in source order.</param>
+    /// <param name="summary">The run's counters.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>A task for the operation.</returns>
+    private async Task FlushWindowAsync(
+        IPushSource source,
+        List<Prepared> window,
+        PushSummary summary,
+        CancellationToken cancellationToken)
+    {
+        if (window.Count == 0)
+        {
+            return;
+        }
+
+        IReadOnlySet<string> unchanged = await this.ResolveUnchangedAsync(window, cancellationToken);
+
+        foreach (List<Prepared> chunk in CutIntoWriteChunks(window))
+        {
+            await this.FlushChunkAsync(source, chunk, unchanged, summary, cancellationToken);
+        }
+    }
+
+    /// <summary>Asks the store, once, which of a window's items have not moved.</summary>
+    /// <param name="window">Prepared rows, up to one lookup window's worth.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The IDs whose stored content and ACL hashes both still match.</returns>
+    /// <remarks>
+    /// This is the round trip the lookup window exists to amortise. It used to
+    /// run inside FlushChunkAsync, once per twenty rows, because the chunk was
+    /// both the lookup unit and the write unit; a 111,900-row crawl therefore
+    /// made 5,595 lookups that each returned at most twenty rows. Asking once per
+    /// window and handing the answer to the ten chunks that came out of it makes
+    /// that 560 lookups for the same rows, and leaves what Graph is asked
+    /// untouched.
+    ///
+    /// The returned set is shared by every chunk from the window and is never
+    /// written to afterwards. That is safe precisely because it is keyed by item
+    /// ID rather than by position, so a chunk reads only its own rows out of it.
+    /// </remarks>
+    private async Task<IReadOnlySet<string>> ResolveUnchangedAsync(
+        List<Prepared> window, CancellationToken cancellationToken)
+    {
+        var unchanged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!this.store.IsEnabled || window.Count == 0)
+        {
+            return unchanged;
+        }
+
+        IReadOnlyDictionary<string, CrawlItemState> known = await this.store.GetItemStatesAsync(
+            window.Select(prepared => prepared.Mapped.Id).ToList(), cancellationToken);
+
+        foreach (Prepared prepared in window)
+        {
+            if (known.TryGetValue(prepared.Mapped.Id, out CrawlItemState state) &&
+                state.Matches(prepared.ContentHash, prepared.AclHash))
+            {
+                unchanged.Add(prepared.Mapped.Id);
+            }
+        }
+
+        return unchanged;
+    }
+
+    /// <summary>Cuts a resolved window into the chunks a single write carries.</summary>
+    /// <param name="window">The window, already looked up.</param>
+    /// <returns>Lists of at most <see cref="WriteChunkSize"/> rows, in source order.</returns>
+    /// <remarks>
+    /// Source order is preserved across the cut and within each chunk, because
+    /// the checkpoint rests on it: a chunk's marker is its last row's, and a
+    /// window emitted out of order would let the watermark pass a row that had
+    /// not been written.
+    /// </remarks>
+    private static List<List<Prepared>> CutIntoWriteChunks(List<Prepared> window)
+    {
+        var chunks = new List<List<Prepared>>((window.Count / WriteChunkSize) + 1);
+
+        for (int offset = 0; offset < window.Count; offset += WriteChunkSize)
+        {
+            chunks.Add(window.GetRange(offset, Math.Min(WriteChunkSize, window.Count - offset)));
+        }
+
+        return chunks;
+    }
     /// <summary>Decides what in this chunk actually needs writing, writes it, and commits.</summary>
     /// <param name="source">The opened source.</param>
     /// <param name="chunk">Prepared items, in the order the source yielded them.</param>
@@ -1143,6 +1379,7 @@ public sealed class PushEngine
     private async Task FlushChunkAsync(
         IPushSource source,
         List<Prepared> chunk,
+        IReadOnlySet<string> unchanged,
         PushSummary summary,
         CancellationToken cancellationToken)
     {
@@ -1182,22 +1419,9 @@ public sealed class PushEngine
         }
 
         // 1. What is already on record for these items?
-        var unchanged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        if (this.store.IsEnabled)
-        {
-            IReadOnlyDictionary<string, CrawlItemState> known = await this.store.GetItemStatesAsync(
-                chunk.Select(prepared => prepared.Mapped.Id).ToList(), cancellationToken);
-
-            foreach (Prepared prepared in chunk)
-            {
-                if (known.TryGetValue(prepared.Mapped.Id, out CrawlItemState state) &&
-                    state.Matches(prepared.ContentHash, prepared.AclHash))
-                {
-                    unchanged.Add(prepared.Mapped.Id);
-                }
-            }
-        }
+        // Resolved once per WINDOW by ResolveUnchangedAsync and handed in, not
+        // looked up here. This method used to make the round trip itself, which
+        // is what tied the store's granularity to Graph's twenty.
 
         // 2. Write what moved, in the order the source yielded, remembering how
         //    far the chunk actually got.
@@ -1282,7 +1506,7 @@ public sealed class PushEngine
         // Recording the prefix must survive the cancellation a failure triggers
         // in the sibling writers, or the run loses its record of items that are
         // genuinely in the index - the one thing the store exists to prevent.
-        // Bounded work: at most two calls over at most ChunkSize rows.
+        // Bounded work: at most two calls over at most one lookup chunk of rows.
         CancellationToken recording = failure is null ? cancellationToken : CancellationToken.None;
         List<Prepared> confirmed = landed == chunk.Count ? chunk : chunk.GetRange(0, landed);
 
@@ -1429,6 +1653,16 @@ public sealed class PushEngine
         }
     }
 
+
+    /// <summary>One write's worth of rows, and the lookup answer they came with.</summary>
+    /// <remarks>
+    /// The channel carries this rather than a bare list because the reader now
+    /// resolves a whole window against the state store before cutting it up, and
+    /// the answer has to travel with the pieces. Every chunk cut from one window
+    /// shares one set; it is read-only from the moment it is published, so the
+    /// sharing needs no lock.
+    /// </remarks>
+    private readonly record struct WriteChunk(List<Prepared> Rows, IReadOnlySet<string> Unchanged);
     /// <summary>One item, mapped, resolved, hashed and waiting for a writer.</summary>
     /// <param name="Mapped">The row as the source yielded it.</param>
     /// <param name="Item">The item to write.</param>

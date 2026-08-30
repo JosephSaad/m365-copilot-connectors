@@ -242,29 +242,29 @@ carries the live tests that confirm them.
 
 ## 4. After go-live
 
-| Feature | Description | Status |
-|---|---|---|
-| Incremental reads, connector side | The engine plumbs the resume marker and the change-detection tier, but no connector reads the marker yet. `sql/26` is not merely unreached by the shipped binaries — it is **incompatible with them**: `HierarchyPushConnector` emits an explicit 30-column `SELECT` and `vwExternalItemsIncremental` projects 12, so pointing `Source:ItemView` at it fails on 19 invalid column names, `LastModified` among them — the view names that column `EffectiveLastModified`. Column parity alone would not finish it: the query orders by item type then id, not the ascending `(marker, id)` a `ChangeMarker` source owes [`SOURCE-CONTRACT.md`](SOURCE-CONTRACT.md). Unnecessary at pilot scale; the lever that matters at production scale | ⚠️ |
-| Hierarchy-aware timestamp deployed | `sql/26` alters the source tables and installs cascading triggers. Needs the source team's agreement; differencing works without it | ⚠️ |
-| Identity cache wired | The principal cache table and store methods exist, but nothing calls them — the CDP resolver still resolves in memory each run | ⚠️ |
-| Single flush procedure | Fold the per-chunk round trips into one server-side compare. The next throughput lever after batching | ❌ |
-| Larger lookup chunks | Decouple the state-lookup size from the batch size, cutting store round trips roughly tenfold | ❌ |
-| Overlapped store reads | Prefetch the next chunk's hashes while the current chunk writes | ❌ |
-| Batched deletions | The sweep still deletes one item at a time; the batch writer already exists | ❌ |
-| Dry-run preview | Consult the state store on a dry run to report what *would* be written, skipped and deleted — the delete sweep previewed before it happens | ❌ |
-| Health endpoint | A machine-readable projection of connection health for monitoring, rather than a page for people | ❌ |
-| Trigger health check | Scheduled run of `sql/26`'s verification query; nothing detects a disabled trigger, and the source keeps accepting writes while the column stops moving | ❌ |
-| Negative TTL enforced | The shorter time-to-live for an unresolvable principal is a caller convention the database cannot see | ❌ |
-| Batch envelope tuning | The client-side batch byte cap is deliberately conservative and should be raised against measured behaviour | ❌ |
-| Sargable incremental view | Project the numeric keys from the item views so the incremental view joins on them rather than on a constructed string | ❌ |
-| Central package management | One file pinning package versions for every project, removing the class of split-version failure that has already broken CI twice | ❌ |
-| Identity library unification | Collapse the pre-existing split that carries eight packages at two versions in the offline restore set | ❌ |
-| Harness fixture generation | Generate the local test harness's fixture copies rather than hand-syncing them | ❌ |
-| Release automation | Encode the publish-then-delete-previous release sequence as a workflow rather than manual steps | ❌ |
-| Strict hasher fallback | Throw on a property type the hasher does not recognise instead of falling back to a string conversion | ❌ |
-| Parsed connection-string check | Parse rather than substring-match when refusing a password in the state connection string | ❌ |
-| Per-type duplicate counts | The run table counts duplicates; the per-item-type breakdown does not | ❌ |
-| Engine file split | Separate the run lifecycle, the chunk flush and the delete sweep into their own files | ❌ |
+| Feature | Description | Status | Live Test Status |
+|---|---|---|---|
+| Incremental reads, connector side | The engine plumbs the resume marker and the change-detection tier, but no connector reads the marker yet. `sql/26` is not merely unreached by the shipped binaries — it is **incompatible with them**: `HierarchyPushConnector` emits an explicit 30-column `SELECT` and `vwExternalItemsIncremental` projects 12, so pointing `Source:ItemView` at it fails on 19 invalid column names, `LastModified` among them — the view names that column `EffectiveLastModified`. Column parity alone would not finish it: the query orders by item type then id, not the ascending `(marker, id)` a `ChangeMarker` source owes [`SOURCE-CONTRACT.md`](SOURCE-CONTRACT.md). Unnecessary at pilot scale; the lever that matters at production scale | ⚠️ | — |
+| Hierarchy-aware timestamp deployed | `sql/26` alters the source tables and installs cascading triggers. Needs the source team's agreement; differencing works without it | ⚠️ | — |
+| Identity cache wired | The principal cache table and store methods exist, but nothing calls them — the CDP resolver still resolves in memory each run | ⚠️ | — |
+| Single flush procedure | Fold the per-chunk round trips into one server-side compare. The next throughput lever after batching | ❌ | — |
+| Larger lookup chunks | Decouple the state-lookup size from the batch size, cutting store round trips roughly tenfold | ✅ | **PASSED, and the tenfold is measured rather than estimated.** `uspGetItemState` was called **560** times for a 111,900-row crawl where it previously took 5,595 — the lookup window is 200 and the write chunk stayed at Graph's 20. `uspRecordUnchanged` stayed at 5,595, correctly: recording belongs to the write chunk, not the window. Run 24 took 12s against 18s for the comparable prior run, but the round-trip count is the evidence here; one wall-clock sample is not. The first attempt used one number for both units and starved the writer pool — 200 rows went to one writer and fifteen sat idle — which the concurrency tests caught |
+| Overlapped store reads | Prefetch the next chunk's hashes while the current chunk writes | ❌ | — |
+| Batched deletions | The sweep still deletes one item at a time; the batch writer already exists | ❌ | — |
+| Dry-run preview | Consult the state store on a dry run to report what *would* be written, skipped and deleted — the delete sweep previewed before it happens | ❌ | — |
+| Health endpoint | A machine-readable projection of connection health for monitoring, rather than a page for people | ❌ | — |
+| Trigger health check | Scheduled run of `sql/26`'s verification query; nothing detects a disabled trigger, and the source keeps accepting writes while the column stops moving | ❌ | — |
+| Negative TTL enforced | The shorter time-to-live for an unresolvable principal is a caller convention the database cannot see | ❌ | — |
+| Batch envelope tuning | The client-side batch byte cap is deliberately conservative and should be raised against measured behaviour | ✅ | **Exposed as `Settings:MaxBatchContentBytes`, and deliberately left at its default.** The cap was raisable only by rebuilding, though its own header said to raise it "once a tenant's real behaviour is known" — which is learned in production, not at compile time. **The measurement says do not move it**: this corpus is p50 491 content bytes and max 904, so twenty requests is 18 KB and the request count closed all 5,608 batches while the byte ceiling has never once fired. Moving it would be tuning against a number nobody has observed |
+| Sargable incremental view | Project the numeric keys from the item views so the incremental view joins on them rather than on a constructed string | ❌ | — |
+| Central package management | One file pinning package versions for every project, removing the class of split-version failure that has already broken CI twice | ❌ | — |
+| Identity library unification | Collapse the pre-existing split that carries eight packages at two versions in the offline restore set | ❌ | — |
+| Harness fixture generation | Generate the local test harness's fixture copies rather than hand-syncing them | ❌ | — |
+| Release automation | Encode the publish-then-delete-previous release sequence as a workflow rather than manual steps | ❌ | — |
+| Strict hasher fallback | Throw on a property type the hasher does not recognise instead of falling back to a string conversion | ❌ | — |
+| Parsed connection-string check | Parse rather than substring-match when refusing a password in the state connection string | ❌ | — |
+| Per-type duplicate counts | The run table counts duplicates; the per-item-type breakdown does not | ❌ | — |
+| Engine file split | Separate the run lifecycle, the chunk flush and the delete sweep into their own files | ❌ | — |
 
 ---
 
