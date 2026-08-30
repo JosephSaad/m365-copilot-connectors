@@ -279,6 +279,58 @@ database that rolls back every transaction in flight and disconnects the
 sessions holding them, which on a running crawl is an aborted run. Re-run
 `sql/20` when nothing is crawling, or not at all.
 
+### Running these against a database that is not called `ConnectorState`
+
+Every script here carries a hard-coded `USE [ConnectorState];` near the top, and
+the source fixture scripts carry `USE [Ops];`. That is right for the deployment
+this document describes and wrong for every other database — and it fails in the
+dangerous direction.
+
+**`sqlcmd -d` does not help.** `-d` sets the *initial* database; the `USE`
+statement then moves the session somewhere else. So
+
+```
+sqlcmd -d ConnectorState_DrillRestore -i sql/21-crawl-state-tables.sql
+```
+
+creates its tables in **`ConnectorState`**, reports success, and leaves you
+believing the drill database was built. On an estate where the live database is
+read-only by policy and the drill copy differs from it by a suffix, that is a
+silent write to production.
+
+Use `deploy/Invoke-StateScripts.ps1`, which stages each file with the name
+substituted, **asserts that no reference to the original name survives**, and
+only then runs anything. A rename that half worked would address two databases
+at once, so one surviving reference stops the whole set before the first
+statement executes. It refuses outright to target `ConnectorState` or `Ops`.
+
+```powershell
+.\deploy\Invoke-StateScripts.ps1 -Database ConnectorState_DrillRestore -TrustServerCertificate -Scripts @(
+    'sql/20-crawl-state-database.sql',
+    'sql/21-crawl-state-tables.sql',
+    'sql/22-crawl-state-views.sql',
+    'sql/23-crawl-state-procedures.sql',
+    'sql/40-crawl-state-per-type-duplicates.sql',
+    'sql/24-crawl-state-reporting.sql',
+    'sql/28-crawl-state-hash-version.sql',
+    'sql/29-crawl-state-partial-status.sql',
+    'sql/33-crawl-state-negative-ttl.sql',
+    'sql/34-crawl-state-live-item-ids.sql',
+    'sql/41-crawl-state-compare-and-see.sql',
+    'sql/43-crawl-state-run-lock.sql')
+```
+
+Three situations need it: the disaster recovery drill in
+[DISASTER-RECOVERY.md](DISASTER-RECOVERY.md), which restores to
+`ConnectorState_DrillRestore` precisely so the live database is never the
+target; a second test rig standing beside a live one; and a second connector
+estate on one instance.
+
+One further thing that switch does and `sqlcmd` on its own does not: it passes
+`-I`, so `QUOTED_IDENTIFIER` is ON for the connection. `crawl.Run` carries
+filtered indexes, and an `INSERT` against a table with one fails
+`Msg 1934` when that setting is OFF — which is how `sqlcmd` connects by default.
+
 ---
 
 ## 3. The two service accounts
