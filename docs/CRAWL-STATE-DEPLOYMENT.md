@@ -191,12 +191,15 @@ is deployed. `sql/25` is idempotent and safe to re-run after any change to the
 roles — running it is the cheapest way to prove the permission set has not
 drifted.
 
-**Every module-creating script sets `QUOTED_IDENTIFIER ON`, and `sql/30` proves
-they took.** SQL Server stores that option *with each module* as it stood in the
-session that created it, and replays the stored value on every execution
-regardless of what the caller sets. sqlcmd connects with it OFF; SSMS connects
-with it ON. So the same file produces a working procedure from a query window
-and a broken one from the command line, with identical output both times.
+**Every script that creates a module or a filtered index sets
+`QUOTED_IDENTIFIER ON`.** It matters for two different reasons, and `sql/30`
+only checks the first.
+
+*Stored with the module.* SQL Server records that option *with each module* as
+it stood in the session that created it, and replays the stored value on every
+execution regardless of what the caller sets. sqlcmd connects with it OFF; SSMS
+connects with it ON. So the same file produces a working procedure from a query
+window and a broken one from the command line, with identical output both times.
 
 It is not cosmetic. `crawl.Item` carries a filtered index, and any `UPDATE`
 against a table with one is refused when the calling module holds
@@ -206,10 +209,38 @@ time a connector starts, which may be days after the deployment that caused it,
 in an application nobody has touched. That is how this was found: a crawl that
 could not open a run, hours after a deploy that reported success.
 
-The `SET` statements at the top of `sql/12`, `sql/22`, `sql/23`, `sql/24`,
-`sql/26` and `sql/28` make the result independent of the client. Run `sql/30`
-last, in every database holding modules; it lists any offender by name and
-throws `50030` so a pipeline stops there rather than at the connector.
+*Required to create the index at all.* `sql/21` needs the option for a second
+reason: `CREATE INDEX` refuses a **filtered** index outright unless it is ON,
+and three of that file's indexes are filtered — `IX_Run_Open`, `IX_Item_Sweep`
+and `IX_Item_NotLive`. Until `sql/21` set it, the command-line path produced a
+database that *looked* complete — eight tables, every view and procedure, and
+`sql/30` reporting OK — with those three indexes silently absent. Nothing
+caught it: a failed batch does not stop the batches after it, so the three
+`Msg 1934`s scrolled past mid-output, `sql/21`'s own verification still printed
+its eight table names, and `sql/30` checks modules, not indexes.
+
+⚠️ **Any environment deployed from the command line before this fix is missing
+those three indexes**, and it is the delete sweep and the open-run lookup that
+pay for it. Counting them is the check, and it is read-only:
+
+```sql
+SELECT i.name, i.has_filter
+FROM        sys.indexes AS i
+INNER JOIN  sys.objects AS o ON o.object_id = i.object_id
+INNER JOIN  sys.schemas AS s ON s.schema_id = o.schema_id
+WHERE       s.name = N'crawl' AND i.type = 2
+ORDER BY    i.name;
+```
+
+Six rows, three with `has_filter = 1`. Anything less means re-running `sql/21`,
+which is guarded object by object and will add only what is missing.
+
+The `SET` statements at the top of `sql/12`, `sql/21` to `sql/24`, `sql/26`,
+`sql/28`, `sql/29`, `sql/31`, `sql/33` to `sql/35` and `sql/40` to `sql/42` make
+the result independent of the client. Run `sql/30` last, in every database
+holding modules; it lists any offender by name and throws `50030` so a pipeline
+stops there rather than at the connector.
+
 **One thing to watch when re-running `sql/20`.** The `CREATE DATABASE` is
 guarded, but the three `ALTER DATABASE` statements after it are not, and the
 read-committed-snapshot one carries `WITH ROLLBACK IMMEDIATE`. Against a live
