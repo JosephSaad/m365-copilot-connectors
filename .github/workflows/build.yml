@@ -626,7 +626,36 @@ jobs:
           Set-Content -Path staged/20-crawl-state-database.sql -Value $sql -Encoding UTF8
           Write-Host 'Staged sql/20 without the D: file clauses.'
 
-      - name: Build ConnectorState (sql/20-24)
+      # THE ORDER BELOW IS THE ONE IN docs/CRAWL-STATE-DEPLOYMENT.md, AND IT HAS
+      # TO BE. This step used to run 21, 22, 23, 24, 28 and stop, which is not
+      # the documented order and not a subset of it either: sql/40 was missing
+      # entirely, and sql/40 must run BEFORE sql/24.
+      #
+      # sql/24 creates uspGetRun, which projects t.ItemsDuplicate from
+      # crawl.RunItemType - a column sql/21 does not create and sql/40 adds.
+      # Deferred name resolution covers a missing TABLE but not a missing COLUMN
+      # on a table that already exists, so sql/24 failed outright with
+      #
+      #   Msg 207 ... Procedure uspGetRun ... Invalid column name 'ItemsDuplicate'
+      #
+      # and this job had been red on every run since at least v1.6.0. It is
+      # invisible on an UPGRADE, where the column is already there when sql/24
+      # is re-run, which is exactly why a job that only ever builds a database
+      # from scratch is the thing that catches it - once it runs the real order.
+      #
+      # The five migrations after sql/28 were never run here at all, so nothing
+      # proved a fresh deployment could apply them. sql/29 in particular adds
+      # run status 5, which the reporting procedures have to handle.
+      #
+      # Four documented steps are deliberately absent, each for a reason
+      # LocalDB cannot argue with:
+      #   sql/25  applied for real - every principal in it is a domain account.
+      #           Parsed in its own step below, which is the failure mode it has
+      #           that nothing else would find.
+      #   sql/42  exercises the roles sql/25 creates, and sql/25 is only parsed.
+      #   sql/27  writes to msdb and needs SQL Agent, which LocalDB has not.
+      #   sql/44  edits SQL Agent job steps, same reason.
+      - name: Build ConnectorState (documented order)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -636,11 +665,27 @@ jobs:
               'sql/21-crawl-state-tables.sql',
               'sql/22-crawl-state-views.sql',
               'sql/23-crawl-state-procedures.sql',
+              'sql/40-crawl-state-per-type-duplicates.sql',
               'sql/24-crawl-state-reporting.sql',
-              'sql/28-crawl-state-hash-version.sql')) {
+              'sql/28-crawl-state-hash-version.sql',
+              'sql/29-crawl-state-partial-status.sql',
+              'sql/33-crawl-state-negative-ttl.sql',
+              'sql/34-crawl-state-live-item-ids.sql',
+              'sql/41-crawl-state-compare-and-see.sql',
+              'sql/43-crawl-state-run-lock.sql')) {
             Write-Host "== $f =="
             sqlcmd -S $server -d ConnectorState -i $f -b
           }
+
+      # Step 14 of the documented order, and the one that would have caught the
+      # filtered-index defect in sql/21 that a command-line deployment hit and
+      # an SSMS one did not. It creates nothing; it checks what everything above
+      # created, so it belongs after the whole set rather than inside it.
+      - name: Verify the stored SET options (sql/30)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          sqlcmd -S '(localdb)\MSSQLLocalDB' -d ConnectorState -i sql/30-verify-set-options.sql -b
 
       # sql/27 is not run here. It writes to msdb and needs SQL Agent, which
       # LocalDB does not have, so executing it would prove nothing and fail for

@@ -169,6 +169,13 @@ BEGIN
 
     SET @Reaped = @@ROWCOUNT;
 
+    -- Status = 2 ONLY, never 5. This is the most dangerous place to be generous
+    -- with the partial status: it decides whether an incremental crawl is
+    -- allowed, and an incremental crawl licenses the DELETE SWEEP. A partial
+    -- full crawl did not reach every item, so a sweep diffing against it would
+    -- offer everything it never reached for deletion. MaxDeletePercent is the
+    -- only thing between that and an emptied index, and a guard is a backstop
+    -- rather than a design.
     DECLARE @LastFullSuccessUtc DATETIME2(3) =
     (
         SELECT MAX(CompletedUtc)

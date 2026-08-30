@@ -140,6 +140,14 @@ WITH LastRun AS
     FROM    [crawl].[Run]
     WHERE   IsDryRun = 0
 ),
+-- DELIBERATELY STILL Status = 2, and not 2 or 5. A partial run refreshed most
+-- of the corpus, so it is tempting to let it reset the freshness clock. It must
+-- not. MinutesSinceLastSuccess is what the staleness alert reads, and the whole
+-- argument in docs/ALERTING.md is that an index nobody has fully refreshed is a
+-- security problem rather than an availability one - ACLs revoked at the source
+-- stay honoured in the index until a run reaches those items. A connection
+-- stuck at partial should go stale and say so, which is exactly what leaving
+-- this alone produces.
 LastSuccess AS
 (
     SELECT  ConnectionId, RunId, CompletedUtc, ItemsWritten, ItemsDeleted, ItemsUnchanged,
@@ -152,10 +160,16 @@ LastSuccess AS
 -- rule to be worth writing.
 FailureStreak AS
 (
+    -- 5 (partial) is a failure for streak purposes, and this is the site where
+    -- omitting it did the most damage. A connection that refused items every
+    -- night reported ConsecutiveFailures = 0 for ever, because the streak
+    -- counted only 3 and 4 - so no streak alert could ever fire on the one
+    -- fault that repeats quietly. The run finished, the items did not arrive,
+    -- and nothing said so.
     SELECT  r.ConnectionId, COUNT(*) AS ConsecutiveFailures
     FROM    [crawl].[Run] AS r
     WHERE   r.IsDryRun = 0
-      AND   r.Status IN (3, 4)
+      AND   r.Status IN (3, 4, 5)
       AND   r.StartedUtc > ISNULL(
                 (SELECT MAX(s.StartedUtc) FROM [crawl].[Run] AS s
                  WHERE s.ConnectionId = r.ConnectionId AND s.Status = 2 AND s.IsDryRun = 0),
@@ -369,8 +383,12 @@ SELECT
     c.DisplayName,
     CAST(r.StartedUtc AS DATE)                                     AS ActivityDate,
     COUNT(*)                                                       AS Runs,
+    -- Succeeded stays strictly 2, and Failed absorbs 5 (partial), so that
+    -- Succeeded + Failed = Runs for every non-dry run. Before this, a partial
+    -- run fell into neither column and the two numbers silently stopped summing
+    -- to the third on exactly the days worth looking at.
     SUM(CASE WHEN r.Status = 2 THEN 1 ELSE 0 END)                  AS Succeeded,
-    SUM(CASE WHEN r.Status IN (3, 4) THEN 1 ELSE 0 END)            AS Failed,
+    SUM(CASE WHEN r.Status IN (3, 4, 5) THEN 1 ELSE 0 END)         AS Failed,
     SUM(r.ItemsWritten)                                            AS ItemsWritten,
     SUM(r.ItemsUnchanged)                                          AS ItemsUnchanged,
     SUM(r.ItemsDeleted)                                            AS ItemsDeleted,

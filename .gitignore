@@ -40,3 +40,9 @@ Logs/
 # Subagent worktrees. Each is its own checkout of this repository; committing
 # one embeds a git repository inside this one, which a clone cannot follow.
 .claude/worktrees/
+
+# Per-machine agent permission grants. The "local" in the name is the whole
+# point: this file says which tools may run without a prompt, so committing it
+# hands those grants to everybody who clones, on a machine whose owner never
+# agreed to them. Shared settings belong in .claude/settings.json.
+.claude/settings.local.json

@@ -115,7 +115,7 @@ public sealed class CrawlStateQueries
 
     /// <summary>Reads one page of the run history. Every filter is optional; null means no filter.</summary>
     /// <param name="connectionId">Restrict to one connection, or null for all.</param>
-    /// <param name="status">1 running, 2 succeeded, 3 failed, 4 abandoned, or null for all.</param>
+    /// <param name="status">1 running, 2 succeeded, 3 failed, 4 abandoned, 5 partial, or null for all.</param>
     /// <param name="mode">1 full, 2 incremental, or null for both.</param>
     /// <param name="fromUtc">Inclusive lower bound on StartedUtc, or null.</param>
     /// <param name="toUtc">Exclusive upper bound on StartedUtc, or null.</param>

@@ -7,8 +7,9 @@
 // so nothing here decodes anything; the procedures take a code, so the filter
 // controls have to encode one. That is the only reason this exists.
 //
-// The numbers below are the CHECK constraints in sql/21: CK_Run_Status allows
-// 1..4, CK_Run_Mode allows 1..2, CK_Item_State allows 1..3. Adding a state means
+// The numbers below are the CHECK constraints in sql/21, as amended: CK_Run_Status allows
+// 1..5 since sql/29 added 5 (partial), CK_Run_Mode allows 1..2, CK_Item_State
+// allows 1..3. Adding a state means
 // changing a constraint, a view and this file together, and a filter that sent
 // an unlisted code would simply match nothing rather than error - which is why
 // the parse below returns null for anything it does not recognise instead of

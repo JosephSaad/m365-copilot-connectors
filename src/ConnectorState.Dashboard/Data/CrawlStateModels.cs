@@ -62,7 +62,7 @@ public sealed record DashboardTiles
     /// <summary>Gets the number of throttle waits in the window, excluding dry runs.</summary>
     public int ThrottleWaitsInWindow { get; init; }
 
-    /// <summary>Gets the count of failed or abandoned runs in the window.</summary>
+    /// <summary>Gets the count of failed, abandoned or partial runs in the window.</summary>
     public int FailedRunsInWindow { get; init; }
 
     /// <summary>Gets the count of runs in the window, excluding dry runs.</summary>
@@ -164,7 +164,7 @@ public sealed record DailyActivityRow
     /// <summary>Gets how many of them succeeded.</summary>
     public int Succeeded { get; init; }
 
-    /// <summary>Gets how many failed or were abandoned.</summary>
+    /// <summary>Gets how many failed, were abandoned, or ended partial.</summary>
     public int Failed { get; init; }
 
     /// <summary>Gets the items written that day.</summary>
@@ -207,7 +207,7 @@ public sealed record RunHistoryRow
     /// <summary>Gets "full" or "incremental". Only a full run may conclude an item was deleted.</summary>
     public string? Mode { get; init; }
 
-    /// <summary>Gets "running", "succeeded", "failed" or "abandoned".</summary>
+    /// <summary>Gets "running", "succeeded", "failed", "abandoned" or "partial".</summary>
     public string? Status { get; init; }
 
     /// <summary>Gets a value indicating whether the run wrote nothing by design.</summary>
@@ -295,7 +295,7 @@ public sealed record RunListRow
     /// <summary>Gets "full" or "incremental".</summary>
     public string? Mode { get; init; }
 
-    /// <summary>Gets "running", "succeeded", "failed" or "abandoned".</summary>
+    /// <summary>Gets "running", "succeeded", "failed", "abandoned" or "partial".</summary>
     public string? Status { get; init; }
 
     /// <summary>Gets a value indicating whether the run wrote nothing by design.</summary>
