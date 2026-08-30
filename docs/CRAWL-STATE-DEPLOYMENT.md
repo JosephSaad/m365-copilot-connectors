@@ -94,10 +94,12 @@ state costs one full recrawl, losing `Ops` costs the business.
   inside the new database. If a DBA holds the first and you hold the second, run
   the scripts in two sittings and split them at the line below.
 
-**Run them in this order. The order is not a convention — each script assumes
-the objects the one before it created, and `sql/25` grants `EXECUTE` on
-procedures by name, so a grant on a procedure that does not exist yet fails
-rather than being deferred.**
+**Run them in this order. The order is not a convention, and two of the
+dependencies are not deferred.** Each script assumes the objects the one before
+it created. `sql/25` grants `EXECUTE` on procedures by name, so a grant on a
+procedure that does not exist yet fails rather than being deferred. And `sql/24`
+selects a column that `sql/40` adds, which is why `sql/40` runs before it — see
+below.
 
 | # | Script | Creates | Run as | Runs in |
 |---|---|---|---|---|
@@ -105,15 +107,35 @@ rather than being deferred.**
 | 2 | `sql/21-crawl-state-tables.sql` | Eight tables and their indexes | `db_owner` on `ConnectorState` | `ConnectorState` |
 | 3 | `sql/22-crawl-state-views.sql` | Six views | `db_owner` | `ConnectorState` |
 | 4 | `sql/23-crawl-state-procedures.sql` | Nineteen procedures — the write path | `db_owner` | `ConnectorState` |
-| 5 | `sql/24-crawl-state-reporting.sql` | Seven procedures — the dashboard's read path | `db_owner` | `ConnectorState` |
-| 6 | `sql/25-crawl-state-least-privilege.sql` | Two logins, two users, two roles, the grants and the denials | `securityadmin` **and** `db_owner` — see below | `master`, then `ConnectorState` |
-| 7 | `sql/28-crawl-state-hash-version.sql` | The hash-version column and the check that escalates a run | `db_owner` | `ConnectorState` |
-| 8 | `sql/29-crawl-state-partial-status.sql` | Run status 5, `partial`, and reclassifies existing rows | `db_owner` | `ConnectorState` |
-| 9 | `sql/33-crawl-state-negative-ttl.sql` | The two principal TTL columns and the clamp in `uspCachePrincipal` | `db_owner` | `ConnectorState` |
-| 10 | `sql/34-crawl-state-live-item-ids.sql` | `uspListLiveItemIds`, read-only, for the dry-run delete preview | `db_owner` | `ConnectorState` |
-| 11 | `sql/40-crawl-state-per-type-duplicates.sql` | `ItemsDuplicate`, and **recreates a table type** — see below | `db_owner` | `ConnectorState` |
+| 5 | `sql/40-crawl-state-per-type-duplicates.sql` | `ItemsDuplicate`, and **recreates a table type** — must precede `sql/24`, see below | `db_owner` | `ConnectorState` |
+| 6 | `sql/24-crawl-state-reporting.sql` | Seven procedures — the dashboard's read path | `db_owner` | `ConnectorState` |
+| 7 | `sql/25-crawl-state-least-privilege.sql` | Two logins, two users, two roles, the grants and the denials | `securityadmin` **and** `db_owner` — see below | `master`, then `ConnectorState` |
+| 8 | `sql/28-crawl-state-hash-version.sql` | The hash-version column and the check that escalates a run | `db_owner` | `ConnectorState` |
+| 9 | `sql/29-crawl-state-partial-status.sql` | Run status 5, `partial`, and reclassifies existing rows | `db_owner` | `ConnectorState` |
+| 10 | `sql/33-crawl-state-negative-ttl.sql` | The two principal TTL columns and the clamp in `uspCachePrincipal` | `db_owner` | `ConnectorState` |
+| 11 | `sql/34-crawl-state-live-item-ids.sql` | `uspListLiveItemIds`, read-only, for the dry-run delete preview | `db_owner` | `ConnectorState` |
 | 12 | `sql/41-crawl-state-compare-and-see.sql` | `uspCompareAndSee`, the one-call compare | `db_owner` | `ConnectorState` |
 | 13 | `sql/30-verify-set-options.sql` | Nothing — it checks what everything above created | any reader | `ConnectorState`, and every other database holding modules |
+
+**`sql/40` runs before `sql/24`, and a fresh deployment fails if it does not.**
+`sql/24` creates `uspGetRun`, which selects `t.ItemsDuplicate` from
+`crawl.RunItemType` — a column `sql/21` does not create and `sql/40` adds.
+Deferred name resolution covers a missing *table*, so a procedure may reference
+one that does not exist yet; it does **not** cover a missing *column* on a table
+that already exists. `crawl.RunItemType` exists from step 2 onwards, so ordering
+`sql/40` after `sql/24` makes the `CREATE OR ALTER PROCEDURE` fail outright:
+
+```
+Msg 207, Level 16, State 1, Procedure uspGetRun
+Invalid column name 'ItemsDuplicate'.
+```
+
+`uspGetRun` is then absent, and `sql/25`'s `GRANT EXECUTE` on it fails in turn
+with `Msg 15151`, so one ordering mistake costs the dashboard's drill-down page
+and reports itself as a permissions problem rather than a schema one. An
+**upgrade** never sees this, because `sql/40` has already run by the time
+`sql/24` is re-run — which is why the earlier order survived until a new
+environment was stood up at v1.5.
 
 **`sql/40` recreates a table type, which destroys two grants.**
 `crawl.ItemTypeCountList` cannot be altered — only dropped — and it cannot be
@@ -123,6 +145,9 @@ procedure, drops and recreates the type, recreates the procedure, and re-grants
 to overlook, because a table type carrying a permission at all is unusual, and
 without it the push identity is refused at the *end* of every run — after the
 crawl has already done all its work. The script verifies both grants and says so.
+At step 5 that re-grant is belt and braces, because `sql/25` runs afterwards and
+issues both grants anyway. On an **upgrade**, where `sql/25` ran long ago, it is
+the only thing putting them back.
 
 **Run `sql/30` last, and run it in `Ops` too.** It is cheap, it is read-only, and
 it catches the failure mode that costs the most to diagnose: a module created
