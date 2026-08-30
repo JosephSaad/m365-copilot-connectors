@@ -115,6 +115,20 @@ public sealed partial class PushEngine
     // crawl.Run.ErrorMessage is NVARCHAR(2000).
     private const int MaxStoredErrorLength = 2000;
 
+    // How often a running crawl tells the store it is still alive.
+    //
+    // Sixty seconds against sql/43's 180-second grace: three beats of headroom,
+    // so one slow round trip, one long pause or one retry storm cannot hand the
+    // lease to a second process while this one is mid-crawl. Cheap at this rate -
+    // sixty round trips an hour against the 560 a full crawl already makes.
+    private static readonly TimeSpan DefaultHeartbeatEvery = TimeSpan.FromSeconds(60);
+
+    // The floor, and it is a guard rather than a preference. A one-second beat
+    // against a store under load is a round trip per second per connection for
+    // the length of every crawl, and the grace period is three minutes wide, so
+    // nothing below this buys anything an operator would notice.
+    private static readonly TimeSpan MinimumHeartbeatEvery = TimeSpan.FromSeconds(1);
+
     private readonly IPushConnector connector;
     private readonly PushOptions options;
     private readonly GraphServiceClient graph;
@@ -136,6 +150,8 @@ public sealed partial class PushEngine
     // needless cost 111,900 times over.
     private readonly int lookupChunkSize;
     private readonly long lookupChunkBytes;
+
+    private readonly TimeSpan heartbeatEvery;
 
     // The rescue path's stand-in for a lookup that cannot be made. See its use
     // in the reader's catch: static, immutable, and shared because nothing ever
@@ -211,6 +227,16 @@ public sealed partial class PushEngine
                 this.lookupChunkSize,
                 MaxLookupChunkSize);
         }
+
+        // Settings:HeartbeatSeconds, because the right interval depends on the
+        // store's latency and on sql/43's @LeaseGraceSeconds, and those are
+        // deployment facts rather than compile-time ones. The default keeps three
+        // beats of headroom inside the default grace.
+        int beat = this.options.Setting("HeartbeatSeconds", 0);
+
+        this.heartbeatEvery = beat > 0
+            ? TimeSpan.FromSeconds(Math.Max(beat, MinimumHeartbeatEvery.TotalSeconds))
+            : DefaultHeartbeatEvery;
 
         this.lookupChunkBytes = this.options.Setting("LookupChunkBytes", 0) > 0
             ? this.options.Setting("LookupChunkBytes", 0)
@@ -289,6 +315,19 @@ public sealed partial class PushEngine
 
         await using IPushSource source = this.connector.CreateSource(context);
 
+        // THE LEASE HAS TO BE KEPT ALIVE FOR AS LONG AS THE CRAWL RUNS. sql/43
+        // presumes a run dead when its heartbeat goes stale and hands the lease
+        // to whoever asks next, so a crawl that stops beating would invite a
+        // second process to start beside it - which is the exact scenario the
+        // lease exists to prevent, caused by the mechanism meant to prevent it.
+        //
+        // Linked to the caller's token so it stops when the run does, and
+        // disposed in a finally so it stops when the run THROWS as well: a
+        // heartbeat outliving a dead crawl would hold the lease against its own
+        // replacement.
+        using var beating = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task heartbeat = this.HeartbeatUntilAsync(beating.Token);
+
         try
         {
             PushSummary summary = await this.PushItemsAsync(source, cancellationToken);
@@ -315,6 +354,66 @@ public sealed partial class PushEngine
                 CancellationToken.None);
 
             throw;
+        }
+        finally
+        {
+            // Stop beating before anything else observes the run as closed.
+            // Awaited rather than abandoned so a beat in flight cannot land
+            // after CompleteRunAsync and resurrect a finished row - though
+            // uspHeartbeatRun guards that too, by only touching rows still at
+            // status 1. Belt and braces on the one thing that would be silent.
+            beating.Cancel();
+
+            try
+            {
+                await heartbeat;
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected: this is how the loop ends.
+            }
+        }
+    }
+
+    /// <summary>Tells the store this run is alive, until the run ends.</summary>
+    /// <param name="cancellationToken">Cancelled when the run finishes or fails.</param>
+    /// <returns>A task that completes when beating stops.</returns>
+    /// <remarks>
+    /// A FAILED HEARTBEAT MUST NOT FAIL THE CRAWL. The grace period in sql/43 is
+    /// three beats wide precisely so a single missed one is survivable, and
+    /// killing an otherwise healthy hour-long crawl because a keepalive could not
+    /// reach the database would be the cure causing the disease. So this warns
+    /// and carries on.
+    ///
+    /// It warns every time rather than once, and that is deliberate: a beat that
+    /// keeps failing IS heading for a lost lease, and the operator wants to see
+    /// it accumulating rather than to find one line at the top of an hour of log.
+    /// </remarks>
+    private async Task HeartbeatUntilAsync(CancellationToken cancellationToken)
+    {
+        if (!this.store.IsEnabled)
+        {
+            return;
+        }
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(this.heartbeatEvery, cancellationToken);
+                await this.store.HeartbeatAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                this.log.Warning(
+                    "Could not record a heartbeat for this run ({Message}). The crawl continues. If this keeps " +
+                    "failing the run's lease will expire and another process may start beside it.",
+                    ex.Message);
+            }
         }
     }
 

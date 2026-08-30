@@ -340,50 +340,97 @@ reviewable form of that work.
 
 ## 7. Beyond go-live: availability, continuity, and what to build next
 
-Nothing in this section is built, and that is deliberate — it is a roadmap,
-ordered by importance, so that the next unit of effort goes where it buys the
-most. It exists because the question "what else is critical?" deserves a written
-answer with reasoning attached, not a backlog of nouns.
-
-**The framing that orders everything below: when this connector dies, search
-does not go down — it goes stale.** Graph keeps serving the last-pushed items
+**The framing that orders everything below: when this connector dies, search does
+not go down — it goes stale.** Graph keeps serving the last-pushed items
 indefinitely, so a dead connector produces no outage, no error page, and no
-complaint. The business-continuity exposure is therefore not "users cannot
-search"; it is that **deletions and permission revocations stop propagating**. A
-terminated employee's access removal, a deleted customer record — both stay
-searchable for the entire outage plus one crawl. RTO here is a *security*
-number, not an availability one, and every priority below follows from that.
+complaint. The business-continuity exposure is not "users cannot search"; it is
+that **deletions and permission revocations stop propagating**. A terminated
+employee's access removal, a deleted customer record — both stay searchable for
+the entire outage plus one crawl. RTO here is a *security* number, not an
+availability one, and every priority below follows from that.
+
+**How to read the two status columns.** *Build* says the thing exists in this
+repository and its own tests pass. *Live test* says it has been exercised against
+the reference rig — a real SQL Server, a real tenant, a real 111,900-item corpus.
+The gap between those two columns is where this project has found every defect
+worth finding, which is why they are kept separate.
 
 ### Tier 0 — before a customer depends on it
 
-| # | Item | Why it outranks everything below it |
-|---|---|---|
-| 1 | **Dead-scheduler detection, wired to alerting** | The one failure mode nothing catches today. `/health` exists and `vwConnectionHealth` says `late` — but nothing *polls* either, and a stopped scheduled task is invisible precisely because the index keeps answering. Wire `/health` into whatever the customer already pages from (SCOM, Zabbix, Azure Monitor — anything that polls JSON) and alert on `status != ok` and on `minutesSinceLastSuccess` exceeding the expected interval. Without this, every other safeguard in this repository reports into a void |
-| 2 | **Single-instance run lock** | Nothing stops two instances crawling one connection concurrently — a stuck task firing again, or, later, two HA nodes both firing on schedule. The store reaps *abandoned* runs but does not refuse a second *live* one, and interleaved writer sets with two delete sweeps racing is the worst case this design has. One `sp_getapplock` in `uspBeginRun` closes it — and it is the prerequisite for any high-availability shape at all, because it is what makes a second node safe |
-| 3 | **DR: state-store backup and a rebuild runbook** | Decide and write down what is actually lost, per artefact. `crawl.Item` hashes → one full crawl rebuilds them; the checkpoint → likewise; run history → evidence gone, corpus fine. So a **daily backup of `ConnectorState` with RPO = 24 hours is defensible**, because the cost of losing a day is one full crawl, not data. The rebuild is: the release zip, the SQL scripts in the order section [`CRAWL-STATE-DEPLOYMENT.md`](CRAWL-STATE-DEPLOYMENT.md) now lists, then restore or accept the recrawl. **Then rehearse it once** — an untested restore is a hypothesis, not a plan |
-| 4 | **Credential DR and rotation** | The sharpest DR gap in the current design: the client secret lives in **Windows Credential Manager, which is per-machine and per-user**. It does not travel to a replacement host, and no runbook says how to re-provision it. Either document that step, or better — the `KeyVault:` plumbing already exists — move the secret there, or to a certificate in the machine store, and the DR surface shrinks to "the new machine's identity can reach the vault". Add expiry alerting while there: `ExpiryWarningDays` watches certificates, and nothing watches the client secret's expiry at all |
-| 5 | **Re-accept the ACL staleness bound** | Already flagged with a ⚠️ in section 1: incremental reads changed what the number means. A directory-side ACL change does not move an item's own timestamp, so on an incremental connection the real bound is the *full-crawl cadence* — 168 hours by default — not the run cadence. That is a decision for the accountable owner, not an engineering task, but going live on the old acceptance would be signing a different number than the one now in force |
+| # | Item | Why it outranks everything below it | Build | Live test |
+|---|---|---|---|---|
+| 1 | **Dead-scheduler detection, wired to alerting** | The one failure mode nothing catches. `/health` exists and `vwConnectionHealth` says `late`, but nothing polls either, and a stopped scheduled task is invisible precisely because the index keeps answering | ⏳ in progress | ⏳ |
+| 2 | **Single-instance run lock** | Two runs mean two DELETE SWEEPS: each diffs the corpus against what *it* has seen, so the second offers every item the first has not reached yet for deletion. `MaxDeletePercent` was the only thing between that and an emptied index, and a guard is a backstop rather than a design | ✅ `sql/43`, exit code 5, 4 tests | ✅ **PASSED.** Two crawls raced against one connection: the second refused with exit **5**, naming the holding run, host, pid and heartbeat. An orphaned run — created by a genuine crash mid-test — held the lease for its 180-second grace and was then reaped automatically, and the next crawl exited 0. Recovery is **minutes, not the twelve hours** a bare status check would have cost. The heartbeat was proven separately: at a 3-second interval it advanced **12 seconds over a 15-second run**; at the 60-second default it correctly never fired on a 15-second crawl |
+| 3 | **DR: state-store backup and a rebuild runbook** | An untested restore is a hypothesis, not a plan | ✅ `Backup-ConnectorState.ps1`, `Invoke-RestoreDrill.ps1`, `DISASTER-RECOVERY.md` | ✅ **REHEARSED, on both shells.** Backup 8.5 MB compressed from 61.1 MB (7.1×) in **0.7s**; restore to a differently-named database in **6.9s**; **112,621 rows across 8 tables, every table matching the manifest**; `DBCC CHECKDB` clean; `sql/30` and `sql/42` both passed against the restored copy; drill database dropped afterwards. The guard was tested too — restoring over `ConnectorState` was refused before any write, exit 4 |
+| 4 | **Credential DR and rotation** | Windows Credential Manager is per-machine and per-user and does not travel to a replacement host | ✅ documented in `DISASTER-RECOVERY.md` | ⚠️ **Established by reading the code, not by rebuilding a host.** Two claims this section originally made were **wrong** — see the correction below |
+| 5 | **Re-accept the ACL staleness bound** | Incremental reads changed what the number means | ❌ not an engineering task | ❌ A decision for the accountable owner. See the ⚠️ in section 1 |
+
+⚠️ **Correction, and it matters because this section asserted the opposite.** The
+first draft said the `KeyVault:` plumbing already existed as the fix for
+credential DR — *"move the secret there"*. **It cannot hold the Entra client
+secret.** The secret provider is built *from* the `TokenCredential`, so the vault
+would be opened using the very credential being stored in it; in `ClientSecret`
+mode `TokenCredentialFactory` reads Windows Credential Manager directly and never
+goes through `ISecretProvider` at all. `KeyVaultOptions`' only well-known key is
+`SqlPassword`. **The correct answer is a certificate**, and `DISASTER-RECOVERY.md`
+is written around that. Rotation is better than expected for the push tools,
+though: each scheduled run is a new process, so an in-place `cmdkey` overwrite is
+picked up on the next run with no restart. `ConnectorServer` is the exception and
+does need one. Confirmed as suspected: **nothing watches a client secret's
+expiry** — `ExpiryWarningDays` reaches the certificate criteria and stops there.
 
 ### Tier 1 — high availability, first month
 
-| # | Item | Shape |
-|---|---|---|
-| 6 | **HA: active/passive on a database lease** | Active/active is the wrong shape for this architecture — one connection wants one writer set and one sweep. The right one: **two nodes, both carrying the deployment and the secrets, both scheduled — and the run lock above makes the second node's attempt a clean no-op while the first holds the lease.** Failover is then automatic and stateless: node A dies, node B's next scheduled firing acquires the lock. `ConnectorState` moves to an Availability Group; the connection strings already name a server, so that name becomes the listener. **One trap to write down now:** SQL Agent jobs live in `msdb`, which does **not** fail over with an AG — `sql/27` (retention) and `sql/32` (trigger health) must be deployed on every replica and gated on `sys.fn_hadr_is_primary_replica`, or they silently stop at the first failover. The dashboard is stateless; run it on both nodes |
-| 7 | **Scheduled reconciliation** | `deploy/Compare-SourceToIndex.ps1` exists and is run by hand. Schedule it weekly and alert on drift. It is the only check that catches the class of defect where the store and Graph agree with each other and both are wrong about the source |
-| 8 | **Route the alert-worthy events to people** | The delete guard firing (`THROW 50007`), a `partial` run, `items refused` health, a failed trigger-health job — all exist and all land in a log or a table. None reaches a person. Decide the paging matrix once: which of these wakes somebody, which waits for morning, and which is a dashboard-only fact |
-| 9 | **Upgrade and rollback runbook** | The pieces exist — versioned releases, `release-retire.yml`, ordered SQL migrations — but no page says "1.4 → 1.5: run `sql/33`–`42`, swap binaries; to back out: binaries back, schema stays". Write it while the additive-only property still holds, and state the rule that preserves it: **migrations stay backward-compatible for one version, or the rollback story dies** |
-| 10 | **Copilot-side result types and activities** | Adoption, not plumbing. Without result types and verticals configured in the tenant, results render bland and users conclude the connector "does not work" — no amount of connector correctness substitutes. External item *activities* feed relevance ranking. Tenant configuration plus a small push-side addition |
+| # | Item | Shape | Build | Live test |
+|---|---|---|---|---|
+| 6 | **HA: active/passive on a database lease** | Two nodes, both scheduled; the run lock makes the passive one's attempt a clean no-op. **SQL Agent jobs live in `msdb`, which does not fail over with an Availability Group** — so they must be deployed on every replica *and* know where they are | ✅ `sql/44` | ⚠️ **PARTIAL, and the untested half is named.** Both jobs now carry a primary-replica guard, and the **standalone path is verified**: `sys.fn_hadr_is_primary_replica` returns NULL off-AG, the guard treats only 0 as "not my turn", and the jobs still run here. The **secondary path is NOT TESTED** — this instance has no Availability Group (`IsHadrEnabled = 0`), and proving a guard that skips needs a two-node rig |
+| 7 | **Scheduled reconciliation** | The only check that catches the class of defect where the store and Graph agree with each other and both are wrong about the source | ⏳ in progress | ⏳ |
+| 8 | **Route the alert-worthy events to people** | The delete guard, a `partial` run, `items refused`, a failed trigger-health job — all recorded, none reaching anybody | ⏳ in progress | ⏳ |
+| 9 | **Upgrade and rollback runbook** | Write it while the additive-only property holds | ✅ `UPGRADE-RUNBOOK.md` | ✅ **And writing it found that the property does not hold** — see below |
+| 10 | **Copilot result types and activities** | Without surfacing configured, results render bland and users conclude the connector does not work | ✅ `COPILOT-SURFACING.md`, `Set-SearchResultTypes.ps1`, `Get-SearchSurfacing.ps1` | ⚠️ **Read-only against the live tenant; no write was made.** Three findings changed the shape of the item — see below |
+
+⚠️ **The additive-only property does not hold, and `sql/40` is what breaks it.**
+It drops and recreates `crawl.ItemTypeCountList` with an eighth column, while the
+v1.4.0 binary declares **seven** `SqlMetaData` columns — and a table-valued
+parameter binds by position **and count**. Worse, the call site catches the
+failure into a `log.Warning`, so a rolled-back v1.4 binary **completes every run,
+reports success, and writes no `crawl.RunItemType` rows at all**: the same silent
+shape as the connector itself. Established by reading both binaries at both tags
+rather than by building them, and the runbook says so.
+
+⚠️ **A fresh deployment was broken, and that defect was introduced here.**
+`sql/24` projects `t.ItemsDuplicate`, which `sql/40` adds — and the deployment
+order had `sql/24` at step 5 and `sql/40` at step 11. Deferred name resolution
+covers a missing *table*, not a missing *column*, so a brand-new install failed at
+step 5 with `Msg 207: Invalid column name 'ItemsDuplicate'`. **Reproduced on a
+scratch database** rather than argued from the source, and the corrected order —
+`sql/40` at step 5, before `sql/24` — was proven the same way. Invisible on an
+upgrade, where the column already exists, which is why it survived: it only bites
+a customer who has never deployed before.
+
+**What the Copilot work established, because two of the item's own assumptions
+were wrong.** Microsoft Search renders connector results from Adaptive Card
+display templates; **Copilot does not use them at all**, and generates rendering
+from semantic labels instead. **Verticals are admin-centre only — no Graph API in
+v1.0 or beta — and are not required for items to appear**, since connector results
+are inline in the All vertical by default. The API half of this work needs no
+permission the app lacks; but verticals and admin-centre result types have **no
+application permission at all** and need a human with Search Administrator, which
+is a staffing fact rather than a configuration one. **One real gap in our own
+schema**: `iconUrl` is absent, and Microsoft lists it among the labels required
+for content to surface in Copilot. Adding it is a schema update rather than a
+delete-and-recreate, so it should ride with other schema work.
 
 ### Tier 2 — as it scales
 
-| # | Item | Note |
-|---|---|---|
-| 11 | **OTLP telemetry to an APM** | The exporter is already packaged behind `-EnableOtlpExporter`; wiring it buys per-run traces with no new code |
-| 12 | **Multi-connection scheduling** | Several connectors on one host need a queue so full crawls do not stack on the same window, and per-connection throttle budgets so one greedy crawl cannot eat the tenant's Graph quota |
-| 13 | **Capacity planning** | The 100-fold test proved 111,900 items; nobody has written down Graph's per-connection ceiling against the corpus growth forecast |
-| 14 | **gMSA, signed packages, SBOM** | A group managed service account removes password rotation entirely; signing the deployment zip and shipping an SBOM gives the change advisory board artefact integrity |
-| 15 | **Sensitivity-label mapping** | If a source ever carries labelled content, the connector should project the label into the schema rather than flatten it away |
+| # | Item | Note | Build | Live test |
+|---|---|---|---|---|
+| 11 | **OTLP telemetry to an APM** | The exporter is already packaged behind `-EnableOtlpExporter`; wiring it buys per-run traces with no new code | ❌ out of scope for now | ❌ |
+| 12 | **Multi-connection scheduling** | Several connectors on one host need a queue so full crawls do not stack, and per-connection budgets so one cannot eat the tenant's Graph quota | ⏳ in progress | ⏳ |
+| 13 | **Capacity planning** | The 100-fold test proved 111,900 items; nobody has written the ceiling against the growth forecast | ⏳ in progress | ⏳ |
+| 14 | **gMSA, signed packages, SBOM** | Removes password rotation entirely; gives the change advisory board artefact integrity | ❌ out of scope for now | ❌ |
+| 15 | **Sensitivity-label mapping** | If a source carries labelled content, project the label rather than flatten it | ❌ out of scope for now | ❌ |
 
-The one-sentence version: **wire the alarm before the redundancy.** Items 1–5
-make a single node honest about being dead, which is worth more than a second
-node that fails the same silent way.
+The one-sentence version: **wire the alarm before the redundancy.** Items 1–5 make
+a single node honest about being dead, which is worth more than a second node that
+fails the same silent way.

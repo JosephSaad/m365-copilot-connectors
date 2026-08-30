@@ -105,16 +105,36 @@ rather than being deferred.**
 | 2 | `sql/21-crawl-state-tables.sql` | Eight tables and their indexes | `db_owner` on `ConnectorState` | `ConnectorState` |
 | 3 | `sql/22-crawl-state-views.sql` | Six views | `db_owner` | `ConnectorState` |
 | 4 | `sql/23-crawl-state-procedures.sql` | Nineteen procedures — the write path | `db_owner` | `ConnectorState` |
-| 5 | `sql/24-crawl-state-reporting.sql` | Seven procedures — the dashboard's read path | `db_owner` | `ConnectorState` |
-| 6 | `sql/25-crawl-state-least-privilege.sql` | Two logins, two users, two roles, the grants and the denials | `securityadmin` **and** `db_owner` — see below | `master`, then `ConnectorState` |
-| 7 | `sql/28-crawl-state-hash-version.sql` | The hash-version column and the check that escalates a run | `db_owner` | `ConnectorState` |
-| 8 | `sql/29-crawl-state-partial-status.sql` | Run status 5, `partial`, and reclassifies existing rows | `db_owner` | `ConnectorState` |
-| 9 | `sql/33-crawl-state-negative-ttl.sql` | The two principal TTL columns and the clamp in `uspCachePrincipal` | `db_owner` | `ConnectorState` |
-| 10 | `sql/34-crawl-state-live-item-ids.sql` | `uspListLiveItemIds`, read-only, for the dry-run delete preview | `db_owner` | `ConnectorState` |
-| 11 | `sql/40-crawl-state-per-type-duplicates.sql` | `ItemsDuplicate`, and **recreates a table type** — see below | `db_owner` | `ConnectorState` |
+| 5 | `sql/40-crawl-state-per-type-duplicates.sql` | `ItemsDuplicate`, and **recreates a table type** — see below. **Must run before `sql/24`** | `db_owner` | `ConnectorState` |
+| 6 | `sql/24-crawl-state-reporting.sql` | Seven procedures — the dashboard's read path | `db_owner` | `ConnectorState` |
+| 7 | `sql/25-crawl-state-least-privilege.sql` | Two logins, two users, two roles, the grants and the denials | `securityadmin` **and** `db_owner` — see below | `master`, then `ConnectorState` |
+| 8 | `sql/28-crawl-state-hash-version.sql` | The hash-version column and the check that escalates a run | `db_owner` | `ConnectorState` |
+| 9 | `sql/29-crawl-state-partial-status.sql` | Run status 5, `partial`, and reclassifies existing rows | `db_owner` | `ConnectorState` |
+| 10 | `sql/33-crawl-state-negative-ttl.sql` | The two principal TTL columns and the clamp in `uspCachePrincipal` | `db_owner` | `ConnectorState` |
+| 11 | `sql/34-crawl-state-live-item-ids.sql` | `uspListLiveItemIds`, read-only, for the dry-run delete preview | `db_owner` | `ConnectorState` |
 | 12 | `sql/41-crawl-state-compare-and-see.sql` | `uspCompareAndSee`, the one-call compare | `db_owner` | `ConnectorState` |
-| 13 | `sql/30-verify-set-options.sql` | Nothing — it checks what everything above created | any reader | `ConnectorState`, and every other database holding modules |
+| 13 | `sql/43-crawl-state-run-lock.sql` | The heartbeat lease: one live crawl per connection | `db_owner` | `ConnectorState` |
+| 14 | `sql/30-verify-set-options.sql` | Nothing — it checks what everything above created | any reader | `ConnectorState`, and every other database holding modules |
+| 15 | `sql/42-verify-least-privilege.sql` | Nothing — it exercises the roles `sql/25` created | `db_owner` | `ConnectorState` |
 
+⚠️ **`sql/40` runs at step 5, before `sql/24`, and the order is not cosmetic.**
+`sql/24` projects `t.ItemsDuplicate` from `crawl.RunItemType`, and `sql/40` is
+what adds that column. SQL Server's deferred name resolution covers a missing
+*table*, not a missing *column*, so on any database that has never had `sql/40`
+run against it — which is every new deployment — `sql/24` is refused outright:
+
+```
+Msg 207, Level 16, State 1
+Invalid column name 'ItemsDuplicate'.
+```
+
+This was reproduced on a scratch database rather than reasoned about, because
+"deferred name resolution does not cover columns" is exactly the kind of claim
+that is easy to have backwards. It is invisible on an upgrade, where the column
+already exists, which is why it survived until somebody worked through a fresh
+install. `sql/40` cannot move earlier than `sql/23` either — it `CREATE OR
+ALTER`s a procedure that `sql/23` also defines, so running it first would have
+`sql/23` overwrite it with the older body.
 **`sql/40` recreates a table type, which destroys two grants.**
 `crawl.ItemTypeCountList` cannot be altered — only dropped — and it cannot be
 dropped while `uspRecordRunItemTypes` references it, so the script drops the

@@ -630,6 +630,8 @@ namespace SqlTicketsConnector.Tests
                 this.inner.GetLiveItemIdsAsync(cancellationToken);
 
 
+            public Task HeartbeatAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
             public Task<IReadOnlySet<string>> CompareAndSeeAsync(
 
                 IReadOnlyCollection<CrawlItemState> candidates, CancellationToken cancellationToken) =>

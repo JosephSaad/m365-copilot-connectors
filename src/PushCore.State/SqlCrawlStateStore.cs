@@ -81,6 +81,14 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
     /// </remarks>
     private const int DeleteGuardErrorNumber = 50007;
 
+    /// <summary>The error sql/43 raises when another run holds the lease.</summary>
+    /// <remarks>
+    /// Surfaced as CrawlRunLockedException rather than as a generic failure,
+    /// because it is not one: a second run refused while the first is healthy is
+    /// the lease working. See that type for why it gets its own exit code.
+    /// </remarks>
+    private const int RunLockedErrorNumber = 50043;
+
     /// <summary>
     /// Command timeout for every call, in seconds.
     /// </summary>
@@ -327,7 +335,39 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
         DateTime? lastFullSuccessUtc;
         int reaped;
 
-        await using (SqlDataReader reader = await begin.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        // THE LEASE REFUSAL IS NOT A FAILURE, so it is not allowed to arrive as
+
+        // one. sql/43 throws 50043 when another live run holds this
+
+        // connection, which happens whenever a scheduled task overruns its own
+
+        // interval or the passive half of a pair reaches its scheduled time.
+
+        // Both are the design working. Translated here so PushHost can exit 5
+
+        // and a scheduler can read "skipped" rather than paging somebody.
+
+        SqlDataReader reader;
+
+
+        try
+
+        {
+
+            reader = await begin.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+        }
+
+        catch (SqlException ex) when (ex.Number == RunLockedErrorNumber)
+
+        {
+
+            throw new CrawlRunLockedException(ex.Message, ex);
+
+        }
+
+
+        await using (reader)
         {
             if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
@@ -497,6 +537,18 @@ public sealed class SqlCrawlStateStore : ICrawlStateStore
     }
 
 
+    /// <inheritdoc />
+    public async Task HeartbeatAsync(CancellationToken cancellationToken)
+    {
+        (_, long run) = this.RequireOpenRun(nameof(this.HeartbeatAsync));
+
+        await using SqlConnection sql = await this.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using SqlCommand command = Procedure(sql, "crawl.uspHeartbeatRun");
+
+        command.Parameters.Add(new SqlParameter("@RunId", SqlDbType.BigInt) { Value = run });
+
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
     /// <inheritdoc />
     public async Task<IReadOnlySet<string>> CompareAndSeeAsync(
         IReadOnlyCollection<CrawlItemState> candidates,

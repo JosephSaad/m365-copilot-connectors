@@ -196,6 +196,22 @@ public interface ICrawlStateStore : IAsyncDisposable
     /// </remarks>
     Task<IReadOnlyList<string>> GetLiveItemIdsAsync(CancellationToken cancellationToken);
 
+    /// <summary>Tells the store this run is still alive.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>A task for the operation.</returns>
+    /// <remarks>
+    /// sql/43 gives each connection a lease: a run whose heartbeat has gone
+    /// stale is presumed dead, is reaped, and its lease is handed to whoever asks
+    /// next. Without this call a long crawl would hand its own lease away
+    /// mid-flight and a second process would start beside it.
+    ///
+    /// It must never throw into the crawl. A missed beat is survivable by design
+    /// - the grace period is several beats wide - so a heartbeat that cannot
+    /// reach the database is worth a warning and nothing more. Killing an
+    /// otherwise healthy run because a keepalive failed would be the cure
+    /// causing the disease.
+    /// </remarks>
+    Task HeartbeatAsync(CancellationToken cancellationToken);
     /// <summary>Decides what needs writing, and records what does not, in one call.</summary>
     /// <param name="candidates">Every item in one lookup window, with the hashes just computed.</param>
     /// <param name="cancellationToken">Cancellation.</param>
