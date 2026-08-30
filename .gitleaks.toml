@@ -120,4 +120,25 @@ regexes = [
   # purpose; the canary value below is not a real credential.
   '''CANARY-9d41b2f7-customer-record''',
   '''<paste from Key Vault, do not commit>''',
+
+  # The three places that NAME TrustServerCertificate in order to warn about it
+  # or to record that it is refused. The rule above is a policy rule, not a
+  # credential rule, and it cannot tell a connection string that disables TLS
+  # validation from a sentence saying such a string is rejected.
+  #
+  # Deliberately matched by the surrounding words rather than by file path. A
+  # path allowlist would exempt those files entirely, including a real
+  # connection string added to one of them later; these three shapes only
+  # exempt the sentence, so `TrustServerCertificate=true` written as
+  # configuration is still reported anywhere it appears - including in the same
+  # files, on any other line.
+  #
+  # Found by the release/net9 merge. On main these lines are old, and the
+  # pre-commit hook only scans what a commit adds, so nothing had ever
+  # presented them to the scanner. The branch that was 33 commits behind added
+  # all three at once and they were reported immediately - which is a fair
+  # description of how much of this allowlist has actually been exercised.
+  '''rejects `?TrustServerCertificate=true`?''',
+  '''sets TrustServerCertificate=true, which is rejected''',
+  '''TrustServerCertificate=true is in effect''',
 ]
