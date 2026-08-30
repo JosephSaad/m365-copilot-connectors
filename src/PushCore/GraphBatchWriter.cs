@@ -300,7 +300,7 @@ public sealed class GraphBatchWriter
     /// run of them. Items refused with anything else are done, and are reported.
     /// </para>
     /// </remarks>
-    public async Task<BatchWriteResult> WriteAsync(
+    public Task<BatchWriteResult> WriteAsync(
         IReadOnlyList<(string ItemId, ExternalItem Item)> batch,
         CancellationToken cancellationToken = default)
     {
@@ -313,6 +313,70 @@ public sealed class GraphBatchWriter
             tracked.Add(new TrackedItem(itemId, item));
         }
 
+        return this.RunBatchAsync(tracked, "write", cancellationToken);
+    }
+
+    /// <summary>Deletes every item, batched, and reports what became of each one.</summary>
+    /// <param name="itemIds">The items to remove from the index.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>One <see cref="BatchItemResult"/> per item, in the order supplied.</returns>
+    /// <remarks>
+    /// <para>
+    /// The same passes, the same backoff, the same per-item outcomes as
+    /// <see cref="WriteAsync"/>, because they are the same code: a deletion
+    /// differs in exactly two ways, and both are named where they occur. It
+    /// builds a DELETE rather than a PUT, and 404 counts as SUCCESS - an item
+    /// Graph says is absent is absent, and calling that a failure would leave it
+    /// pending for ever, retried every run against something already gone.
+    /// </para>
+    /// <para>
+    /// A sweep of 412 items previously cost 412 round trips. This makes it 21.
+    /// The saving is the same one batching already bought for writes, and the
+    /// writer was already here; only the sweep had not been pointed at it.
+    /// </para>
+    /// <para>
+    /// A refusal is reported, never thrown. One item that will not delete must
+    /// not abandon the rest of the sweep - the store keeps it pending, the next
+    /// run retries it, and crawl.vwPendingDeletes shows anything that keeps
+    /// failing.
+    /// </para>
+    /// </remarks>
+    public Task<BatchWriteResult> DeleteAsync(
+        IReadOnlyList<string> itemIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(itemIds);
+
+        var tracked = new List<TrackedItem>(itemIds.Count);
+
+        foreach (string itemId in itemIds)
+        {
+            tracked.Add(new TrackedItem(itemId));
+        }
+
+        return this.RunBatchAsync(tracked, "delete", cancellationToken);
+    }
+
+    /// <summary>The passes, the backoff and the per-item outcomes, for either verb.</summary>
+    /// <param name="tracked">Everything this call is responsible for, already wrapped.</param>
+    /// <param name="verb">"write" or "delete", for the log lines only.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>One <see cref="BatchItemResult"/> per item, in the order supplied.</returns>
+    /// <remarks>
+    /// Shared on purpose rather than duplicated. A write and a delete differ in
+    /// two places - which request NextChunk builds, and whether 404 is a success
+    /// - and both are marked where they occur. Everything else about them is the
+    /// same problem: twenty per envelope, one sleep per pass honouring the
+    /// longest Retry-After any sub-response asked for, per-item outcomes so one
+    /// refusal does not abandon the other nineteen. Two copies of that would be
+    /// two chances to fix a defect in one of them, which this file has already
+    /// paid for once.
+    /// </remarks>
+    private async Task<BatchWriteResult> RunBatchAsync(
+        List<TrackedItem> tracked,
+        string verb,
+        CancellationToken cancellationToken)
+    {
         var pending = new List<TrackedItem>(tracked);
         int roundTrips = 0;
 
@@ -352,7 +416,8 @@ public sealed class GraphBatchWriter
                         item.Refuse(item.StatusCode, item.Reason ?? "still refused after every attempt");
 
                         this.log.Error(
-                            "Batched write of {ItemId} gave up after {Max} attempts, last status {Status}.",
+                            "Batched {Verb} of {ItemId} gave up after {Max} attempts, last status {Status}.",
+                            verb,
                             item.ItemId,
                             MaxWriteAttempts,
                             item.StatusCode);
@@ -366,10 +431,11 @@ public sealed class GraphBatchWriter
                 TimeSpan wait = longestRetryAfter ?? GraphThrottling.Backoff(attempt);
 
                 this.log.Warning(
-                    "{Count} of {Offered} batched writes were refused as retryable. Waiting {Seconds}s before " +
+                    "{Count} of {Offered} batched {Verb}s were refused as retryable. Waiting {Seconds}s before " +
                     "attempt {Next} of {Max}.",
                     retry.Count,
                     pending.Count,
+                    verb,
                     (int)wait.TotalSeconds,
                     attempt + 1,
                     MaxWriteAttempts);
@@ -442,12 +508,29 @@ public sealed class GraphBatchWriter
             // serialized exactly once, so the defect had no way to appear -
             // 44e464f fixed the sibling case, one ACL shared ACROSS items, and
             // could not have caught one item serialized across attempts.
-            GraphModelReset.ForSerialization(item.Item);
+            RequestInformation request;
 
-            RequestInformation request = this.graph.External
-                .Connections[this.connectionId]
-                .Items[item.ItemId]
-                .ToPutRequestInformation(item.Item);
+            if (item.IsDelete)
+            {
+                // No body, so nothing to re-serialize and nothing to reset. The
+                // backing-store defect above cannot reach a DELETE - which is
+                // worth saying rather than leaving as an absence, because the
+                // next person to add an operation here will need to know which
+                // of the two shapes theirs is.
+                request = this.graph.External
+                    .Connections[this.connectionId]
+                    .Items[item.ItemId]
+                    .ToDeleteRequestInformation();
+            }
+            else
+            {
+                GraphModelReset.ForSerialization(item.Item!);
+
+                request = this.graph.External
+                    .Connections[this.connectionId]
+                    .Items[item.ItemId]
+                    .ToPutRequestInformation(item.Item!);
+            }
 
             // A body whose length cannot be asked for counts as zero, which
             // disables the byte ceiling for that item but never the request
@@ -596,6 +679,18 @@ public sealed class GraphBatchWriter
                 continue;
             }
 
+            // A DELETE that answers 404 got what it asked for. The item is not
+            // in the index, which is the state being requested, and treating it
+            // as a failure would leave it pending for ever - re-attempted every
+            // run, for ever, against an item that has already gone. This mirrors
+            // the single-item TryDeleteAsync exactly; the two must agree, or one
+            // item gets two policies depending on which path removed it.
+            if (status == 404 && item.IsDelete)
+            {
+                item.Succeed(status);
+                continue;
+            }
+
             // Only a refusal needs its headers, and only a refusal pays for the
             // sub-response to be materialised. The message is disposable and the
             // SDK's own documentation says to dispose it.
@@ -628,7 +723,8 @@ public sealed class GraphBatchWriter
             string body = await ReadErrorBodyAsync(subResponse, cancellationToken);
 
             this.log.Error(
-                "Batched write of {ItemId} was refused with status {Status}. Not retrying this item. {Body}",
+                "Batched {Verb} of {ItemId} was refused with status {Status}. Not retrying this item. {Body}",
+                item.IsDelete ? "delete" : "write",
                 item.ItemId,
                 status,
                 body);
@@ -852,9 +948,24 @@ public sealed class GraphBatchWriter
             this.Item = item;
         }
 
+        /// <summary>A deletion, which carries no body.</summary>
+        internal TrackedItem(string itemId)
+        {
+            this.ItemId = itemId;
+            this.Item = null;
+            this.IsDelete = true;
+        }
+
         internal string ItemId { get; }
 
-        internal ExternalItem Item { get; }
+        /// <summary>The item to write, or null when this is a deletion.</summary>
+        internal ExternalItem? Item { get; }
+
+        /// <summary>
+        /// Whether this is a DELETE rather than a PUT. It changes two things and
+        /// only two: which request is built for it, and whether 404 is a success.
+        /// </summary>
+        internal bool IsDelete { get; }
 
         internal int Attempts { get; set; }
 

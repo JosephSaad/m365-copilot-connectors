@@ -694,12 +694,72 @@ public sealed class PushEngine
 
         var confirmed = new List<string>(pending.Count);
 
-        foreach (CrawlDeletion deletion in pending)
+        // BATCHED WHEN BATCHING IS ON, one at a time when it is not. The sweep
+        // was the last caller still paying a round trip per item: 412 pending
+        // deletions cost 412 calls, where the batch writer the engine already
+        // owned would have made it 21.
+        //
+        // The single-item path stays reachable and is not dead code. It is what
+        // Settings:Batch = false selects, which is the first thing to try when a
+        // run starts failing in a way batching could explain - and a sweep is
+        // exactly when somebody wants that lever.
+        GraphBatchWriter? writer = this.ResolveBatchWriter(summary);
+
+        if (writer is not null)
         {
-            if (await this.TryDeleteAsync(deletion.ItemId, summary, cancellationToken))
+            var byId = new Dictionary<string, string>(pending.Count, StringComparer.OrdinalIgnoreCase);
+
+            foreach (CrawlDeletion deletion in pending)
             {
-                confirmed.Add(deletion.ItemId);
-                summary.CountDeleted(deletion.ItemType);
+                byId[deletion.ItemId] = deletion.ItemType;
+            }
+
+            BatchWriteResult result = await writer.DeleteAsync(
+                pending.Select(deletion => deletion.ItemId).ToList(), cancellationToken);
+
+            // Reported because otherwise nothing distinguishes a batched sweep
+            // from the per-item one it replaced. The counters are identical
+            // either way - same deletions, same failures - so the round trips
+            // are the only observable difference, and a change justified by them
+            // that does not print them cannot be checked after the fact.
+            this.log.Information(
+                "Delete sweep: {Count} deletion(s) sent in {RoundTrips} $batch round trip(s).",
+                pending.Count,
+                result.RoundTrips);
+
+            foreach (BatchItemResult item in result.Written)
+            {
+                confirmed.Add(item.ItemId);
+
+                // The type comes from the store's own row rather than being
+                // inferred, so the per-type breakdown of a sweep matches the
+                // per-type breakdown of the crawl that created those items.
+                summary.CountDeleted(byId[item.ItemId]);
+            }
+
+            if (result.FailedCount > 0)
+            {
+                // Logged per item, not just counted. A sweep that half-worked is
+                // a list of items still answering searches for records that are
+                // gone, and "37 failed" does not tell anybody which.
+                foreach (BatchItemResult item in result.Failed)
+                {
+                    this.log.Error(
+                        "Delete of {ItemId} failed with status {Status}. It stays pending and will be retried.",
+                        item.ItemId,
+                        item.StatusCode);
+                }
+            }
+        }
+        else
+        {
+            foreach (CrawlDeletion deletion in pending)
+            {
+                if (await this.TryDeleteAsync(deletion.ItemId, summary, cancellationToken))
+                {
+                    confirmed.Add(deletion.ItemId);
+                    summary.CountDeleted(deletion.ItemType);
+                }
             }
         }
 

@@ -68,6 +68,17 @@ namespace SqlTicketsConnector.Tests.TestSupport
         public List<string> WrittenBodies { get; } = new List<string>();
 
         /// <summary>
+        /// The HTTP method of every $batch sub-request, in the order they were
+        /// sent.
+        ///
+        /// Recorded because a round-trip count cannot tell a batched DELETE from
+        /// a batched PUT, and the difference between those two is the difference
+        /// between removing an item and rewriting the one you were asked to
+        /// remove. A test that only counts envelopes would pass through that.
+        /// </summary>
+        public List<string> BatchMethods { get; } = new List<string>();
+
+        /// <summary>
         /// Gets or sets a hook that fails a write. Returning an exception for a
         /// given item ID makes that PUT throw, which is how a test drives the
         /// engine's behaviour when a write dies partway through a run.
@@ -435,6 +446,12 @@ namespace SqlTicketsConnector.Tests.TestSupport
         /// <param name="request">The sub-request, as the SDK serialized it.</param>
         private void WriteSubResponse(Utf8JsonWriter writer, JsonElement request)
         {
+            lock (this.WrittenItemIds)
+            {
+                this.BatchMethods.Add(
+                    request.TryGetProperty("method", out JsonElement verb) ? verb.GetString() ?? "?" : "?");
+            }
+
             string requestId = request.GetProperty("id").GetString();
             string itemId = ItemIdOf(
                 request.TryGetProperty("url", out JsonElement url) ? url.GetString() : null);
