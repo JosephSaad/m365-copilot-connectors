@@ -621,26 +621,115 @@ jobs:
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path staged | Out-Null
           $sql = Get-Content sql/20-crawl-state-database.sql -Raw
-          $sql = $sql -replace '(?ms)^\s*ON PRIMARY.*?(?=^\s*(GO|ALTER|--))', ''
-          $sql = $sql -replace '(?ms)^\s*LOG ON.*?(?=^\s*(GO|ALTER|--))', ''
-          Set-Content -Path staged/20-crawl-state-database.sql -Value $sql -Encoding UTF8
-          Write-Host 'Staged sql/20 without the D: file clauses.'
 
-      - name: Build ConnectorState (sql/20-24)
+          # ONE DETERMINISTIC REPLACEMENT OF THE WHOLE STATEMENT, and the
+          # previous two-regex version is why this comment is long.
+          #
+          # It stripped from "ON PRIMARY" to the next line beginning GO, ALTER
+          # or "--". The nearest such line is the GO *after* the guard's END, so
+          # the strip ate the END as well and produced
+          #
+          #     IF DB_ID(N'ConnectorState') IS NULL
+          #     BEGIN
+          #         CREATE DATABASE [ConnectorState]
+          #     GO
+          #
+          # - an unterminated BEGIN. sqlcmd answered "Msg 102 ... Incorrect
+          # syntax near 'ConnectorState'", the database was never created, and
+          # all eleven scripts after it failed with "Cannot open database". This
+          # job had been red on every run for weeks and the visible errors were
+          # eleven login failures pointing at nothing.
+          #
+          # Matching the statement from CREATE DATABASE to its own terminating
+          # semicolon cannot eat a neighbour, whatever gets added around it.
+          $sql = [regex]::Replace(
+            $sql,
+            '(?ms)(CREATE\s+DATABASE\s+\[\w+\])\s*ON\s+PRIMARY\s*\(.*?\)\s*LOG\s+ON\s*\(.*?\)\s*;',
+            '$1;')
+
+          if ($sql -match 'D:\\SQL') {
+            throw 'Staging sql/20 left a D: path behind. The CREATE DATABASE statement did not match the pattern above, so this run would fail on a runner that has no D: drive.'
+          }
+
+          Set-Content -Path staged/20-crawl-state-database.sql -Value $sql -Encoding UTF8
+          Write-Host 'Staged sql/20 with the instance default file locations.'
+
+      # THE ORDER BELOW IS THE ONE IN docs/CRAWL-STATE-DEPLOYMENT.md, AND IT HAS
+      # TO BE. This step used to run 21, 22, 23, 24, 28 and stop, which is not
+      # the documented order and not a subset of it either: sql/40 was missing
+      # entirely, and sql/40 must run BEFORE sql/24.
+      #
+      # sql/24 creates uspGetRun, which projects t.ItemsDuplicate from
+      # crawl.RunItemType - a column sql/21 does not create and sql/40 adds.
+      # Deferred name resolution covers a missing TABLE but not a missing COLUMN
+      # on a table that already exists, so sql/24 failed outright with
+      #
+      #   Msg 207 ... Procedure uspGetRun ... Invalid column name 'ItemsDuplicate'
+      #
+      # and this job had been red on every run since at least v1.6.0. It is
+      # invisible on an UPGRADE, where the column is already there when sql/24
+      # is re-run, which is exactly why a job that only ever builds a database
+      # from scratch is the thing that catches it - once it runs the real order.
+      #
+      # The five migrations after sql/28 were never run here at all, so nothing
+      # proved a fresh deployment could apply them. sql/29 in particular adds
+      # run status 5, which the reporting procedures have to handle.
+      #
+      # Four documented steps are deliberately absent, each for a reason
+      # LocalDB cannot argue with:
+      #   sql/25  applied for real - every principal in it is a domain account.
+      #           Parsed in its own step below, which is the failure mode it has
+      #           that nothing else would find.
+      #   sql/42  exercises the roles sql/25 creates, and sql/25 is only parsed.
+      #   sql/27  writes to msdb and needs SQL Agent, which LocalDB has not.
+      #   sql/44  edits SQL Agent job steps, same reason.
+      - name: Build ConnectorState (documented order)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $server = '(localdb)\MSSQLLocalDB'
+
           sqlcmd -S $server -i staged/20-crawl-state-database.sql -b
+          if ($LASTEXITCODE -ne 0) { throw "sql/20 failed with exit $LASTEXITCODE. Nothing after it can work: every later script opens the database this one creates." }
+
+          # Asserted rather than assumed. sqlcmd printed a syntax error here for
+          # weeks and the loop below carried on regardless, so the visible
+          # failure was eleven "Cannot open database" lines that read like a
+          # permissions problem and pointed nowhere near the real fault.
+          $exists = sqlcmd -S $server -h -1 -W -b -Q "SET NOCOUNT ON; SELECT CASE WHEN DB_ID('ConnectorState') IS NULL THEN 'no' ELSE 'yes' END;" |
+                      Where-Object { $_ -match '^(yes|no)$' } | Select-Object -First 1
+          if ($exists -ne 'yes') { throw 'sql/20 reported success but ConnectorState does not exist. Look at the staging step above, not at permissions.' }
+
           foreach ($f in @(
               'sql/21-crawl-state-tables.sql',
               'sql/22-crawl-state-views.sql',
               'sql/23-crawl-state-procedures.sql',
+              'sql/40-crawl-state-per-type-duplicates.sql',
               'sql/24-crawl-state-reporting.sql',
-              'sql/28-crawl-state-hash-version.sql')) {
+              'sql/28-crawl-state-hash-version.sql',
+              'sql/29-crawl-state-partial-status.sql',
+              'sql/33-crawl-state-negative-ttl.sql',
+              'sql/34-crawl-state-live-item-ids.sql',
+              'sql/41-crawl-state-compare-and-see.sql',
+              'sql/43-crawl-state-run-lock.sql')) {
             Write-Host "== $f =="
             sqlcmd -S $server -d ConnectorState -i $f -b
+
+            # Stop at the first failure. The set is ordered and every script
+            # assumes the one before it, so carrying on turns one real error
+            # into a screenful of consequences and buries the cause.
+            if ($LASTEXITCODE -ne 0) { throw "$f failed with exit $LASTEXITCODE." }
           }
+
+      # Step 14 of the documented order, and the one that would have caught the
+      # filtered-index defect in sql/21 that a command-line deployment hit and
+      # an SSMS one did not. It creates nothing; it checks what everything above
+      # created, so it belongs after the whole set rather than inside it.
+      - name: Verify the stored SET options (sql/30)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          sqlcmd -S '(localdb)\MSSQLLocalDB' -d ConnectorState -i sql/30-verify-set-options.sql -b
 
       # sql/27 is not run here. It writes to msdb and needs SQL Agent, which
       # LocalDB does not have, so executing it would prove nothing and fail for
@@ -706,13 +795,39 @@ jobs:
 
           # A CREATE OR ALTER batch that failed to parse leaves a procedure
           # absent and is otherwise silent until the first EXEC.
+          # THESE NUMBERS ARE FOR THE FULL DOCUMENTED SET, not the five scripts
+          # this job used to run. sql/33 adds crawl.vwPrincipalCacheTtl, which is
+          # why views is 7 and not the 6 sql/22 creates - the old 6 was correct
+          # for a build that stopped at sql/28 and became wrong the moment the
+          # job started running the order an operator actually follows.
+          #
+          # Exact for tables and views, a floor for procedures: a later migration
+          # adding a procedure is routine, while one adding a table or a view is
+          # a schema change that should have to come past this line.
           $tables = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.tables WHERE SCHEMA_NAME(schema_id) = 'crawl';"
           $views  = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.views WHERE SCHEMA_NAME(schema_id) = 'crawl';"
           $procs  = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.procedures WHERE SCHEMA_NAME(schema_id) = 'crawl';"
           Write-Host "crawl schema: $tables tables, $views views, $procs procedures"
           if ($tables -ne 8) { $failures += "expected 8 crawl tables, found $tables" }
-          if ($views -ne 6) { $failures += "expected 6 crawl views, found $views" }
-          if ($procs -lt 26) { $failures += "expected at least 26 crawl procedures, found $procs" }
+          if ($views -ne 7) { $failures += "expected 7 crawl views, found $views" }
+          if ($procs -lt 30) { $failures += "expected at least 30 crawl procedures, found $procs" }
+
+          # The table types, which nothing checked before and sql/40 is the
+          # reason to start. It cannot ALTER crawl.ItemTypeCountList - a table
+          # type can only be dropped - so it drops the procedure that references
+          # it, drops and recreates the type, and puts both back. A half-applied
+          # sql/40 leaves the type missing and every write path that passes one
+          # fails at run time rather than here.
+          $types = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.table_types WHERE SCHEMA_NAME(schema_id) = 'crawl';"
+          Write-Host "crawl table types: $types (expected 6)"
+          if ($types -ne 6) { $failures += "expected 6 crawl table types, found $types" }
+
+          # sql/29's migration, and the reason this job now runs it: the CHECK
+          # constraint has to admit 5 (partial) or a connector that finishes with
+          # refused items cannot record what it did.
+          $five = Get-Scalar 'ConnectorState' "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_Run_Status' AND definition LIKE '%5%';"
+          Write-Host "CK_Run_Status admits status 5: $five (expected 1)"
+          if ($five -ne 1) { $failures += 'sql/29 did not widen CK_Run_Status to admit status 5 (partial)' }
 
           # sql/28's migration. The column has to exist and carry a default, or
           # a connector on a database that skipped it would compare against a
@@ -746,14 +861,29 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $server = '(localdb)\MSSQLLocalDB'
           sqlcmd -S $server -i staged/20-crawl-state-database.sql -b
+          if ($LASTEXITCODE -ne 0) { throw "sql/20 is not re-runnable: exit $LASTEXITCODE on the second pass." }
+
+          # The SAME list the first pass ran. A second pass over a subset proves
+          # only that the subset is idempotent, and the scripts most likely to
+          # not be - the ones that ALTER a constraint or recreate a table type -
+          # are exactly the ones a short list leaves out.
           foreach ($f in @(
               'sql/21-crawl-state-tables.sql',
               'sql/22-crawl-state-views.sql',
               'sql/23-crawl-state-procedures.sql',
-              'sql/24-crawl-state-reporting.sql')) {
+              'sql/40-crawl-state-per-type-duplicates.sql',
+              'sql/24-crawl-state-reporting.sql',
+              'sql/28-crawl-state-hash-version.sql',
+              'sql/29-crawl-state-partial-status.sql',
+              'sql/33-crawl-state-negative-ttl.sql',
+              'sql/34-crawl-state-live-item-ids.sql',
+              'sql/41-crawl-state-compare-and-see.sql',
+              'sql/43-crawl-state-run-lock.sql')) {
             sqlcmd -S $server -d ConnectorState -i $f -b
+            if ($LASTEXITCODE -ne 0) { throw "$f is not re-runnable: exit $LASTEXITCODE on the second pass." }
           }
           foreach ($f in @('sql/12-timesheet-views.sql', 'sql/26-timesheet-incremental.sql')) {
             sqlcmd -S $server -d Ops -i $f -b
+            if ($LASTEXITCODE -ne 0) { throw "$f is not re-runnable: exit $LASTEXITCODE on the second pass." }
           }
           Write-Host 'Second pass completed without error.'

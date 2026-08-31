@@ -110,8 +110,16 @@ BEGIN
          WHERE StartedUtc >= @Since AND IsDryRun = 0)                                AS ItemsDeletedInWindow,
         (SELECT ISNULL(SUM(ThrottleWaits), 0)  FROM [crawl].[Run]
          WHERE StartedUtc >= @Since AND IsDryRun = 0)                                AS ThrottleWaitsInWindow,
+        -- 5 (partial) counts as failed here, and that is a judgement worth
+        -- stating. A partial run FINISHED, so it is tempting to leave it out of
+        -- a failure count - but it finished with items refused and absent from
+        -- the index, the connector exits 4 for it, and PushHost's own comment
+        -- block argues at length that a run which lost items is not a clean run.
+        -- Counting it as neither succeeded nor failed, which is what this did
+        -- before, is the one answer that is definitely wrong: the tile then
+        -- reports fewer failures than there were.
         (SELECT COUNT(*) FROM [crawl].[Run]
-         WHERE StartedUtc >= @Since AND IsDryRun = 0 AND Status IN (3, 4))           AS FailedRunsInWindow,
+         WHERE StartedUtc >= @Since AND IsDryRun = 0 AND Status IN (3, 4, 5))        AS FailedRunsInWindow,
         (SELECT COUNT(*) FROM [crawl].[Run]
          WHERE StartedUtc >= @Since AND IsDryRun = 0)                                AS RunsInWindow,
 
@@ -176,7 +184,7 @@ GO
 
 CREATE OR ALTER PROCEDURE [crawl].[uspListRuns]
     @ConnectionId    NVARCHAR(64) = NULL,
-    @Status          TINYINT      = NULL,     -- 1 running, 2 succeeded, 3 failed, 4 abandoned
+    @Status          TINYINT      = NULL,     -- 1 running, 2 succeeded, 3 failed, 4 abandoned, 5 partial
     @Mode            TINYINT      = NULL,     -- 1 full, 2 incremental
     @FromUtc         DATETIME2(3) = NULL,
     @ToUtc           DATETIME2(3) = NULL,
@@ -199,8 +207,14 @@ BEGIN
         c.DisplayName,
         c.ConnectorKey,
         CASE r.Mode   WHEN 1 THEN N'full'    WHEN 2 THEN N'incremental' END AS Mode,
+        -- WHEN 5 is not optional decoration. sql/29 widened CK_Run_Status to
+        -- admit 5 (partial) and updated nothing that reads it, so a partial run
+        -- came back through here with a NULL status: the Runs page rendered an
+        -- empty pill, and an operator reading it had no word for what happened.
+        -- The views in sql/22 always mapped it; this procedure did not.
         CASE r.Status WHEN 1 THEN N'running' WHEN 2 THEN N'succeeded'
-                      WHEN 3 THEN N'failed'  WHEN 4 THEN N'abandoned'  END  AS Status,
+                      WHEN 3 THEN N'failed'  WHEN 4 THEN N'abandoned'
+                      WHEN 5 THEN N'partial' END  AS Status,
         r.IsDryRun,
         r.StartedUtc,
         r.CompletedUtc,

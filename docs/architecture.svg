@@ -1,185 +1,111 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" role="img" aria-labelledby="diagramTitle diagramDesc">
-  <title id="diagramTitle">Three sources, two paths, one index</title>
-  <desc id="diagramDesc">SQL Server and a Cloudera CDP cluster feed Microsoft 365 Copilot by two routes. The agent-hosted route runs a gRPC connector behind the Microsoft Graph connector agent and never calls Microsoft Graph itself. The direct push route runs console tools that call the Graph external items API themselves. Everything read from CDP passes a Ranger gate first, which decides whether a table or path may be indexed at all or must be left to a live query. Both routes write into one external index that Copilot and Microsoft Search read.</desc>
-
-  <rect x="0" y="0" width="1600" height="1000" fill="#ffffff"/>
-
-  <text x="40" y="46" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="600" fill="#1f2328">Three sources, two paths, one index</text>
-  <text x="40" y="74" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#57606a">The agent-hosted connector never calls Microsoft Graph. The direct push tools do, and hold the tenant relationship themselves.</text>
-
-  <!-- ON PREMISES -->
-  <rect x="40" y="100" width="1000" height="850" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5" stroke-dasharray="6 5"/>
-  <text x="64" y="128" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.4" fill="#57606a">ON-PREMISES — YOUR NETWORK</text>
-
-  <text x="72" y="164" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.2" fill="#8c959f">SOURCES</text>
-  <text x="404" y="164" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.2" fill="#8c959f">WHAT MAY BE INDEXED</text>
-  <text x="660" y="164" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.2" fill="#8c959f">WHAT READS IT</text>
-
-  <!-- SQL Server -->
-  <rect x="72" y="182" width="290" height="128" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
-  <rect x="72" y="182" width="6" height="128" rx="3" fill="#6e7781"/>
-  <text x="96" y="210" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">SQL Server</text>
-  <text x="96" y="236" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">dbo.Tickets</text>
-  <text x="96" y="256" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">dbo.vwExternalItems</text>
-  <text x="96" y="280" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">SELECT only, least-privilege grant.</text>
-  <text x="96" y="298" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Views, so the filter cannot be edited out.</text>
-
-  <!-- CDP cluster -->
-  <rect x="72" y="336" width="290" height="288" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
-  <rect x="72" y="336" width="6" height="288" rx="3" fill="#bc4c00"/>
-  <text x="96" y="364" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Cloudera CDP 7.1.9</text>
-  <text x="96" y="384" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Kerberised. Reached as the service account,</text>
-  <text x="96" y="402" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">with no credential held by the connector.</text>
-
-  <rect x="96" y="418" width="242" height="58" rx="6" fill="#fff8f2" stroke="#e5b489" stroke-width="1.2"/>
-  <text x="112" y="440" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">HDFS / HttpFS</text>
-  <text x="112" y="460" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Documents. Per-file POSIX ACLs.</text>
-
-  <rect x="96" y="486" width="242" height="58" rx="6" fill="#fff8f2" stroke="#e5b489" stroke-width="1.2"/>
-  <text x="112" y="508" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Hive / Impala</text>
-  <text x="112" y="528" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Tables, over ODBC with SSPI.</text>
-
-  <rect x="96" y="554" width="242" height="58" rx="6" fill="#fff8f2" stroke="#e5b489" stroke-width="1.2"/>
-  <text x="112" y="576" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Apache Atlas</text>
-  <text x="112" y="596" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">The catalogue: owners, lineage, tags.</text>
-
-  <!-- Ranger gate -->
-  <rect x="404" y="336" width="212" height="288" rx="8" fill="#fff5f5" stroke="#cf222e" stroke-width="1.6"/>
-  <rect x="404" y="336" width="6" height="288" rx="3" fill="#cf222e"/>
-  <text x="428" y="364" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Apache Ranger</text>
-  <text x="428" y="386" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Read before anything else.</text>
-  <text x="428" y="404" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Unreachable stops the run.</text>
-
-  <text x="428" y="436" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#cf222e">Never indexed</text>
-  <text x="428" y="456" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• a row filter or column mask</text>
-  <text x="428" y="474" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• a deny, ever mirrored</text>
-  <text x="428" y="492" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• a column-scoped grant</text>
-  <text x="428" y="512" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Routed to a live query instead.</text>
-
-  <text x="428" y="546" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#1a7f37">Indexed</text>
-  <text x="428" y="566" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Table-wide grants, with the</text>
-  <text x="428" y="584" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">granted groups becoming the</text>
-  <text x="428" y="602" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">item's ACL. No group, no item.</text>
-
-  <!-- Agent-hosted path -->
-  <rect x="660" y="182" width="352" height="180" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
-  <rect x="660" y="182" width="6" height="180" rx="3" fill="#6e7781"/>
-  <text x="684" y="210" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">SqlTicketsConnector</text>
-  <text x="684" y="230" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Windows service, gRPC on loopback.</text>
-  <text x="684" y="254" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#bc4c00">Never calls Microsoft Graph.</text>
-  <text x="684" y="276" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• streams rows, checkpoints a watermark</text>
-  <text x="684" y="294" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• stamps the ACL, truncates at 4 MB</text>
-  <text x="684" y="312" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• redacts row values before any log</text>
-  <text x="684" y="330" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">• emits DeletedItem for soft deletes</text>
-  <text x="684" y="352" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" font-style="italic" fill="#8c959f">The agent detects deletes and skips unchanged items.</text>
-
-  <!-- Direct push path -->
-  <rect x="660" y="392" width="352" height="232" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
-  <rect x="660" y="392" width="6" height="232" rx="3" fill="#0969da"/>
-  <text x="684" y="420" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Direct push tools</text>
-  <text x="684" y="440" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Console apps. One line of Main each.</text>
-
-  <rect x="684" y="454" width="304" height="44" rx="6" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.2"/>
-  <text x="700" y="472" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">SqlGraphPush</text>
-  <text x="700" y="490" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">one flat table</text>
-
-  <rect x="684" y="506" width="304" height="44" rx="6" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.2"/>
-  <text x="700" y="524" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">SqlHierarchyPush</text>
-  <text x="700" y="542" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">customer, engagement, time entry</text>
-
-  <rect x="684" y="558" width="304" height="52" rx="6" fill="#f2f8ff" stroke="#b6d3f5" stroke-width="1.4"/>
-  <text x="700" y="576" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0550ae">CdpGraphPush</text>
-  <text x="700" y="594" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">HDFS documents · Hive tables · Atlas catalogue</text>
-
-  <!-- Shared core -->
-  <rect x="72" y="664" width="940" height="118" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1.5"/>
-  <rect x="72" y="664" width="6" height="118" rx="3" fill="#0969da"/>
-  <text x="96" y="692" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">PushCore — the shared engine, which names no source technology</text>
-  <text x="96" y="716" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Connection and schema registration · truncation · ACLs · the PUT with backoff · exit codes 0/2/3/4 · redaction</text>
-  <text x="96" y="738" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">A connector supplies a schema and an IPushSource. Only the engine may say an item counted, and only after the write</text>
-  <text x="96" y="756" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">returned — which is what makes it impossible for a failed crawl to advance a watermark.</text>
-  <text x="96" y="776" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="11.5" fill="#8c959f">PushCore.Sql adds the SQL half · CdpConnector.Source adds the Cloudera half · Connector.Security is shared by all</text>
-
-  <!-- Not indexed / live query -->
-  <rect x="72" y="806" width="940" height="112" rx="8" fill="#fffbf0" stroke="#d4a72c" stroke-width="1.5"/>
-  <rect x="72" y="806" width="6" height="112" rx="3" fill="#d4a72c"/>
-  <text x="96" y="834" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">What deliberately does not go into the index</text>
-  <text x="96" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">A row-filtered or masked table is a per-user view of the data, and an index holds one copy — so it is queried live instead.</text>
-  <text x="96" y="878" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">A file whose groups resolve to no Entra group is skipped, never written with a fallback grant. Fact tables, event streams</text>
-  <text x="96" y="898" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">and raw landing zones are analytics assets, not knowledge assets. The catalogue is indexed even when its tables are not.</text>
-
-  <!-- CLOUD -->
-  <rect x="1080" y="100" width="480" height="850" rx="12" fill="#f2f8ff" stroke="#b6d3f5" stroke-width="1.5" stroke-dasharray="6 5"/>
-  <text x="1104" y="128" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.4" fill="#0a5ca8">MICROSOFT 365 CLOUD</text>
-
-  <rect x="1112" y="182" width="416" height="112" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
-  <rect x="1112" y="182" width="6" height="112" rx="3" fill="#6e7781"/>
-  <text x="1136" y="210" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Graph connector agent</text>
-  <text x="1136" y="232" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Holds the tenant relationship for the</text>
-  <text x="1136" y="250" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">agent-hosted route, and does its ingestion.</text>
-  <text x="1136" y="274" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">Hashes items, detects deletions.</text>
-
-  <rect x="1112" y="392" width="416" height="112" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1.5"/>
-  <rect x="1112" y="392" width="6" height="112" rx="3" fill="#0969da"/>
-  <text x="1136" y="420" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Copilot connectors API</text>
-  <text x="1136" y="444" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12" fill="#0550ae">PUT /external/connections/{id}</text>
-  <text x="1136" y="462" font-family="Consolas, SFMono-Regular, Menlo, monospace" font-size="12" fill="#0550ae">     /items/{itemId}</text>
-  <text x="1136" y="486" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#57606a">One connection per connector. Append-only schema.</text>
-
-  <rect x="1112" y="560" width="416" height="106" rx="8" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
-  <rect x="1112" y="560" width="6" height="106" rx="3" fill="#6e7781"/>
-  <text x="1136" y="588" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">The external index</text>
-  <text x="1136" y="612" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">Security-trimmed per item, by Entra group.</text>
-  <text x="1136" y="632" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">An item granted to nobody is returned to</text>
-  <text x="1136" y="650" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">nobody — which is why none is ever written.</text>
-
-  <rect x="1112" y="716" width="416" height="90" rx="8" fill="#ffffff" stroke="#8250df" stroke-width="1.6"/>
-  <rect x="1112" y="716" width="6" height="90" rx="3" fill="#8250df"/>
-  <text x="1136" y="744" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328">Microsoft 365 Copilot</text>
-  <text x="1136" y="768" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">and Microsoft Search, grounded on what</text>
-  <text x="1136" y="786" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#57606a">the asker is entitled to see, and nothing else.</text>
-
-  <!-- EDGES -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1900 1180" width="1900" height="1180" font-family="Segoe UI, Calibri, sans-serif">
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#57606a"/>
-    </marker>
-    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0969da"/>
-    </marker>
-    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#cf222e"/>
-    </marker>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#5b6a76"/></marker>
+    <marker id="at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#1f7ac0"/></marker>
   </defs>
-
-  <!-- SQL Server to the agent-hosted connector -->
-  <path d="M362,224 L660,224" fill="none" stroke="#57606a" stroke-width="1.6" marker-end="url(#arrow)"/>
-  <text x="420" y="216" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#57606a">rows after the watermark</text>
-
-  <!-- SQL Server to the direct push tools -->
-  <path d="M362,272 L628,272 L628,478 L684,478" fill="none" stroke="#0969da" stroke-width="1.6" marker-end="url(#arrowBlue)"/>
-
-  <!-- CDP to Ranger -->
-  <path d="M362,480 L404,480" fill="none" stroke="#cf222e" stroke-width="1.8" marker-end="url(#arrowRed)"/>
-
-  <!-- Ranger to the CDP tool -->
-  <path d="M616,480 L648,480 L648,584 L684,584" fill="none" stroke="#0969da" stroke-width="1.6" marker-end="url(#arrowBlue)"/>
-  <text x="470" y="638" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" font-style="italic" fill="#8c959f">only what the policies permit</text>
-
-  <!-- Agent-hosted to the agent -->
-  <path d="M1012,238 L1112,238" fill="none" stroke="#57606a" stroke-width="1.6" marker-end="url(#arrow)"/>
-
-  <!-- Agent to the API -->
-  <path d="M1320,294 L1320,392" fill="none" stroke="#57606a" stroke-width="1.6" marker-end="url(#arrow)"/>
-
-  <!-- Direct push to the API -->
-  <path d="M1012,508 L1112,458" fill="none" stroke="#0969da" stroke-width="1.8" marker-end="url(#arrowBlue)"/>
-  <text x="1014" y="546" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" fill="#0969da">HTTPS 443</text>
-  <text x="1014" y="562" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" fill="#0969da">outbound only</text>
-
-  <!-- API to index to Copilot -->
-  <path d="M1320,504 L1320,560" fill="none" stroke="#0969da" stroke-width="1.6" marker-end="url(#arrowBlue)"/>
-  <path d="M1320,666 L1320,716" fill="none" stroke="#8250df" stroke-width="1.6" marker-end="url(#arrow)"/>
-
-  <text x="40" y="978" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#8c959f">Adding a source is a class and a configuration file. Nothing in PushCore changes, and no existing connector is touched or even rebuilt differently.</text>
+  <rect width="1900" height="1180" fill="#ffffff"/>
+  <text x="50" y="62" font-size="34" font-weight="600" fill="#0b2f52">Microsoft 365 Copilot connector platform</text>
+  <text x="50" y="98" font-size="20" fill="#5b6a76">High level architecture as of v1.7.1. Dashed elements are optional, out of scope, or the path not taken.</text>
+  <rect x="50" y="150" width="380" height="520" rx="14" fill="#f3f7fa" stroke="#d6e0e9" stroke-width="2"/>
+  <text x="72" y="184" font-size="17" font-weight="600" letter-spacing="1.5" fill="#0b2f52">SOURCES</text>
+  <text x="72" y="208" font-size="15" fill="#5b6a76">On premises, never exposed to the cloud</text>
+  <rect x="520" y="150" width="520" height="520" rx="14" fill="#f3f7fa" stroke="#d6e0e9" stroke-width="2"/>
+  <text x="542" y="184" font-size="17" font-weight="600" letter-spacing="1.5" fill="#0b2f52">THE PUSH TOOLS</text>
+  <text x="542" y="208" font-size="15" fill="#5b6a76">Console apps. One line of Main each</text>
+  <rect x="1130" y="150" width="430" height="520" rx="14" fill="#f3f7fa" stroke="#d6e0e9" stroke-width="2"/>
+  <text x="1152" y="184" font-size="17" font-weight="600" letter-spacing="1.5" fill="#0b2f52">MICROSOFT 365 CLOUD</text>
+  <rect x="520" y="720" width="520" height="390" rx="14" fill="#f3f7fa" stroke="#d6e0e9" stroke-width="2"/>
+  <text x="542" y="754" font-size="17" font-weight="600" letter-spacing="1.5" fill="#0b2f52">OPERATIONS</text>
+  <rect x="1130" y="720" width="430" height="390" rx="14" fill="#f3f7fa" stroke="#d6e0e9" stroke-width="2"/>
+  <text x="1152" y="754" font-size="17" font-weight="600" letter-spacing="1.5" fill="#0b2f52">THE OTHER PATH</text>
+  <text x="1152" y="778" font-size="15" fill="#5b6a76">Agent hosted, no Graph dependency</text>
+  <polyline points="400,263 550,271" fill="none" stroke="#5b6a76" stroke-width="2" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="400,363 550,271" fill="none" stroke="#5b6a76" stroke-width="2" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="400,473 475,473 475,271 550,271" fill="none" stroke="#5b6a76" stroke-width="2" stroke-dasharray="7,6" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="400,593 475,593 475,271 550,271" fill="none" stroke="#5b6a76" stroke-width="2" stroke-dasharray="7,6" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="1010,271 1160,271" fill="none" stroke="#1f7ac0" stroke-width="3.5" stroke-linejoin="round" marker-end="url(#at)"/>
+  <polyline points="1345,317 1345,337" fill="none" stroke="#5b6a76" stroke-width="2" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="1345,413 1345,433" fill="none" stroke="#5b6a76" stroke-width="2" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="1010,271 1068,271 1068,488 1010,488" fill="none" stroke="#5b6a76" stroke-width="2" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="780,413 780,433" fill="none" stroke="#5b6a76" stroke-width="2" stroke-dasharray="7,6" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="1010,488 1036,488 1036,835 1010,835" fill="none" stroke="#5b6a76" stroke-width="2" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="780,880 780,900" fill="none" stroke="#5b6a76" stroke-width="2" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="780,990 780,1010" fill="none" stroke="#5b6a76" stroke-width="2" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="1010,271 1052,271 1052,1048 1010,1048" fill="none" stroke="#5b6a76" stroke-width="2" stroke-dasharray="7,6" stroke-linejoin="round" marker-end="url(#a)"/>
+  <polyline points="1345,910 1345,890" fill="none" stroke="#1f7ac0" stroke-width="3.5" stroke-linejoin="round" marker-end="url(#at)"/>
+  <rect x="80" y="225" width="320" height="76" rx="10" fill="#5c8ca8" stroke="#5c8ca8" stroke-width="2" opacity="1"/>
+  <text x="98" y="257" font-size="19" font-weight="600" fill="#ffffff">SQL Server, tickets</text>
+  <text x="98" y="281" font-size="15" fill="#dbe7f0">SELECT only, least privilege</text>
+  <rect x="80" y="325" width="320" height="76" rx="10" fill="#5c8ca8" stroke="#5c8ca8" stroke-width="2" opacity="1"/>
+  <text x="98" y="357" font-size="19" font-weight="600" fill="#ffffff">SQL Server, hierarchy</text>
+  <text x="98" y="381" font-size="15" fill="#dbe7f0">Customers, engagements, time</text>
+  <rect x="80" y="425" width="320" height="96" rx="10" fill="#5c8ca8" stroke="#5c8ca8" stroke-width="2" stroke-dasharray="8,6" opacity="0.58"/>
+  <text x="98" y="457" font-size="19" font-weight="600" fill="#ffffff">Cloudera CDP</text>
+  <text x="98" y="481" font-size="15" fill="#dbe7f0">HDFS, Hive, Atlas catalogue</text>
+  <rect x="80" y="545" width="320" height="96" rx="10" fill="#5c8ca8" stroke="#5c8ca8" stroke-width="2" stroke-dasharray="8,6" opacity="0.58"/>
+  <text x="98" y="577" font-size="19" font-weight="600" fill="#ffffff">Apache Ranger</text>
+  <text x="98" y="601" font-size="15" fill="#dbe7f0">Read before anything else.</text>
+  <text x="98" y="621" font-size="15" fill="#dbe7f0">A masked table is never indexed</text>
+  <rect x="550" y="225" width="460" height="92" rx="10" fill="#1f7ac0" stroke="#1f7ac0" stroke-width="2" opacity="1"/>
+  <text x="568" y="257" font-size="19" font-weight="600" fill="#ffffff">PushCore engine</text>
+  <text x="568" y="281" font-size="15" fill="#dbe7f0">Read, map, truncate, ACL, hash, batch, write</text>
+  <rect x="550" y="337" width="460" height="76" rx="10" fill="#1f7ac0" stroke="#1f7ac0" stroke-width="2" stroke-dasharray="8,6" opacity="0.58"/>
+  <text x="568" y="369" font-size="19" font-weight="600" fill="#ffffff">Second instance, refused</text>
+  <text x="568" y="393" font-size="15" fill="#dbe7f0">One live crawl per connection, by lease</text>
+  <rect x="550" y="433" width="460" height="110" rx="10" fill="#0b2f52" stroke="#0b2f52" stroke-width="2" opacity="1"/>
+  <text x="568" y="465" font-size="19" font-weight="600" fill="#ffffff">Crawl state database</text>
+  <text x="568" y="489" font-size="15" fill="#dbe7f0">What was seen, what changed, what to delete,</text>
+  <text x="568" y="509" font-size="15" fill="#dbe7f0">the run lock, and the principal cache</text>
+  <rect x="550" y="563" width="460" height="76" rx="10" fill="#1f7ac0" stroke="#1f7ac0" stroke-width="2" opacity="1"/>
+  <text x="568" y="595" font-size="19" font-weight="600" fill="#ffffff">Release package</text>
+  <text x="568" y="619" font-size="15" fill="#dbe7f0">Authenticode, file catalog, SBOM</text>
+  <rect x="1160" y="225" width="370" height="92" rx="10" fill="#0b2f52" stroke="#0b2f52" stroke-width="2" opacity="1"/>
+  <text x="1178" y="257" font-size="19" font-weight="600" fill="#ffffff">Copilot connectors API</text>
+  <text x="1178" y="281" font-size="15" fill="#dbe7f0">Connections, schema, items, $batch</text>
+  <rect x="1160" y="337" width="370" height="76" rx="10" fill="#0b2f52" stroke="#0b2f52" stroke-width="2" opacity="1"/>
+  <text x="1178" y="369" font-size="19" font-weight="600" fill="#ffffff">Microsoft Search</text>
+  <text x="1178" y="393" font-size="15" fill="#dbe7f0">Result types and display templates</text>
+  <rect x="1160" y="433" width="370" height="76" rx="10" fill="#0b2f52" stroke="#0b2f52" stroke-width="2" opacity="1"/>
+  <text x="1178" y="465" font-size="19" font-weight="600" fill="#ffffff">Microsoft 365 Copilot</text>
+  <text x="1178" y="489" font-size="15" fill="#dbe7f0">Grounded on connector content</text>
+  <rect x="1160" y="529" width="370" height="97" rx="10" fill="#0b2f52" stroke="#0b2f52" stroke-width="2" opacity="1"/>
+  <text x="1178" y="561" font-size="19" font-weight="600" fill="#ffffff">Microsoft Entra ID</text>
+  <text x="1178" y="585" font-size="15" fill="#dbe7f0">Groups the access control lists</text>
+  <text x="1178" y="605" font-size="15" fill="#dbe7f0">are expressed in. No user ACEs</text>
+  <rect x="550" y="790" width="460" height="90" rx="10" fill="#1f7ac0" stroke="#1f7ac0" stroke-width="2" opacity="1"/>
+  <text x="568" y="822" font-size="19" font-weight="600" fill="#ffffff">Operations dashboard</text>
+  <text x="568" y="846" font-size="15" fill="#dbe7f0">Runs, items, health. Read only, by role</text>
+  <rect x="550" y="900" width="460" height="90" rx="10" fill="#1f7ac0" stroke="#1f7ac0" stroke-width="2" opacity="1"/>
+  <text x="568" y="932" font-size="19" font-weight="600" fill="#ffffff">Health watchdog</text>
+  <text x="568" y="956" font-size="15" fill="#dbe7f0">Freshness, and the paging matrix behind it</text>
+  <rect x="550" y="1010" width="460" height="76" rx="10" fill="#1f7ac0" stroke="#1f7ac0" stroke-width="2" stroke-dasharray="8,6" opacity="0.58"/>
+  <text x="568" y="1042" font-size="19" font-weight="600" fill="#ffffff">OTLP collector</text>
+  <text x="568" y="1066" font-size="15" fill="#dbe7f0">Spans and metrics per run. Optional</text>
+  <rect x="1160" y="790" width="370" height="100" rx="10" fill="#0b2f52" stroke="#0b2f52" stroke-width="2" opacity="1"/>
+  <text x="1178" y="822" font-size="19" font-weight="600" fill="#ffffff">Graph connector agent</text>
+  <text x="1178" y="846" font-size="15" fill="#dbe7f0">Holds the tenant relationship.</text>
+  <text x="1178" y="866" font-size="15" fill="#dbe7f0">Polls the connector over gRPC</text>
+  <rect x="1160" y="910" width="370" height="100" rx="10" fill="#1f7ac0" stroke="#1f7ac0" stroke-width="2" stroke-dasharray="8,6" opacity="0.58"/>
+  <text x="1178" y="942" font-size="19" font-weight="600" fill="#ffffff">SqlTicketsConnector</text>
+  <text x="1178" y="966" font-size="15" fill="#dbe7f0">Loopback gRPC service.</text>
+  <text x="1178" y="986" font-size="15" fill="#dbe7f0">Never calls Microsoft Graph</text>
+  <rect x="444.8" y="255" width="60.4" height="23" rx="5" fill="#ffffff" opacity="0.95"/>
+  <text x="475" y="271" font-size="14" fill="#5b6a76" text-anchor="middle">SELECT</text>
+  <rect x="452.2" y="327.7" width="45.6" height="23" rx="5" fill="#ffffff" opacity="0.95"/>
+  <text x="475" y="343.7" font-size="14" fill="#5b6a76" text-anchor="middle">read</text>
+  <rect x="971.6" y="259" width="178.8" height="23" rx="5" fill="#ffffff" opacity="0.95"/>
+  <text x="1061" y="275" font-size="14" fill="#5b6a76" text-anchor="middle">$batch, 20 per request</text>
+  <rect x="963.8" y="332.8" width="208.4" height="23" rx="5" fill="#ffffff" opacity="0.95"/>
+  <text x="1068" y="348.8" font-size="14" fill="#5b6a76" text-anchor="middle">change detection, run lock</text>
+  <rect x="694.3" y="414.2" width="171.4" height="23" rx="5" fill="#ffffff" opacity="0.95"/>
+  <text x="780" y="430.2" font-size="14" fill="#5b6a76" text-anchor="middle">lease refused, exit 5</text>
+  <rect x="961.4" y="649.5" width="149.2" height="23" rx="5" fill="#ffffff" opacity="0.95"/>
+  <text x="1036" y="665.5" font-size="14" fill="#5b6a76" text-anchor="middle">read only, by role</text>
+  <rect x="716.5" y="874.8" width="127" height="23" rx="5" fill="#ffffff" opacity="0.95"/>
+  <text x="780" y="890.8" font-size="14" fill="#5b6a76" text-anchor="middle">health endpoint</text>
+  <rect x="749.8" y="991.2" width="60.4" height="23" rx="5" fill="#ffffff" opacity="0.95"/>
+  <text x="780" y="1007.2" font-size="14" fill="#5b6a76" text-anchor="middle">alerts</text>
+  <rect x="1277.8" y="891.2" width="134.4" height="23" rx="5" fill="#ffffff" opacity="0.95"/>
+  <text x="1345" y="907.2" font-size="14" fill="#5b6a76" text-anchor="middle">gRPC on loopback</text>
+  <text x="50" y="1154" font-size="15" fill="#5b6a76">Every item written to Microsoft Graph carries an access control list derived from its source, so Copilot returns to each user only what the source system would.</text>
 </svg>

@@ -265,6 +265,23 @@ not a safety tool. This one refuses:
 
 There is no `-Force`. If a guard fires, the answer is to pick a different name.
 
+### Running any `sql/` script against the drill database
+
+You cannot point them at it directly, and the failure is silent. Every script in
+`sql/` carries a hard-coded `USE [ConnectorState];`, and `sqlcmd -d` only sets
+the *initial* database — the `USE` then moves the session back to the live one.
+So a script run "against `ConnectorState_DrillRestore`" builds its objects in
+`ConnectorState`, reports success, and leaves the drill database untouched.
+
+The guards above protect the *restore*. They do not protect a script run
+afterwards, which is the more likely mistake: the drill is over, the database is
+sitting there, and re-applying a migration to it looks harmless.
+
+Use `deploy/Invoke-StateScripts.ps1`, which substitutes the name, asserts that
+none of the original survives before executing anything, and refuses to target
+`ConnectorState` at all. See
+[CRAWL-STATE-DEPLOYMENT.md](CRAWL-STATE-DEPLOYMENT.md#running-these-against-a-database-that-is-not-called-connectorstate).
+
 ### The rehearsal record
 
 Rehearse **at least once at deployment, and again after any change to the

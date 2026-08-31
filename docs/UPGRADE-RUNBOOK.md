@@ -156,6 +156,41 @@ The schema is designed so that reversing it is unnecessary — mostly, and secti
 code change is almost always the wrong instrument: it throws away evidence to
 solve a problem in logic, and it re-arms the delete guard for no reason.
 
+### Rolling back across a hash version costs a full rewrite, in both directions
+
+`crawl.Connection.HashVersion` records the framing the stored hashes were
+computed with. The escalation is **symmetric**: going back from 2 to 1 is treated
+exactly like going forward from 1 to 2, and it should be — a rolled-back binary
+really does hash differently from the one that wrote those rows.
+
+Observed on the Live Test 2 rig. A build at version 2 against a connection
+recorded at 1:
+
+```
+[WRN] The hash framing changed from version 1 to 2. ... escalated to full and
+      will rewrite the corpus. This is a migration, not a fault ...
+```
+
+and then the shipping build at version 1 against the same connection, now
+recorded at 2:
+
+```
+[WRN] The hash framing changed from version 2 to 1. ...
+```
+
+Both escalate, both announce it exactly once, and the next run is silent. So a
+rollback that crosses a `HashVersion` boundary costs **one full write cycle on
+every connection**, the same as the upgrade did. Budget for it in the rollback
+window rather than discovering it there — on the 111,800-item corpus that is
+about 75 minutes per connection.
+
+**A caveat that matters if you ever test this.** Bumping the constant alone
+proves the *signalling* and nothing else. `HashVersion` is never an input to
+`ItemHasher.HashContent`; it is a declaration that a developer changed the
+framing. Move only the number and the run escalates, announces a rewrite, and
+then finds every hash still matching — `unchanged`, zero writes. The warning is
+exact for a real framing change and overstates a synthetic one.
+
 ---
 
 ## 4. The additive-only property, and where it currently fails
