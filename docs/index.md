@@ -22,6 +22,7 @@ documentation that ships with it.
 | [**The five sources, routed**](ROUTING-DECISIONS.md) | The routing rule applied: two SQL sources and three CDP sources, one verdict each, the two premises that close half the gates — and the two scenarios that split rather than landing on one leaf |
 | [**Assumptions**](ASSUMPTIONS.md) | Every decision taken on the reader's behalf, and what would change if it were wrong |
 | [**Go-live readiness**](GO-LIVE-READINESS.md) | Every feature in the direct-push path at v1.5.0 — what is built, what is part-built, what is not — and the six verification tasks between the current release and a supported service |
+| [**What is next**](What-is-Next.md) | The four things known to be open — two work, two decisions — with what would close each and which of them is waiting on a person rather than on effort |
 
 ## Deploying
 
