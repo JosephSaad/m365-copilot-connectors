@@ -1,0 +1,839 @@
+<html><head><meta charset="utf-8"><title>Deployment and Test Guide</title></head><body>
+
+<h1>Deploying and testing the Microsoft 365 Copilot connectors</h1>
+<p class="sub">A complete guide for someone who has never done this before. It assumes no prior knowledge of Microsoft 365, Microsoft Graph, SQL Server, PowerShell or this repository, and explains every term the first time it is used.</p>
+<p class="meta">Applies to release <b>v1.8.0</b>. Allow one full day for a first deployment, and a second day for the tests.</p>
+
+<h2>Part 0. What you are building, and why</h2>
+
+<h3>0.1 The problem this solves</h3>
+
+<p>Microsoft 365 Copilot answers questions using the documents and data it can see. Out of the box it sees
+things stored <i>inside</i> Microsoft 365 &mdash; email, Teams messages, files in SharePoint and OneDrive. It
+does <b>not</b> see anything in your own systems: your ticketing database, your HR system, your data
+warehouse.</p>
+
+<p>A <b>connector</b> is the bridge. It copies information out of one of your systems and puts it into the
+Microsoft 365 search index, so Copilot can find it and answer questions about it. The information stays in
+your system too &mdash; the connector copies, it does not move.</p>
+
+<p>This repository builds connectors that read from <b>SQL Server databases</b> and, optionally, from a
+<b>Cloudera</b> big-data cluster.</p>
+
+<h3>0.2 The two ways to build a connector, and which one this is</h3>
+
+<p>Microsoft offers two approaches, and it matters that you know which you are working with.</p>
+
+<table>
+<tr><th style="width:22%">Approach</th><th style="width:39%">How it works</th><th>Who does the work</th></tr>
+<tr><td><b>Agent-hosted</b></td><td>You install Microsoft's "Graph connector agent" on a server. It calls your code on a schedule and handles everything else.</td><td>Microsoft's agent handles scheduling, retries, change detection and deletions. You supply the data.</td></tr>
+<tr><td><b>Direct push</b><br>(this repository)</td><td>Your own program reads the source and sends the data straight to Microsoft over the internet. There is no agent.</td><td><b>You</b> handle scheduling, retries, change detection and deletions. That is what most of this repository is.</td></tr>
+</table>
+
+<p>Direct push gives you control and immediacy; the price is that everything the agent would have done for
+you has to exist in your own code. This repository contains that code. The guide below is about deploying
+and proving it.</p>
+
+<h3>0.3 The vocabulary, up front</h3>
+
+<p>You will meet these constantly. Read them once now; they are repeated in context later.</p>
+
+<table>
+<tr><th style="width:24%">Term</th><th>What it means</th></tr>
+<tr><td><b>Tenant</b></td><td>Your organisation's Microsoft 365 account. Everything below happens inside one tenant.</td></tr>
+<tr><td><b>Microsoft Graph</b></td><td>The single web API through which programs talk to Microsoft 365. Everything this connector sends to Microsoft goes through it.</td></tr>
+<tr><td><b>External connection</b></td><td>A named container in the search index that holds your data. You create one per source. It has an ID you choose, for example <span class="mono">sqltickets</span>.</td></tr>
+<tr><td><b>External item</b></td><td>One record inside a connection &mdash; one ticket, one customer, one time entry. It has an ID, some properties, some text content, and a list of who may see it.</td></tr>
+<tr><td><b>Schema</b></td><td>The list of properties an external connection's items may have, and how each behaves in search. <b>Registered once and never changeable.</b> Getting it wrong means deleting the connection and everything in it.</td></tr>
+<tr><td><b>ACL</b> (access control list)</td><td>The list of who may see an item. Every item carries one. Copilot uses it to decide whether to show that item to the person asking. <b>This is the security boundary.</b></td></tr>
+<tr><td><b>Entra ID</b></td><td>Microsoft's identity system, formerly Azure AD. It holds your users and groups. ACLs are expressed as Entra group IDs.</td></tr>
+<tr><td><b>App registration</b></td><td>An identity for a <i>program</i> rather than a person. The connector signs in as one. It has a client ID and a secret, like a username and password.</td></tr>
+<tr><td><b>Crawl</b> (or run)</td><td>One execution of the connector: read the source, decide what changed, send it to Microsoft. Runs are numbered and recorded.</td></tr>
+<tr><td><b>Full crawl</b></td><td>A crawl that reads <b>everything</b> in the source.</td></tr>
+<tr><td><b>Incremental crawl</b></td><td>A crawl that reads only what changed since last time. Faster, but it cannot detect deletions.</td></tr>
+<tr><td><b>Crawl state database</b></td><td>A SQL database <i>this repository</i> creates, to remember what it sent last time. Without it, every crawl re-sends everything and nothing is ever deleted.</td></tr>
+<tr><td><b>Delete sweep</b></td><td>After a full crawl, the connector compares what the source returned against what it sent before. Anything missing is removed from the index.</td></tr>
+<tr><td><b>Throttling</b></td><td>Microsoft telling your program to slow down. Normal at volume. The connector must wait and retry rather than give up.</td></tr>
+<tr><td><b>Exit code</b></td><td>The number a program returns when it finishes. 0 means success. This connector uses 2, 3, 4 and 5 for specific failures &mdash; see section 0.5.</td></tr>
+</table>
+
+<h3>0.4 The moving parts</h3>
+
+<p>By the end of this guide you will have five things running. Here is what each is for.</p>
+
+<table>
+<tr><th style="width:26%">Part</th><th>What it is and why it exists</th></tr>
+<tr><td><b>The source database</b></td><td>Your data. A SQL Server database the connector reads from, using a read-only login. The connector never writes to it.</td></tr>
+<tr><td><b>The crawl state database</b></td><td>A second SQL database, created by this repository. It remembers what was sent, when, and with what content &mdash; so the next crawl can send only what changed, and can tell what has been deleted. It also holds a lock that stops two crawls running at once.</td></tr>
+<tr><td><b>The push tools</b></td><td>Small command-line programs. You run one per source. Each reads its source, works out what to send, and sends it.</td></tr>
+<tr><td><b>The external connections</b></td><td>Created inside Microsoft 365 by the tools on their first run. This is where the data lands.</td></tr>
+<tr><td><b>The dashboard</b></td><td>A small internal website showing crawl history and health. Read-only. Optional, but it is how you find out a crawl failed without reading log files.</td></tr>
+</table>
+
+<p><b>The flow, in one sentence:</b> a push tool reads rows from the source database, asks the crawl state
+database which of them have changed since last time, sends the changed ones to Microsoft Graph in batches,
+records what it sent back into the crawl state database, and removes from the index anything the source
+stopped returning.</p>
+
+<h3>0.5 The exit codes, and what each one means for you</h3>
+
+<p>When a push tool finishes it returns a number. In PowerShell you read it with
+<span class="mono">$LASTEXITCODE</span>. Learn these &mdash; your monitoring will be built on them.</p>
+
+<table>
+<tr><th style="width:8%">Code</th><th style="width:26%">Meaning</th><th>What to do</th></tr>
+<tr><td><b>0</b></td><td>Success</td><td>Nothing.</td></tr>
+<tr><td><b>2</b></td><td>Configuration is invalid</td><td>The tool refused to start. It prints every problem it found, not just the first. Fix the settings file. <b>Nothing was sent.</b></td></tr>
+<tr><td><b>3</b></td><td>Credentials rejected</td><td>The identity is wrong, expired, or lacks permission. Check the app registration and the stored secret. This is a security-team question, not a data question.</td></tr>
+<tr><td><b>4</b></td><td>Ingestion failed</td><td>Something went wrong partway. Some data may be in the index and some not. Read the log, fix the cause, run again &mdash; re-running is always safe.</td></tr>
+<tr><td><b>5</b></td><td><b>Skipped &mdash; already running</b></td><td><b>Not a failure.</b> Another crawl of the same connection is already in progress and this one stood down deliberately. If your monitoring pages someone for this, it will page them for correct behaviour. Treat 5 as success.</td></tr>
+</table>
+
+<h2>Part 1. Before you touch anything</h2>
+
+<p>Work through this part completely before starting Part 2. Every item here has caused a failed deployment
+when skipped.</p>
+
+<h3>1.1 What you need from other people</h3>
+
+<p>Three of these come from other teams and can take days. Request them first.</p>
+
+<table>
+<tr><th style="width:24%">What</th><th style="width:24%">Who gives it to you</th><th>Why you cannot proceed without it</th></tr>
+<tr><td><b>An app registration with admin consent</b></td><td>Whoever administers Microsoft 365</td><td>The connector signs in as this. Without <i>admin consent</i> specifically, sign-in appears to work and the first real call fails with exit 3.</td></tr>
+<tr><td><b>An Entra group object ID</b></td><td>Identity team</td><td>Every item needs an ACL. The tool refuses to start without one rather than showing your data to everyone.</td></tr>
+<tr><td><b>A read-only SQL login on the source</b></td><td>Database administrator</td><td>The connector reads the source. It must not be able to write to it.</td></tr>
+<tr><td><b>Permission to create a database</b></td><td>Database administrator</td><td>The crawl state database is created by you, on an instance you nominate.</td></tr>
+<tr><td><b>A Windows server to run it on</b></td><td>Infrastructure team</td><td>It needs outbound HTTPS to Microsoft and a network route to the SQL Server.</td></tr>
+</table>
+
+<p><b>The two permissions the app registration needs</b>, exactly:</p>
+<ul>
+<li><span class="mono">ExternalConnection.ReadWrite.OwnedBy</span> &mdash; create and manage its own connections</li>
+<li><span class="mono">ExternalItem.ReadWrite.OwnedBy</span> &mdash; put items into them</li>
+</ul>
+<p>Both are <b>application</b> permissions, not delegated ones, and both need an administrator to click
+"Grant admin consent". "OwnedBy" means the app can only touch connections it created &mdash; it cannot see
+another connector's data.</p>
+
+<h3>1.2 What to install on the machine</h3>
+
+<p>Run each check. If a check fails, install the thing beside it before continuing.</p>
+
+<table>
+<tr><th style="width:22%">Software</th><th style="width:34%">Check it is there</th><th>If missing</th></tr>
+<tr><td><b>.NET SDK 10</b></td><td><span class="mono">dotnet --list-sdks</span></td><td>Download from Microsoft. Needed to build; a server that only runs the tool needs the smaller Runtime instead.</td></tr>
+<tr><td><b>SQL Server</b></td><td><span class="mono">Get-Service MSSQLSERVER</span></td><td>Any recent edition. <b>Developer edition is free</b> for non-production. See the warning below about LocalDB.</td></tr>
+<tr><td><b>SQL Server Agent</b></td><td><span class="mono">Get-Service SQLSERVERAGENT</span></td><td>Part of SQL Server. Needed for the scheduled cleanup job. Set it to start automatically.</td></tr>
+<tr><td><b>sqlcmd</b></td><td><span class="mono">sqlcmd -?</span></td><td>Command-line SQL client. Ships with SQL Server tools.</td></tr>
+<tr><td><b>PowerShell 7</b></td><td><span class="mono">pwsh --version</span></td><td>The scripts use it. <b>Windows PowerShell 5.1 must also remain available</b> &mdash; one installer needs it, see trap T4.</td></tr>
+<tr><td><b>Git</b></td><td><span class="mono">git --version</span></td><td>To get the source.</td></tr>
+<tr><td><b>IIS</b></td><td><span class="mono">Get-Service W3SVC</span></td><td>Only if you want the dashboard. It is a Windows feature, not a download.</td></tr>
+<tr><td><b>GitHub CLI</b></td><td><span class="mono">gh --version</span></td><td>Only if you will publish releases. <span class="mono">winget install GitHub.cli</span></td></tr>
+</table>
+
+<p><b>A warning about LocalDB.</b> SQL Server "LocalDB" is a cut-down version often installed with Visual
+Studio. It will appear to work and then fail you in one specific way: <b>it has no SQL Server Agent</b>, so
+the scheduled cleanup job cannot run and one of the tests below is impossible. Use a full SQL Server
+instance, even a Developer edition one on your own machine.</p>
+
+<h3>1.3 Values to collect</h3>
+
+<p>Fill this table in before Part 2. Print it, or keep it in a file <b>outside</b> the repository. The
+right-hand column contains real identifiers for your organisation and must never be committed to source
+control.</p>
+
+<table>
+<tr><th style="width:26%">Value</th><th style="width:38%">Where you get it, exactly</th><th>Yours</th></tr>
+<tr><td>Tenant ID</td><td>Entra admin centre &rarr; Overview &rarr; "Tenant ID". A long code with dashes.</td><td>&nbsp;</td></tr>
+<tr><td>Client ID</td><td>Entra &rarr; App registrations &rarr; your app &rarr; "Application (client) ID".</td><td>&nbsp;</td></tr>
+<tr><td>Client secret</td><td>Same page &rarr; Certificates &amp; secrets &rarr; New client secret. <b>Copy it immediately</b> &mdash; it is shown once and never again. Note its expiry date.</td><td>store it, do not write it here</td></tr>
+<tr><td>Credential target name</td><td>You invent this. A label for where the secret is stored on the machine, e.g. <span class="mono">SqlGraphPush/EntraClientSecret</span>.</td><td>&nbsp;</td></tr>
+<tr><td>Entra group object ID</td><td>Entra &rarr; Groups &rarr; your group &rarr; "Object Id".</td><td>&nbsp;</td></tr>
+<tr><td>SQL Server instance</td><td>The server name. <span class="mono">localhost</span> if it is the same machine.</td><td>&nbsp;</td></tr>
+<tr><td>Source database name</td><td>The database holding the data you want indexed.</td><td>&nbsp;</td></tr>
+<tr><td>Source view or table</td><td>What the connector reads, e.g. <span class="mono">dbo.Tickets</span>.</td><td>&nbsp;</td></tr>
+<tr><td>Crawl state database name</td><td>You choose. <span class="mono">ConnectorState</span> is the default the scripts assume.</td><td>&nbsp;</td></tr>
+<tr><td>Connection ID</td><td>You choose. <b>Letters and numbers only</b>, 32 characters or fewer, and it cannot begin with "Microsoft". It cannot be changed later.</td><td>&nbsp;</td></tr>
+<tr><td>Data and log file paths</td><td>Where SQL Server should put the new database's files. Ask your DBA.</td><td>&nbsp;</td></tr>
+</table>
+
+<h3>1.4 Storing the secret safely</h3>
+
+<p>The client secret is a password. It must <b>never</b> go into a configuration file, because configuration
+files end up in source control, in backups, and in support bundles.</p>
+
+<p>Store it in Windows Credential Manager, which encrypts it per-user on that machine:</p>
+
+<pre>cmdkey /generic:SqlGraphPush/EntraClientSecret /user:app /pass</pre>
+
+<p>It will prompt for the password &mdash; paste the secret there. The configuration file then contains only
+the <i>name</i> <span class="mono">SqlGraphPush/EntraClientSecret</span>, never the value. The connector reads
+it at startup, holds it in memory, and never writes it anywhere.</p>
+
+<p>Confirm it is stored:</p>
+<pre>cmdkey /list | findstr SqlGraphPush</pre>
+
+<p><b>If the connector runs as a service account rather than as you</b>, the credential must be stored under
+<i>that</i> account, because Credential Manager is per-user. Storing it as yourself and running as a service
+gives exit code 3 with a message about the credential not being found.</p>
+
+
+<h2>Part 2. Understanding what you are about to install</h2>
+
+<p>You could follow Part 3 mechanically. Do not. Five minutes here saves an afternoon later, because the
+commands in Part 3 fail in ways that only make sense if you know what they are doing.</p>
+
+<h3>2.1 Why there are two databases</h3>
+
+<p>The <b>source database</b> is yours and already exists. The connector only reads it.</p>
+
+<p>The <b>crawl state database</b> is created by this repository, and exists to answer three questions nothing
+else can:</p>
+
+<ul>
+<li><b>"Have I sent this item before, and has it changed?"</b> It stores a fingerprint (a hash) of every item
+sent. Next time, the connector computes the fingerprint again; if it matches, it skips the item entirely. On
+a large corpus this is the difference between a 75-minute crawl and a 12-second one.</li>
+<li><b>"What has been deleted?"</b> Direct push has no notion of "no longer returned" &mdash; the source
+simply stops mentioning a row. By keeping an inventory of what it sent, the connector can compare and remove
+what has gone.</li>
+<li><b>"Is another crawl already running?"</b> Two at once is genuinely dangerous: each compares the source
+against its own partial view and offers the other's unprocessed items for deletion. A lease in this database
+prevents it.</li>
+</ul>
+
+<p><b>If you skip the crawl state database</b> the connector still works: it writes every item on every run
+and never deletes anything. That is a reasonable configuration for a one-off load and a poor one for a
+standing sync.</p>
+
+<h3>2.2 What the numbered SQL scripts do</h3>
+
+<p>The <span class="mono">sql\</span> folder contains numbered scripts. They are not alternatives. They are
+<b>steps</b>, and they run in a fixed order.</p>
+
+<table>
+<tr><th style="width:14%">Script</th><th style="width:32%">What it creates</th><th>Why you care</th></tr>
+<tr><td><span class="mono">20</span></td><td>The database, the <span class="mono">crawl</span> schema, six table types</td><td>The only one you must edit first. It names file paths.</td></tr>
+<tr><td><span class="mono">21</span></td><td>Eight tables and their indexes</td><td>The actual storage.</td></tr>
+<tr><td><span class="mono">22</span></td><td>Six views</td><td>Readable summaries the dashboard uses.</td></tr>
+<tr><td><span class="mono">23</span></td><td>Nineteen procedures, the write path</td><td>Everything the connector calls while crawling.</td></tr>
+<tr><td><b><span class="mono">40</span></b></td><td>An extra column, and it rebuilds one table type</td><td><b>Must run before 24.</b> The single most common deployment failure. See trap T2.</td></tr>
+<tr><td><span class="mono">24</span></td><td>Seven procedures, the read path</td><td>What the dashboard calls.</td></tr>
+<tr><td><span class="mono">25</span></td><td>Logins, users, two roles and their grants</td><td>Least privilege. Needs the named accounts to exist.</td></tr>
+<tr><td><span class="mono">28 29 33 34 41 43</span></td><td>Later additions: fingerprint versioning, a "partial" run status, cache lifetimes, a read-only listing, a faster compare, and the run lock</td><td>Each was added after the original design. All are required.</td></tr>
+<tr><td><span class="mono">30 42</span></td><td>Nothing. They <b>check</b> what the others built</td><td>Run them. They are how you know it worked.</td></tr>
+<tr><td><span class="mono">44</span></td><td>Nothing here. It edits scheduled jobs</td><td>Only for SQL Server Availability Groups.</td></tr>
+</table>
+
+<p><b>The order, in full:</b></p>
+<p class="mono" style="margin-left:1em;">20 &rarr; 21 &rarr; 22 &rarr; 23 &rarr; <b>40</b> &rarr; 24 &rarr; 25 &rarr; 28 &rarr; 29 &rarr; 33 &rarr; 34 &rarr; 41 &rarr; 43 &rarr; 30 &rarr; 42 &rarr; 44</p>
+
+<h3>2.3 What a crawl actually does, step by step</h3>
+
+<p>Knowing this makes the log readable.</p>
+
+<ol>
+<li><b>Read the settings file</b> and check every value. If anything is wrong it stops with exit 2 and lists
+<i>all</i> the problems, not just the first.</li>
+<li><b>Fetch the secret</b> from Credential Manager and get a token from Microsoft.</li>
+<li><b>Create the connection if absent</b>, then register the schema. Registration runs on Microsoft's side
+and takes 5 to 15 minutes. The connection sits in state "Draft" until it becomes "Ready".</li>
+<li><b>Take the lease</b> in the crawl state database. If another crawl holds it, stop with exit 5.</li>
+<li><b>Open a run record</b>, the numbered entry you will see in the dashboard.</li>
+<li><b>Read rows from the source</b>, one at a time.</li>
+<li><b>For each row</b>, work out who may see it, cut the text if it is too long, and compute two
+fingerprints, one for content and one for the access list.</li>
+<li><b>Every 200 rows</b>, ask the state database which have changed. Send only those, in batches of 20.</li>
+<li><b>Record what was sent</b> back into the state database.</li>
+<li><b>After a full crawl</b>, compare the inventory against what the source returned and delete what is
+missing, unless that would exceed the safety threshold, in which case refuse and fail.</li>
+<li><b>Close the run record</b> and print a summary.</li>
+</ol>
+
+<h3>2.4 How to read the summary line</h3>
+
+<p>Every run ends with a line like this. It is the most useful output the tool produces.</p>
+
+<pre>Ingestion complete. 111800 row(s) processed (Customer=1200, Engagement=6200, TimeEntry=104400)
+for connection consultingwork; 111800 distinct item(s). unchanged=0 deleted=0 failed=0
+batches=6252 truncated=0 skipped=0 duplicates=0 throttleWaits=3050</pre>
+
+<table>
+<tr><th style="width:22%">Field</th><th>What it tells you</th></tr>
+<tr><td><span class="mono">processed</span></td><td>Items actually written to the index this run.</td></tr>
+<tr><td><span class="mono">unchanged</span></td><td>Items whose fingerprint matched, so they were skipped. <b>On a healthy second run this should be nearly everything.</b></td></tr>
+<tr><td><span class="mono">deleted</span></td><td>Items removed because the source stopped returning them.</td></tr>
+<tr><td><span class="mono">failed</span></td><td><b>Items Microsoft refused, which are NOT in the index.</b> Anything above zero means data is missing, and the run exits 4.</td></tr>
+<tr><td><span class="mono">batches</span></td><td>Network requests that carried the writes. Roughly items divided by 20.</td></tr>
+<tr><td><span class="mono">truncated</span></td><td>Items whose text was cut to fit the size limit.</td></tr>
+<tr><td><span class="mono">skipped</span></td><td>Items deliberately not sent, usually because nobody could be granted access to them.</td></tr>
+<tr><td><span class="mono">duplicates</span></td><td>The source returned the same ID twice. Above zero means a defect in the source query.</td></tr>
+<tr><td><span class="mono">throttleWaits</span></td><td>How many times Microsoft asked the tool to slow down. <b>Large numbers are normal and fine, provided <span class="mono">failed</span> is zero.</b></td></tr>
+</table>
+
+<h2>Part 3. Standing it up</h2>
+
+<p>Every command below is meant to be typed exactly. Where you must substitute your own value it appears in
+<span class="mono">&lt;angle brackets&gt;</span>.</p>
+
+<h3>3.1 Get the code and build it</h3>
+
+<pre>git clone &lt;repository-url&gt; C:\src\connectors
+cd C:\src\connectors
+dotnet build SqlTicketsConnector.sln -c Release</pre>
+
+<p><b>Expected:</b> <span class="mono">Build succeeded. 0 Warning(s) 0 Error(s)</span>. Warnings are treated
+as errors here, so anything else means stop and investigate.</p>
+
+<p>Then run the tests, which prove the code works before you point it at anything real:</p>
+<pre>dotnet test SqlTicketsConnector.sln</pre>
+<p><b>Expected:</b> <span class="mono">Passed! Failed: 0</span>. These touch no network and no database.</p>
+
+<h3>3.2 Publish the tools to their own folder</h3>
+
+<p>Publishing produces a self-contained folder you can run. <b>Publish outside the repository.</b> The
+published copy will hold your real connection strings; the repository copy must keep its harmless
+placeholders. Keeping them apart is what stops a real credential reaching source control.</p>
+
+<pre>dotnet publish src\SqlGraphPush\SqlGraphPush.csproj -c Release -o C:\Connectors\SqlGraphPush
+dotnet publish src\SqlHierarchyPush\SqlHierarchyPush.csproj -c Release -o C:\Connectors\SqlHierarchyPush</pre>
+
+<h3>3.3 Edit sql/20 before running it</h3>
+
+<p>Open <span class="mono">C:\src\connectors\sql\20-crawl-state-database.sql</span> and find:</p>
+
+<pre>FILENAME = N'D:\SQLData\ConnectorState.mdf'
+FILENAME = N'D:\SQLLogs\ConnectorState_log.ldf'</pre>
+
+<p>Replace both with real paths for your instance. <b>These are deliberately wrong as shipped.</b> A database
+that silently lands in the instance default folder is one nobody notices until that volume fills, so the
+script fails loudly instead. If your server has no <span class="mono">D:</span> drive use
+<span class="mono">C:\SQLData</span>, or ask your DBA where databases belong.</p>
+
+<h3>3.4 Build the crawl state database</h3>
+
+<p>Run each script <b>one at a time, in order</b>, and read what each prints. Every script ends with a
+verification block, and that output is the point of running them separately.</p>
+
+<pre>cd C:\src\connectors
+sqlcmd -S &lt;server&gt; -E -C -I -i sql\20-crawl-state-database.sql -b</pre>
+
+<p>The flags matter and are not decoration:</p>
+<table>
+<tr><th style="width:10%">Flag</th><th>Why</th></tr>
+<tr><td><span class="mono">-S</span></td><td>Which server. Use <span class="mono">.</span> or <span class="mono">localhost</span> for this machine.</td></tr>
+<tr><td><span class="mono">-E</span></td><td>Sign in as your Windows account rather than with a password.</td></tr>
+<tr><td><span class="mono">-C</span></td><td>Trust the server certificate. Needed for a local instance with a self-signed one.</td></tr>
+<tr><td><span class="mono">-I</span></td><td><b>Do not omit this.</b> It turns on a SQL setting these tables require. Without it you get <span class="mono">Msg 1934</span> and a confusing message about indexed views. See trap T5.</td></tr>
+<tr><td><span class="mono">-b</span></td><td>Return a failure code if anything goes wrong, so you notice.</td></tr>
+<tr><td><span class="mono">-d</span></td><td>Which database. Used from script 21 onwards.</td></tr>
+</table>
+
+<p>Then the rest, each with <span class="mono">-d ConnectorState</span> added:</p>
+
+<pre>sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\21-crawl-state-tables.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\22-crawl-state-views.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\23-crawl-state-procedures.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\40-crawl-state-per-type-duplicates.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\24-crawl-state-reporting.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\25-crawl-state-least-privilege.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\28-crawl-state-hash-version.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\29-crawl-state-partial-status.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\33-crawl-state-negative-ttl.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\34-crawl-state-live-item-ids.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\41-crawl-state-compare-and-see.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\43-crawl-state-run-lock.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\30-verify-set-options.sql -b</pre>
+
+<p><b>Note that 40 comes before 24.</b> That is not a typo. See trap T2.</p>
+
+<p><b>Check the result.</b> Run this and compare against the expected numbers:</p>
+
+<pre>sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -Q "SET NOCOUNT ON;
+SELECT 'tables', COUNT(*) FROM sys.tables WHERE SCHEMA_NAME(schema_id)='crawl'
+UNION ALL SELECT 'views', COUNT(*) FROM sys.views WHERE SCHEMA_NAME(schema_id)='crawl'
+UNION ALL SELECT 'procedures', COUNT(*) FROM sys.procedures WHERE SCHEMA_NAME(schema_id)='crawl'
+UNION ALL SELECT 'types', COUNT(*) FROM sys.table_types WHERE SCHEMA_NAME(schema_id)='crawl';"</pre>
+
+<p><b>Expected: 8 tables, 7 views, 30 procedures, 6 table types.</b> Fewer than 30 procedures almost always
+means a script failed and you did not notice. Go back and re-read the output.</p>
+
+<h3>3.5 If your database is not called ConnectorState</h3>
+
+<p><b>Read this even if you think it does not apply to you.</b></p>
+
+<p>Every script contains a line near the top reading <span class="mono">USE [ConnectorState];</span>. The
+<span class="mono">-d</span> flag sets only the <i>starting</i> database; that <span class="mono">USE</span>
+then moves the session somewhere else. So a script you run "against your test database" creates its objects
+in <b>ConnectorState</b> instead, and reports success while doing it.</p>
+
+<p>If your database has a different name, use the supplied wrapper. It rewrites the name and refuses to run
+if any reference to the original survives:</p>
+
+<pre>.\deploy\Invoke-StateScripts.ps1 -Database &lt;YourDbName&gt; -TrustServerCertificate -Scripts @(
+    'sql/20-crawl-state-database.sql','sql/21-crawl-state-tables.sql',
+    'sql/22-crawl-state-views.sql','sql/23-crawl-state-procedures.sql',
+    'sql/40-crawl-state-per-type-duplicates.sql','sql/24-crawl-state-reporting.sql',
+    'sql/28-crawl-state-hash-version.sql','sql/29-crawl-state-partial-status.sql',
+    'sql/33-crawl-state-negative-ttl.sql','sql/34-crawl-state-live-item-ids.sql',
+    'sql/41-crawl-state-compare-and-see.sql','sql/43-crawl-state-run-lock.sql')</pre>
+
+<h3>3.6 Write the settings file</h3>
+
+<p>Open <span class="mono">C:\Connectors\SqlGraphPush\appsettings.json</span>, the <b>published</b> one, not
+the one in the repository. It is JSON: text in quotes, values after colons, items separated by commas. A
+missing comma is the most common mistake and produces exit 2 naming the line.</p>
+
+<pre>{
+  "Environment": "Production",
+
+  "Auth": {
+    "Mode": "ClientSecret",
+    "TenantId": "&lt;your tenant id&gt;",
+    "ClientId": "&lt;your client id&gt;",
+    "ClientSecretCredentialTarget": "SqlGraphPush/EntraClientSecret"
+  },
+
+  "DataSource": {
+    "Server": "&lt;your sql server&gt;",
+    "Database": "&lt;your source database&gt;",
+    "SqlAuthMode": "WindowsIntegrated",
+    "MaxContentBytes": 3670016,
+    "ExtraConnectionOptions": ""
+  },
+
+  "Acl": {
+    "GrantGroupObjectIds": [ "&lt;your entra group object id&gt;" ]
+  },
+
+  "Graph": {
+    "ConnectionId": "&lt;yourconnectionid&gt;",
+    "ConnectionName": "A name people will see",
+    "Description": "What this contains",
+    "SchemaReadyTimeoutMinutes": 30
+  },
+
+  "Source": { "ItemView": "dbo.Tickets", "MaxItems": 0 },
+
+  "Settings": {
+    "Writers": "16",
+    "Batch": "true",
+    "StateConnectionString": "Server=&lt;server&gt;;Database=ConnectorState;Integrated Security=true;Encrypt=true"
+  }
+}</pre>
+
+<p><b>A note on SQL connection encryption.</b> Both connection settings above leave certificate validation
+switched <b>on</b>, which is what you want. If your SQL Server has a self-signed certificate &mdash; common on
+a developer machine, and normal for a fresh local install &mdash; the connection will fail with a message
+about the certificate chain not being trusted.</p>
+
+<p>There is a setting that turns that check off. This repository deliberately refuses to carry it: a
+committed secret scanner rejects it on sight, because switching off transport validation means anything on
+the network path can read your data in transit and nobody will be told. <b>Do not add it to a production
+configuration.</b></p>
+
+<p>The three legitimate answers, in order of preference: install a certificate the machine trusts; use a
+certificate from your internal authority; or, on a developer machine only and knowingly, add the exemption
+locally and never commit it. For one-off <span class="mono">sqlcmd</span> work against a local instance the
+<span class="mono">-C</span> flag does the same thing for that single command, which is why the examples
+earlier in this guide use it &mdash; a flag on a throwaway command is a different risk from a setting living
+permanently in a deployed file.</p>
+<p><b>Things that will catch you here:</b></p>
+<ul>
+<li><span class="mono">MaxItems: 0</span> means <i>no limit</i>, not "read nothing".</li>
+<li>The state connection string must contain <b>no password</b>. The tool rejects one that does, because
+crawl state is reached with an integrated identity.</li>
+<li><span class="mono">ConnectionId</span> cannot be changed after the first run without deleting the
+connection and everything in it.</li>
+<li>Leave <span class="mono">Writers</span> at 16. It is the ceiling; anything higher is silently clamped and
+the tool tells you so.</li>
+</ul>
+
+<h2>Part 4. The first crawl</h2>
+
+<h3>4.1 Always dry run first</h3>
+
+<pre>cd C:\Connectors\SqlGraphPush
+.\SqlGraphPush.exe --dry-run</pre>
+
+<p>A dry run reads the source, builds the schema, maps every row, and <b>writes nothing to Microsoft</b>. It
+is the cheapest way to find a configuration mistake.</p>
+
+<p><b>What you should see, and what each line means:</b></p>
+
+<pre>[INF] SqlGraphPush starting connector tickets ... against connection sqltickets
+[INF] Auth:Mode is ClientSecret. Reading Credential Manager target ...
+[INF] Client secret resolved ... The value is held in memory only and is never logged.
+[INF] Crawl state is enabled. Delete detection, change detection and resume are available.
+[INF] Dry run: schema builds cleanly (6 properties). Reading and mapping ... writing nothing to Graph.
+[INF] Crawl run 1 opened for connection sqltickets in Full mode (dry run).
+[INF] Would write ticket1001 (Ticket): 6 properties, 220 content bytes, 1 ACL entr(y/ies).
+[INF] Delete preview: the index holds no live items for this connection, so nothing would be removed.
+[INF] Crawl run 1 closed as succeeded.</pre>
+
+<table>
+<tr><th style="width:34%">If you see</th><th>It means</th></tr>
+<tr><td>"Crawl state is enabled"</td><td>Good. The state database is reachable.</td></tr>
+<tr><td>"No crawl state store configured"</td><td>Your <span class="mono">StateConnectionString</span> is missing or wrong. Every run will rewrite everything and never delete. Fix it before going further.</td></tr>
+<tr><td>"1 ACL entr(y/ies)"</td><td>Good. Each item has one grant. Zero would mean nobody can see it.</td></tr>
+<tr><td>Exit 2 with a list</td><td>Configuration problems, all of them at once. Fix and repeat.</td></tr>
+<tr><td>Exit 3</td><td>Credentials. Either the secret is wrong or admin consent was never granted.</td></tr>
+</table>
+
+<h3>4.2 The first real run</h3>
+
+<pre>.\SqlGraphPush.exe</pre>
+
+<p><b>Expect this to be slow the first time</b>, and to look stuck. It is not. Registering the schema happens
+on Microsoft's servers and typically takes 5 to 15 minutes. You will see:</p>
+
+<pre>[INF] Connection state Draft.
+[INF] Connection state Draft.
+[INF] Connection state Ready.</pre>
+
+<p>Only after "Ready" does anything get written. If you want to watch it separately, open another window and
+run <span class="mono">deploy\Watch-SchemaRegistration.ps1</span>.</p>
+
+<p><b>Before this run, understand that the schema is permanent.</b> Once registered, no property's type or
+behaviour can ever be changed. Correcting a mistake means deleting the connection and every item in it. If
+you are unsure about the schema, stop and review the dry run output first.</p>
+
+<p><b>What success looks like:</b></p>
+<pre>[INF] Crawl run 2 closed as succeeded.
+[INF] Ingestion complete. 3 row(s) processed ... failed=0 ...</pre>
+<p>followed by a timing table. Check <span class="mono">$LASTEXITCODE</span> is <b>0</b>.</p>
+
+<h3>4.3 Confirm the data really arrived</h3>
+
+<p>Do not trust the log alone. Ask the two systems independently.</p>
+
+<p><b>Ask the state database what it recorded:</b></p>
+<pre>sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -Q "SET NOCOUNT ON;
+SELECT RunId, Status, ItemsRead, ItemsWritten, ItemsFailed FROM crawl.vwRunHistory;"</pre>
+
+<p><b>Ask Microsoft what it holds.</b> The simplest check is in the Microsoft 365 admin centre, under Search
+&amp; intelligence &rarr; Data sources: your connection should be listed and show an item count. It can lag
+by a few minutes.</p>
+
+<h2>Part 5. The tests, in order</h2>
+
+<p>Each test states what it proves, why that matters, exactly what to do, and what failure looks like. Run
+them in this order &mdash; several depend on the state left by the one before.</p>
+
+<h3>Test 1 &mdash; Change detection</h3>
+<p><b>Proves:</b> the connector recognises unchanged items and skips them.<br>
+<b>Why it matters:</b> without this, every crawl rewrites the whole corpus, which is slow, wasteful, and
+burns your Microsoft write quota.</p>
+<p><b>Do:</b> run the tool a second time, immediately, changing nothing.</p>
+<p><b>Expect:</b> <span class="mono">unchanged</span> equals nearly everything, <span class="mono">processed</span>
+near zero, <span class="mono">batches=0</span>, and a far shorter run.</p>
+<p><b>If it fails</b> &mdash; if the second run writes everything again &mdash; your item IDs are not stable
+between runs. Something in the source query is generating a different ID for the same row. This is the most
+important early failure to catch.</p>
+
+<h3>Test 2 &mdash; Delete detection</h3>
+<p><b>Proves:</b> removing something at the source removes it from Copilot.<br>
+<b>Why it matters:</b> a document deleted for a reason must stop being answerable. This is a compliance
+property, not a tidiness one.</p>
+<p><b>Do:</b> mark one row deleted at the source (however your source expresses that), then run a full crawl.
+Pick a second row and leave it alone, as a control.</p>
+<p><b>Expect:</b> <span class="mono">deleted=1</span>, and a log line saying the sweep will remove one item.</p>
+<p><b>Verify on three surfaces</b>, because any one alone can mislead:</p>
+<pre>-- the state database should mark it deleted (State 3)
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -Q "SET NOCOUNT ON;
+SELECT ItemId, State FROM crawl.Item WHERE ItemId IN ('&lt;deleted-id&gt;','&lt;control-id&gt;');"</pre>
+<p>and confirm the deleted one is gone from the index while the control is still there.</p>
+
+<h3>Test 3 &mdash; Undelete</h3>
+<p><b>Proves:</b> the previous test is reversible, and the corpus was not rebuilt around the gap.</p>
+<p><b>Do:</b> restore the row at the source, run a full crawl.</p>
+<p><b>Expect:</b> the item returns, its state goes back to 1 (live), and <span class="mono">deleted=0</span>.</p>
+
+<h3>Test 4 &mdash; The delete guard</h3>
+<p><b>Proves:</b> a source that suddenly returns far fewer rows does <b>not</b> empty your index.<br>
+<b>Why it matters:</b> the likeliest cause of a big deletion is not a big deletion. It is a dropped view, a
+revoked permission, or a filter that matched nothing. The guard exists to refuse that.</p>
+<p><b>Before you start, do this arithmetic.</b> The guard compares a <i>percentage</i>, stored to two decimal
+places. On a corpus of 100,000 items, one missing item is 0.001 per cent, which stores as
+<span class="mono">0.00</span> &mdash; so even a guard set to zero will not catch it. Work out how many items
+your threshold really represents:</p>
+<pre>-- how many missing items does a zero guard actually catch?
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -Q "SET NOCOUNT ON;
+DECLARE @live INT = (SELECT COUNT(*) FROM crawl.Item WHERE ConnectionId='&lt;id&gt;' AND State=1);
+SELECT n AS missing, CAST(100.0*n/@live AS DECIMAL(5,2)) AS stored_pct
+FROM (VALUES (1),(2),(5),(6),(10),(20)) v(n);"</pre>
+<p>The first row whose <span class="mono">stored_pct</span> is above 0.00 is the smallest loss the guard can
+see.</p>
+<p><b>Do:</b> set <span class="mono">"MaxDeletePercent": "0"</span> in Settings, remove at least that many
+rows at the source, run a full crawl.</p>
+<p><b>Expect:</b> the run <b>fails</b> with exit 4 and a message naming both numbers:</p>
+<pre>Delete sweep refused. It would remove 6 of 111799 live items (0.01%), above the 0.00% guard.</pre>
+<p><b>Then recover:</b> restore the rows, remove the <span class="mono">MaxDeletePercent</span> override, run
+again, and confirm health returns to normal. A failed run stays in the history &mdash; that is intended.</p>
+
+<h3>Test 5 &mdash; The run lock</h3>
+<p><b>Proves:</b> two crawls cannot run at once.<br>
+<b>Why it matters:</b> two simultaneous crawls can delete each other's data.</p>
+<p><b>Do:</b> start the tool, wait two seconds, start it again in another window.</p>
+<p><b>Expect:</b> the first exits 0. The second exits <b>5</b> and prints a message naming the run that holds
+the lease, its host, its process ID and its last heartbeat.</p>
+<p><b>Remember exit 5 is not a failure.</b> If your monitoring treats it as one, it will alert every time
+this works correctly.</p>
+
+<h3>Test 6 &mdash; Incremental crawling</h3>
+<p><b>Proves:</b> the connector can read only what changed.</p>
+<p><b>Do:</b> point <span class="mono">Source:ItemView</span> at your incremental view, set
+<span class="mono">"Incremental": "true"</span>, and run twice.</p>
+<p><b>Expect:</b> the first may be <i>escalated to a full crawl</i>, with the reason stated &mdash; there is no
+checkpoint yet to be a difference from. The second opens in Incremental mode and reports where it resumed
+from.</p>
+<p><b>A guard you may hit:</b> if the view has no "last modified" column the tool exits 2 and names the view
+you should be using instead. That is correct behaviour, not a fault.</p>
+
+<h3>Test 7 &mdash; Throttling</h3>
+<p><b>Proves:</b> the connector survives Microsoft asking it to slow down.<br>
+<b>Why it matters:</b> at any real volume this <i>will</i> happen. The question is whether items are lost.</p>
+<p><b>Do:</b> nothing special. Read the counters from your largest run.</p>
+<p><b>Expect:</b> <span class="mono">throttleWaits</span> above zero with <span class="mono">failed=0</span>.
+Thousands of waits with nothing lost is a pass. Any non-zero <span class="mono">failed</span> is not.</p>
+
+<h3>Test 8 &mdash; The scheduled cleanup job</h3>
+<p><b>Proves:</b> run history is trimmed automatically, so the state database does not grow without limit.</p>
+<p><b>Do:</b></p>
+<pre>sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\27-crawl-state-retention-job.sql -b
+sqlcmd -S &lt;server&gt; -E -C -I -d msdb -Q "EXEC dbo.sp_start_job @job_name = N'ConnectorState - purge crawl history';"</pre>
+<p>Wait half a minute, then read the outcome:</p>
+<pre>sqlcmd -S &lt;server&gt; -E -C -I -d msdb -Q "SET NOCOUNT ON;
+SELECT TOP 3 step_name, run_status, LEFT(message,120) FROM msdb.dbo.sysjobhistory h
+JOIN msdb.dbo.sysjobs j ON j.job_id=h.job_id
+WHERE j.name = N'ConnectorState - purge crawl history' ORDER BY instance_id DESC;"</pre>
+<p><b>Expect:</b> <span class="mono">run_status = 1</span> and a message naming each connection purged.
+<b>This test is impossible on LocalDB</b>, which has no SQL Server Agent.</p>
+
+<h3>Test 9 &mdash; Least privilege</h3>
+<p><b>Proves:</b> the connector's own database account can do what it needs and nothing more.</p>
+<p><b>Do:</b></p>
+<pre>sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -i sql\42-verify-least-privilege.sql -b</pre>
+<p><b>Expect:</b> every writer procedure reachable, every reader view reachable, and every attempt to touch
+the tables <i>directly</i> refused. This script needs no accounts of its own &mdash; it creates temporary
+users internally &mdash; so it works even where the named service accounts do not exist.</p>
+
+<h3>Test 10 &mdash; Nothing sensitive reaches the logs</h3>
+<p><b>Proves:</b> log files can be shared with support without leaking customer data.</p>
+<p><b>Do:</b> take some real text from your source &mdash; a customer name, a description &mdash; and search
+every log for it:</p>
+<pre>Select-String -Path C:\Connectors\*\Logs\*.log -SimpleMatch "&lt;a real value from your data&gt;"</pre>
+<p><b>Expect:</b> no matches. The logs should contain item IDs, counts and byte sizes only.</p>
+
+<h2>Part 6. The dashboard</h2>
+
+<h3>6.1 What it is</h3>
+<p>A small internal website showing crawl history, run detail and connection health. It is <b>read-only</b>
+&mdash; it cannot start a crawl or change anything &mdash; and it is how you learn a crawl failed without
+reading log files.</p>
+
+<h3>6.2 Install it</h3>
+<pre>dotnet publish src\ConnectorState.Dashboard -c Release -o artifacts\dashboard</pre>
+<p>Then, <b>from an elevated Windows PowerShell 5.1 prompt</b> &mdash; not PowerShell 7, see trap T4:</p>
+<pre>.\deploy\Install-Dashboard-IIS.ps1 -SiteName ConnectorState `
+    -PhysicalPath C:\inetpub\ConnectorState `
+    -SourcePath .\artifacts\dashboard -HttpPort 8080 -HttpsPort 8443</pre>
+
+<h3>6.3 Give it permission to read</h3>
+<p>The website runs as its own Windows identity, named after the site:
+<span class="mono">IIS APPPOOL\ConnectorState</span>. That identity has no access to your database yet, so
+every page will return <b>HTTP 500</b> until you grant it:</p>
+<pre>sqlcmd -S &lt;server&gt; -E -C -I -d master -Q "IF SUSER_ID('IIS APPPOOL\ConnectorState') IS NULL
+    CREATE LOGIN [IIS APPPOOL\ConnectorState] FROM WINDOWS;"
+sqlcmd -S &lt;server&gt; -E -C -I -d ConnectorState -Q "
+    IF DATABASE_PRINCIPAL_ID('IIS APPPOOL\ConnectorState') IS NULL
+        CREATE USER [IIS APPPOOL\ConnectorState] FOR LOGIN [IIS APPPOOL\ConnectorState];
+    ALTER ROLE [crawl_reader] ADD MEMBER [IIS APPPOOL\ConnectorState];"</pre>
+<p><b>A 500 here is almost never a code fault.</b> It is this grant.</p>
+
+<h3>6.4 Restricting who can see it</h3>
+<p>Set <span class="mono">CrawlState:ReaderGroups</span> in the site's
+<span class="mono">appsettings.json</span> to a Windows or Entra group. Members see the pages; everyone else
+gets HTTP 403.</p>
+<p><b>The application does not notice the change until it restarts.</b> Touch
+<span class="mono">web.config</span> to recycle it:</p>
+<pre>(Get-Item C:\inetpub\ConnectorState\web.config).LastWriteTime = Get-Date</pre>
+<p>Skip that and your change appears to do nothing, which is easy to misread as the feature not working.</p>
+<p><b>You can test both directions with one account:</b> point it first at a group you are <i>not</i> in
+(expect 403), then at one you are (expect 200).</p>
+
+<h2>Part 7. Running it regularly</h2>
+
+<h3>7.1 Scheduling</h3>
+<p>Nothing invokes the connector on its own. You schedule it, typically with Windows Task Scheduler, and the
+repository provides <span class="mono">deploy\Schedule-Connectors.ps1</span> to set that up.</p>
+
+<p><b>One task, one process, running the connectors in sequence</b> &mdash; not several tasks with staggered
+start times. Task Scheduler has no way to say "start this when that one finishes", so staggered tasks
+eventually overlap when one runs long, and then the run lock refuses one of them every night.</p>
+
+<p><b>Your monitoring must treat exit 5 as success.</b> It means "another crawl was already running", which
+is the design working. A rule that pages on any non-zero exit will page somebody at 3am for correct
+behaviour, and the rule will be switched off, and then a real failure will be missed too.</p>
+
+<h3>7.2 A sensible pattern</h3>
+<table>
+<tr><th style="width:22%">When</th><th style="width:20%">What</th><th>Why</th></tr>
+<tr><td>Every few hours</td><td>Incremental crawl</td><td>Keeps content fresh cheaply. Cannot detect deletions.</td></tr>
+<tr><td>Nightly or weekly</td><td>Full crawl</td><td>The only thing that detects deletions and refreshes permissions.</td></tr>
+<tr><td>Weekly</td><td>Reconciliation</td><td><span class="mono">deploy\Compare-SourceToIndex.ps1</span> compares the source against the index and reports drift.</td></tr>
+</table>
+
+<p><b>The gap between full crawls is your permission staleness window.</b> If someone loses access at the
+source today and the next full crawl is in seven days, Copilot may keep showing them that content for seven
+days. Choose that interval deliberately, and write down who accepted it.</p>
+
+<h2>Part 8. Releasing a new version</h2>
+
+<p>Only relevant if you are changing the code. Four steps, and only the third is done by hand.</p>
+
+<ol>
+<li><b>Tag both lines together.</b> This repository ships two builds from the same source: a current one and
+one for older tooling. Tag <span class="mono">vX.Y.Z</span> on the main branch and
+<span class="mono">vX.Y.Z-net9</span> on the other. They must carry the same version.</li>
+<li><b>Automation builds each tag</b> and creates a <b>draft</b> release with the deployment package, the
+offline package set, and checksums attached.</li>
+<li><b>A person publishes the two drafts.</b> The automation never publishes, deliberately &mdash; the
+package is something somebody signs off.</li>
+<li><b>Retire what the new release supersedes</b>, by running the retirement workflow manually.</li>
+</ol>
+
+<p><b>Retirement deletes releases and keeps every tag.</b> A release is a download page; the tag is the exact
+code it was built from. Deleting the tag would break every attempt to check out that version later, for the
+sake of tidying a downloads page.</p>
+
+<p><b>Two things that surprise people:</b></p>
+<ul>
+<li><b>A tag is not a release.</b> If any part of the build fails, the release step is skipped and you have a
+tag with nothing attached. Always check the release page, not just that the tag exists.</li>
+<li><b>A draft is not downloadable.</b> So a draft cannot be your rollback target. Keep at least two
+<i>published</i> versions if you want somewhere to roll back to.</li>
+</ul>
+
+<p><b>Before pushing anything</b>, check you are not committing secrets. Search the change for identifiers,
+internal hostnames and credential names, and run a secret scanner over the <i>whole history</i>, not just
+your change &mdash; something committed weeks ago is still exposed.</p>
+
+<h2>Part 9. The traps</h2>
+
+<p>Each of these has cost real time. They are ordered by when you are likely to meet them.</p>
+
+<table>
+<tr><th style="width:6%">#</th><th style="width:24%">Trap</th><th>What happens, and what to do</th></tr>
+
+<tr><td><b>T1</b></td><td>Using LocalDB</td><td>It looks like SQL Server and mostly behaves like it, but it has <b>no SQL Server Agent</b>, so the scheduled cleanup cannot run and Test 8 is impossible. Use a full instance, even a free Developer edition one.</td></tr>
+
+<tr><td><b>T2</b></td><td><b>Running script 24 before script 40</b></td><td>The most common deployment failure. Script 24 creates a procedure that reads a column script 40 adds. SQL Server tolerates a missing <i>table</i> but not a missing <i>column</i>, so script 24 fails with <span class="mono">Msg 207</span>, and then the grant on the procedure it did not create fails with <span class="mono">Msg 15151</span>. <b>So a schema mistake reports itself as a permissions problem</b> and sends you looking in the wrong place. It is invisible when upgrading an existing database and appears only when building a new one.</td></tr>
+
+<tr><td><b>T3</b></td><td><b><span class="mono">-d</span> does not redirect the scripts</b></td><td>Every script contains <span class="mono">USE [ConnectorState]</span>. The <span class="mono">-d</span> flag sets only the starting database. A script run "against test" therefore builds in <b>production</b> and reports success. Use <span class="mono">deploy\Invoke-StateScripts.ps1</span> for any other database name. This is the most dangerous item here because the failure is silent and in the wrong direction.</td></tr>
+
+<tr><td><b>T4</b></td><td>Running the IIS installer under PowerShell 7</td><td>It uses Windows-feature commands that do not exist in PowerShell 7, and dies at the first step with <span class="mono">Class not registered</span> &mdash; which reads like a broken IIS rather than a wrong shell. Use Windows PowerShell 5.1, elevated.</td></tr>
+
+<tr><td><b>T5</b></td><td>Omitting <span class="mono">-I</span> from sqlcmd</td><td>Some tables use a SQL feature that requires a setting sqlcmd leaves off by default. You get <span class="mono">Msg 1934</span> and a message about indexed views that has nothing to do with your problem. Always pass <span class="mono">-I</span>.</td></tr>
+
+<tr><td><b>T6</b></td><td>HTTP 500 from the dashboard</td><td>Almost always the website's identity lacking database access, not a code fault. Each site has its own identity, <span class="mono">IIS APPPOOL\&lt;SiteName&gt;</span>, and a second site needs its own grant. See 6.3.</td></tr>
+
+<tr><td><b>T7</b></td><td>Changing dashboard settings and seeing no effect</td><td>The application reads its configuration once at startup. Touch <span class="mono">web.config</span> to recycle it. Without this, a test of the permission settings returns the same answer every time and proves nothing.</td></tr>
+
+<tr><td><b>T8</b></td><td><b>Expecting a zero delete guard to block one item</b></td><td>The guard compares a percentage stored to two decimal places. On 100,000 items a single missing row rounds to 0.00 and passes. Compute how many items your threshold really represents before testing it, and agree the threshold in <b>items</b> as well as percent.</td></tr>
+
+<tr><td><b>T9</b></td><td>Treating exit 5 as a failure</td><td>It means another crawl was already running. That is the lock doing its job. Alerting on it pages people for correct behaviour.</td></tr>
+
+<tr><td><b>T10</b></td><td>Assuming the schema can be corrected</td><td>It cannot. A registered schema is append-only: you may add a property, but no property's type or behaviour can ever change. Fixing a mistake means deleting the connection and every item in it. Review the dry run output before the first real push.</td></tr>
+
+<tr><td><b>T11</b></td><td>Storing the secret as the wrong user</td><td>Credential Manager is per-user. Store it as yourself and run the connector as a service account, and it will not be found &mdash; exit 3, with a message about the credential. Store it under the account that will run it.</td></tr>
+</table>
+
+<h2>Part 10. Troubleshooting by symptom</h2>
+
+<table>
+<tr><th style="width:30%">Symptom</th><th style="width:34%">Most likely cause</th><th>What to do</th></tr>
+
+<tr><td>Exit 2 with a list of problems</td><td>The settings file</td><td>It lists every problem at once. Fix them all, run again. Nothing was sent.</td></tr>
+
+<tr><td>Exit 3</td><td>Admin consent was never granted, the secret expired, or it is stored under the wrong user</td><td>Check consent in Entra first &mdash; it is the most common. Then check the secret's expiry date. Then check which account stored it.</td></tr>
+
+<tr><td>Exit 5 every time</td><td>A previous crawl crashed and its lease has not expired</td><td>Wait three minutes; the lease expires on its own and the next run reclaims it. If it persists, look for a stuck process.</td></tr>
+
+<tr><td><span class="mono">failed</span> above zero</td><td>Microsoft refused some items</td><td>Those items are <b>not</b> in the index. Read the log for the reason. Run again &mdash; only the refused ones are retried, because the successful ones recorded their fingerprints.</td></tr>
+
+<tr><td>Second run writes everything again</td><td>Item IDs are not stable between runs</td><td>Something in the source query generates a different ID for the same row. Fix the query. Until then, change detection cannot work at all.</td></tr>
+
+<tr><td><span class="mono">Msg 207 Invalid column name</span></td><td>Script 24 ran before script 40</td><td>Trap T2. Run script 40, then re-run 24 and 25.</td></tr>
+
+<tr><td><span class="mono">Msg 1934 ... QUOTED_IDENTIFIER</span></td><td>Missing <span class="mono">-I</span></td><td>Trap T5. Add the flag and repeat.</td></tr>
+
+<tr><td><span class="mono">Cannot open database</span> repeatedly</td><td>An earlier script failed and the database was never created</td><td>Scroll <b>up</b> past the repeated errors. The real error is the first one.</td></tr>
+
+<tr><td>Dashboard shows HTTP 500</td><td>The site identity has no database access</td><td>Trap T6, and section 6.3.</td></tr>
+
+<tr><td>Dashboard shows HTTP 403</td><td>You are not in the configured reader group</td><td>Intended. Add yourself, or clear the setting, and recycle the site.</td></tr>
+
+<tr><td>Delete sweep refused, run failed</td><td>More items disappeared than the guard allows</td><td><b>Assume the source is wrong before assuming the deletion is real.</b> Check the source returns what you expect. If the deletion is genuine, raise the threshold deliberately for one run.</td></tr>
+
+<tr><td>Schema stuck in Draft beyond 30 minutes</td><td>Registration failed on Microsoft's side</td><td>Check the connection in the admin centre. A schema that will not register usually breaks a naming rule &mdash; property names must be letters and numbers, 32 characters or fewer.</td></tr>
+
+<tr><td>Thousands of throttle waits</td><td>Normal at volume</td><td>Nothing, provided <span class="mono">failed</span> is zero. Expect a large first load to take about a quarter longer than an unthrottled estimate suggests.</td></tr>
+</table>
+
+<h2>Part 11. A checklist you can tick off</h2>
+
+<p><b>Before you start</b></p>
+<ul>
+<li>App registration exists, with both permissions and <b>admin consent granted</b></li>
+<li>Entra group object ID collected</li>
+<li>Read-only SQL login on the source</li>
+<li>Permission to create a database</li>
+<li>Full SQL Server with Agent running (not LocalDB)</li>
+<li>Secret stored in Credential Manager, <b>under the account that will run the connector</b></li>
+<li>Every value in table 1.3 filled in</li>
+</ul>
+
+<p><b>Deployment</b></p>
+<ul>
+<li>Build succeeds with zero warnings, tests pass</li>
+<li>Tools published <b>outside</b> the repository</li>
+<li>File paths in script 20 edited to real ones</li>
+<li>All scripts run in order, <b>40 before 24</b>, each one's output read</li>
+<li>Object counts match: 8 tables, 7 views, 30 procedures, 6 table types</li>
+<li>Settings file completed in the <b>published</b> folder</li>
+<li>Dry run clean</li>
+<li>First real run exits 0, and the data is visible independently of the log</li>
+</ul>
+
+<p><b>Tests</b></p>
+<ul>
+<li>Change detection: second run reports nearly everything unchanged</li>
+<li>Delete detection: verified on three surfaces, with a control</li>
+<li>Undelete: the item comes back</li>
+<li>Delete guard: refuses, with the arithmetic done first</li>
+<li>Recovery: health returns to normal</li>
+<li>Run lock: second concurrent run exits 5</li>
+<li>Incremental: resumes rather than re-reading</li>
+<li>Throttling: waits above zero, failures at zero</li>
+<li>Cleanup job: runs and names what it purged</li>
+<li>Least privilege: writer refused direct table access</li>
+<li>Logs: no source content anywhere in them</li>
+</ul>
+
+<p><b>Before going live</b></p>
+<ul>
+<li>Schedule created, and <b>exit 5 treated as success</b> by monitoring</li>
+<li>Full-crawl interval chosen deliberately, and the permission staleness window written down and accepted
+by a named person</li>
+<li>Delete threshold agreed in <b>items</b> as well as percent</li>
+<li>Somebody named as the person woken when a crawl fails</li>
+<li>Secret expiry date recorded, with a reminder before it</li>
+</ul>
+
+<p class="meta" style="margin-top:1.5em;">The last four are not engineering tasks, and clearing every
+technical item above does not answer a single one of them. They are the difference between something that
+works and something that is supported.</p>
+
+</body></html>

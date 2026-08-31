@@ -52,6 +52,22 @@ documentation that ships with it.
 | [**Capacity planning**](CAPACITY-PLANNING.md) | Will this still work at ten times the corpus? Graph's published ceilings and the one it does not publish, this rig's measured throughput and storage per item, what scales linearly and what has stopped, and the five queries that produce another estate's own version of these numbers |
 | [Adding a connector](ADDING-A-PUSH-CONNECTOR.md) | The source seam, and what a new source has to supply |
 
+## Generated documents
+
+Two documents here are **built from source in this repository** rather than
+hand-edited, so that they cannot drift out of date invisibly. Edit the source,
+re-run the generator, and the output regenerates.
+
+| Source | Generator | Produces |
+|---|---|---|
+| [`guides/deployment-and-test-guide.html`](guides/deployment-and-test-guide.html) | `guides/New-DeploymentGuide.ps1` | A 22-page Word guide to deploying and testing this connector **from no prior knowledge** — vocabulary, prerequisites, every command explained, eleven tests in order, eleven traps, and troubleshooting indexed by symptom |
+| the layout inside `diagrams/New-ArchitectureDiagram.ps1` | the same script | [`architecture.svg`](architecture.svg) and [`architecture.png`](architecture.png), from one declared layout so the two cannot disagree |
+
+Both need Word or `System.Drawing` on the machine, are documentation builds
+rather than part of `Build.ps1`, and nothing in CI depends on either. Their
+output is written **beside** the repository, not into it: a binary that changes
+wholesale on every rebuild makes every diff useless.
+
 ## Troubleshooting
 
 [CDP](TROUBLESHOOTING-CDP.md) · [direct push](TROUBLESHOOTING-DIRECT-PUSH.md) ·
