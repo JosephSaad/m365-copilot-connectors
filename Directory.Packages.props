@@ -132,7 +132,7 @@
       is the supported path rather than a convenience. The driver itself is an
       operator-installed MSI under Cloudera's own licence and is never bundled.
     -->
-    <PackageVersion Include="System.Data.Odbc" Version="9.0.0" />
+    <PackageVersion Include="System.Data.Odbc" Version="10.0.11" />
   </ItemGroup>
 
   <!-- Logging. -->
