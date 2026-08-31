@@ -11,6 +11,13 @@ Managed Service Account over Kerberos, and Active Directory owns that password.
 If a question here looks like it is asking for a credential, it is not — please
 query it rather than answering it.
 
+**You do not have to answer all of it.** The connector is three independent
+pieces — **HDFS documents**, **Hive contracts** and the **Atlas catalogue** —
+and a pilot may run any one of them on its own. The **Needed for** column says
+which pieces each question serves. Seventeen of the twenty-seven questions apply
+whichever you choose; beyond those, HDFS adds three, Hive five and Atlas two.
+Leave the rest blank.
+
 Example values are illustrative and use the reserved `corp.example` domain.
 
 ---
@@ -20,57 +27,61 @@ Example values are illustrative and use the reserved `corp.example` domain.
 **Ask for these first.** Sections 2 to 5 can be answered in any order; these
 gate everything, and two of them go through other people's queues.
 
-| # | What we need | Why | Your answer |
-|---|---|---|---|
-| 1.1 | The **Kerberos realm** name, and whether it **trusts our Active Directory domain** | Everything cluster-side is Kerberos over SSPI as the service account. Without a cross-realm trust — or a cluster whose Kerberos is AD-integrated — no ticket we present is accepted and the pilot cannot begin. If there is no trust, say so early: the fallback puts a keytab on the connector host, which is a decision to record rather than a default | |
-| 1.2 | Confirmation the service account is granted **read on the HDFS paths**, **`select` on the Hive object**, and **entity-read in the `cm_atlas` Ranger service** | The Atlas grant is the one most often missed. Ranger's Hive service says nothing about who may read the *catalogue* — that is a separate service. Without it Atlas answers 403 and the run exits 3 | |
-| 1.3 | The **cluster group names** that should see this content | The connector mirrors **group** grants only, never per-user ones. Every group Ranger names has to be mapped; an unmapped group means the item is granted to nobody and is silently skipped | |
-| 1.4 | The **Entra group object ID** for each of those groups | Group names alone are not enough — the object ID is what is written onto each indexed item's access list | |
+| # | Needed for | What we need | Why | Your answer |
+|---|---|---|---|---|
+| 1.1 | All | The **Kerberos realm** name, and whether it **trusts our Active Directory domain** | Everything cluster-side is Kerberos over SSPI as the service account. Without a cross-realm trust — or a cluster whose Kerberos is AD-integrated — no ticket we present is accepted and the pilot cannot begin. If there is no trust, say so early: the fallback puts a keytab on the connector host, which is a decision to record rather than a default | |
+| 1.2 | All | Confirmation the service account is granted **read on the HDFS paths** *(HDFS)*, **`select` on the Hive object** *(Hive)*, and **entity-read in the `cm_atlas` Ranger service** *(Atlas)* | Answer only the clauses for the pieces you are running. The Atlas grant is the one most often missed. Ranger's Hive service says nothing about who may read the *catalogue* — that is a separate service. Without it Atlas answers 403 and the run exits 3 | |
+| 1.3 | All | The **cluster group names** that should see this content | The connector mirrors **group** grants only, never per-user ones. Every group Ranger names has to be mapped; an unmapped group means the item is granted to nobody and is silently skipped | |
+| 1.4 | All | The **Entra group object ID** for each of those groups | Group names alone are not enough — the object ID is what is written onto each indexed item's access list. Reading it needs Microsoft 365 tenant access, so it may not be yours to answer | |
 
 ## 2 · Endpoints
 
-| # | What we need | Why | Your answer |
-|---|---|---|---|
-| 2.1 | **HttpFS / WebHDFS base URL**, ending `/webhdfs/v1` | Must be **https** — the connector refuses plain http. Please give the **TLS** port specifically: 14000 is the plaintext default, and pairing `https://` with it is the most common first-run failure | |
-| 2.2 | **HiveServer2 host, port and transport mode** — binary or HTTP | CDP's default is *binary* on 10000; our shipped configuration assumes *HTTP* on 10001. Getting this explicitly avoids a first connection that simply hangs. HTTP mode also needs the HTTP path, usually `cliservice` | |
-| 2.3 | The **Hive service principal name** (usually `hive`), and whether TLS is enabled | A wrong service principal is rejected with a message that reads like a network fault | |
-| 2.4 | **Ranger Admin base URL** | The TLS port, 6182 rather than 6080. A Ranger we cannot read is deliberately fatal: the run stops rather than indexing content whose access policies it could not check | |
-| 2.5 | **Atlas base URL, without the `/api/atlas` suffix** | The port varies by topology — 31443 in a stock install, different again behind Knox. There is deliberately no default, because a wrong guess fails at the least helpful moment | |
-| 2.6 | The **exact Ranger service names** for HDFS, Hive and Atlas | `cm_hdfs`, `cm_hive` and `cm_atlas` are Cloudera Manager's defaults but are not guaranteed. A wrong name stops the run naming the service, so this is cheap to get wrong — and cheaper to ask | |
+| # | Needed for | What we need | Why | Your answer |
+|---|---|---|---|---|
+| 2.1 | HDFS | **HttpFS / WebHDFS base URL**, ending `/webhdfs/v1` | Must be **https** — the connector refuses plain http. Please give the **TLS** port specifically: 14000 is the plaintext default, and pairing `https://` with it is the most common first-run failure | |
+| 2.2 | Hive | **HiveServer2 host, port and transport mode** — binary or HTTP | CDP's default is *binary* on 10000; our shipped configuration assumes *HTTP* on 10001. Getting this explicitly avoids a first connection that simply hangs. HTTP mode also needs the HTTP path, usually `cliservice` | |
+| 2.3 | Hive | The **Hive service principal name** (usually `hive`), and whether TLS is enabled | A wrong service principal is rejected with a message that reads like a network fault | |
+| 2.4 | All | **Ranger Admin base URL** | The TLS port, 6182 rather than 6080. A Ranger we cannot read is deliberately fatal: the run stops rather than indexing content whose access policies it could not check. Every piece reads Ranger, including Atlas | |
+| 2.5 | Atlas | **Atlas base URL, without the `/api/atlas` suffix** | The port varies by topology — 31443 in a stock install, different again behind Knox. There is deliberately no default, because a wrong guess fails at the least helpful moment | |
+| 2.6 | All | The **exact Ranger service names** for the pieces in scope — HDFS, Hive and Atlas | `cm_hdfs`, `cm_hive` and `cm_atlas` are Cloudera Manager's defaults but are not guaranteed. A wrong name stops the run naming the service, so this is cheap to get wrong — and cheaper to ask | |
 
 ## 3 · Scope of the pilot
 
-| # | What we need | Why | Your answer |
-|---|---|---|---|
-| 3.1 | The **HDFS paths** in scope, absolute | Keep a pilot to one or two directories. This bounds both the cost and the blast radius of getting something wrong | |
-| 3.2 | The **Hive table or view**, as `database.object` | A **view you control** is preferable to a base table: it puts the filtering somewhere a DBA can read | |
-| 3.3 | A **watermark column** and a **key column** on it | An ascending timestamp and a stable key are what make incremental runs possible. Without them every run re-reads everything | |
-| 3.4 | Rough **row and file counts** | Sets the item budget, and tells us whether the pilot approaches the tenant's Copilot item quota before any schema is designed | |
-| 3.5 | Which **Atlas entity types** to catalogue | `hive_db` and `hive_table` are the useful pair. Please note that `hdfs_path` will catalogue **nothing** — see the note at the end | |
+| # | Needed for | What we need | Why | Your answer |
+|---|---|---|---|---|
+| 3.1 | HDFS | The **HDFS paths** in scope, absolute | Keep a pilot to one or two directories. This bounds both the cost and the blast radius of getting something wrong | |
+| 3.2 | Hive | The **Hive table or view**, as `database.object` | A **view you control** is preferable to a base table: it puts the filtering somewhere a DBA can read | |
+| 3.3 | Hive | A **watermark column** and a **key column** on it | An ascending timestamp and a stable key are what make incremental runs possible. Without them every run re-reads everything. HDFS needs no answer here — it uses each file's modification time and path as the equivalent pair | |
+| 3.4 | All | Rough **row and file counts** | Sets the item budget, and tells us whether the pilot approaches the tenant's Copilot item quota before any schema is designed. Weigh it against 3.7 | |
+| 3.5 | Atlas | Which **Atlas entity types** to catalogue | `hive_db` and `hive_table` are the useful pair. Please note that `hdfs_path` will catalogue **nothing** — see the note at the end | |
+| 3.6 | HDFS | What **file types** are in the paths at 3.1, roughly, by count | Text is extracted from **PDF** and the **OpenXML family** — `.docx`, `.docm`, `.xlsx`, `.xlsm`, `.pptx`, `.pptm` — and read directly from plain text. Everything else is indexed by **name and metadata only**: the legacy binary formats (`.doc`, `.xls`, `.ppt`), `.msg`, archives, images, and any PDF that is a scan rather than text, because there is no OCR. A pilot directory of scanned PDFs indexes filenames and looks like a failure | |
+| 3.7 | All | The tenant's **remaining Copilot connector item quota**, if anyone can read it | The quota is **licensed, tenant-wide and shared** with every other connector in the tenant, so a pilot competes with connectors you may not own. It is readable only from `connectionQuota.itemsRemaining` on the Graph **beta** endpoint, and nothing in this connector watches it — you learn you were wrong through error 1008 or 1009, mid-crawl. **Probably not a CDP question:** it needs Microsoft 365 tenant access. Ask early anyway | |
 
 ## 4 · Network and host
 
 **The other long pole.** Firewall changes are rarely quick, so please start
 these in parallel with everything else.
 
-| # | What we need | Why | Your answer |
-|---|---|---|---|
-| 4.1 | Firewall openings from the connector host to **HttpFS, HiveServer2, Ranger and Atlas** | The host has to reach all four | |
-| 4.2 | Outbound **443** from that host to `login.microsoftonline.com` and `graph.microsoft.com` | This connector pushes to Microsoft Graph directly rather than through an on-premises agent, so the host itself needs to reach Microsoft | |
-| 4.3 | Whether **Knox** fronts any of these services | Knox changes every URL to a gateway path and port | |
-| 4.4 | Confirmation the **cluster's CA is trusted** by the Windows host | All four endpoints are TLS, and the connector will not disable certificate validation | |
+| # | Needed for | What we need | Why | Your answer |
+|---|---|---|---|---|
+| 4.1 | All | Firewall openings from the connector host to the services in scope — **HttpFS** *(HDFS)*, **HiveServer2** *(Hive)*, **Atlas** *(Atlas)* — and to **Ranger**, always | Ranger is not optional for any piece, so at least two openings are needed whichever you choose | |
+| 4.2 | All | Outbound **443** from that host to `login.microsoftonline.com` and `graph.microsoft.com` | This connector pushes to Microsoft Graph directly rather than through an on-premises agent, so the host itself needs to reach Microsoft | |
+| 4.3 | All | Whether **Knox** fronts any of these services | Knox changes every URL to a gateway path and port | |
+| 4.4 | All | Confirmation the **cluster's CA is trusted** by the Windows host | Every endpoint above is TLS, and the connector will not disable certificate validation | |
+| 4.5 | Hive | Whether the **Cloudera Hive ODBC driver** may be installed on the connector host, and which version | The Hive connector reaches HiveServer2 through ODBC, and the driver's registered name goes into `Settings:HiveDriver` verbatim. It is a **Cloudera download with its own licence terms**, installed on the Windows host rather than on the cluster, so it usually needs a different approval from everything else here. HDFS and Atlas need no driver | |
+| 4.6 | All | A **SQL Server database** the connector host can reach, for the crawl state store | Recommended rather than required. Without `Settings:StateConnectionString` the connector still crawls, but there is **no run history, no deletion detection and no dashboard** — which is most of what makes a pilot legible to anyone who was not watching the console. Express edition is enough. It holds **no cluster content**: only item IDs, hashes and run rows. See [crawl state deployment](CRAWL-STATE-DEPLOYMENT.md) | |
 
 ## 5 · Ranger policy model
 
 These decide whether six findings from our policy-fidelity review are real work
 or inert on your cluster — and whether the connector will refuse to run at all.
 
-| # | What we need | Why | Your answer |
-|---|---|---|---|
-| 5.1 | Do you use **Ranger Security Zones**? If so, which services and resources does each cover? | The connector **refuses to run** against a service whose policies carry a zone name, rather than reading them zone-blind. Ranger evaluates a zoned resource against that zone's policies only; reading them together would grant indexed content to people the cluster refuses | |
-| 5.2 | Do you use **tag-based policies** — any policy on `cm_tag`, and is Tagsync running against Atlas? | A mask or deny written against an Atlas classification lives on the tag service. We read only the resource services, so a tag policy is invisible to us and a PII-tagged column would be indexed unmasked | |
-| 5.3 | Does any policy use **allow-exceptions, validity periods, or item conditions**? | On a policy edit screen: *Exclude from Allow Conditions*, *Validity Period*, *Deny All Other Accesses*. Each is currently read as though absent, which grants more widely than you intend | |
-| 5.4 | The **policy count** shown in Ranger Admin for the Hive service | We compare it against what the connector reports reading. A round number on our side — 200 is the stock page size — against a larger number on yours means the policy list was being truncated | |
+| # | Needed for | What we need | Why | Your answer |
+|---|---|---|---|---|
+| 5.1 | All | Do you use **Ranger Security Zones**? If so, which services and resources does each cover? | The connector **refuses to run** against a service whose policies carry a zone name, rather than reading them zone-blind. Ranger evaluates a zoned resource against that zone's policies only; reading them together would grant indexed content to people the cluster refuses | |
+| 5.2 | All | Do you use **tag-based policies** — any policy on `cm_tag`, and is Tagsync running against Atlas? | A mask or deny written against an Atlas classification lives on the tag service. We read only the resource services, so a tag policy is invisible to us and a PII-tagged column would be indexed unmasked | |
+| 5.3 | All | Does any policy use **allow-exceptions, validity periods, or item conditions**? | On a policy edit screen: *Exclude from Allow Conditions*, *Validity Period*, *Deny All Other Accesses*. Each is currently read as though absent, which grants more widely than you intend | |
+| 5.4 | All | The **policy count** shown in Ranger Admin for **each service named at 2.6** | We compare it against what the connector reports reading. A round number on our side — 200 is the stock page size — against a larger number on yours means the policy list was being truncated. The truncation is a paging limit rather than a Hive one, so it is worth a count for every service in scope | |
 
 ---
 
