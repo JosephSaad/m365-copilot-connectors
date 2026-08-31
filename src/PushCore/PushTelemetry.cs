@@ -71,7 +71,7 @@ public static class PushTelemetry
     /// release tag: a dashboard that cannot tell which build produced a series
     /// cannot tell an instrumentation change from a behaviour change.
     /// </remarks>
-    public const string Version = "1.7.1";
+    public const string Version = "1.8.0";
 
     /// <summary>Spans: one per run, with a child per phase.</summary>
     public static readonly ActivitySource Source = new(Name, Version);
