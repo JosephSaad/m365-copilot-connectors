@@ -69,7 +69,7 @@ Each outcome then has exactly one decision it does not get to make on preference
 
 | Outcome | The decision it cannot make on preference | What decides it instead |
 |---|---|---|
-| `INDEX IT` | agent-hosted or direct push | the deletion SLA, then the hosting. Only a crawl detects deletions for you |
+| `INDEX IT` | agent-hosted or direct push | the deletion SLA, then the hosting. Only a crawl detects deletions *for* you — on a direct push you build the sweep, and once built the SLA stops deciding |
 | `MODEL IT` | Import, DirectQuery or Direct Lake | OneLake residency, and whether a second copy is permitted |
 | `CALL IT` | federated, action, MCP or ready-made MCP | where the answer must appear, and whether you are writing |
 
@@ -240,7 +240,7 @@ abstract, and the engine decides which modes are available:
 | Same tables via **Hive** | Cloudera Hive ODBC driver, or the Spark connector against HiveServer2 | Import only in practice. Hive on Tez is batch, so DirectQuery lands in tens of seconds |
 | **Spark SQL** | Spark connector against a Thrift server endpoint | both, but inherits session startup latency without a long-running Thrift server |
 | Raw files on **HDFS** | Hadoop File (HDFS) connector over WebHDFS | Import only. No predicate pushdown, file-by-file. Not viable at bank data volumes |
-| **HBase** | Apache Phoenix ODBC driver, or a Hive external table over the HBase table | Import only; added latency rules out DirectQuery |
+| **HBase** | Apache Phoenix ODBC driver, or a Hive external table over the HBase table | Import only; latency rules out DirectQuery |
 | **Iceberg** tables | through Impala or Spark — or a OneLake shortcut, which virtualizes Iceberg metadata as Delta via Apache XTable | DirectQuery through Impala, or **Direct Lake via shortcut** where storage is cloud object storage, not local HDFS |
 | **Kafka / NiFi** streams | no direct path | must land in a queryable store first |
 
@@ -339,9 +339,18 @@ gateway pattern is written.
 
 **The two `INDEX IT` custom leaves are one decision you do not get to make on
 preference.** Agent-hosted needs a Windows host and crawls incrementally, which
-is what lets it delete; direct push runs anywhere with outbound HTTPS and never
-deletes anything. So the deletion SLA picks it, and hosting picks it when the
-SLA does not care.
+is what has deletion detected *for* it. Direct push runs anywhere with outbound
+HTTPS and has nothing detected for it at all: the platform never reports what
+disappeared from the source, so deletion is something you build or something you
+go without.
+
+**Built, it stops being a differentiator.** The direct push in this repository
+records each item's last-seen run in a state database, sweeps what a run stopped
+returning, and refuses the sweep when too much of the source has vanished at
+once — live-tested, including the refusal. Its deletion SLA is therefore the
+crawl interval, the same bound the agent-hosted leaf offers, and **hosting
+decides instead**. Read the two leaves as *detected for you* against *you build
+it once*, rather than as *can* against *cannot*.
 
 Five axes are in play, and only same-axis choices are alternatives:
 
@@ -551,8 +560,17 @@ a removed record has to stop appearing immediately, no index path qualifies.
 There is also a platform backstop worth knowing and not designing against: where
 connection failures stop delete detection working reliably, items not
 rediscovered by a crawl for **28 days** are removed from the index automatically,
-to maintain compliance. `deploy/Compare-SourceToIndex.ps1` finds the orphans a push leaves
-behind and prints the `DELETE` commands without running them.
+to maintain compliance.
+
+**What building it looks like, since this repository has.** Each item's last-seen
+run is recorded in a state database; a sweep removes what a run stopped
+returning; and a guard refuses the sweep when too much of the source has vanished
+at once, so a source that fails to enumerate cannot empty the index behind you.
+That bounds the SLA at the crawl interval rather than at nothing, which is why
+the leaf above stops being decided by deletion. `deploy/Compare-SourceToIndex.ps1`
+remains the independent audit — it finds orphans the sweep missed and prints the
+`DELETE` commands without running them, which is the check for the case where the
+store and the index agree with each other and are both wrong about the source.
 
 **Freshness.** Bounded by crawl interval on every index path. Nothing makes an
 index live. Hourly freshness needs a watermark column, incremental crawls, and
