@@ -1,20 +1,22 @@
 ---
 title: What is next
-description: The four things known to be open — what each one is, why it matters, what would close it, and which of them are decisions rather than work.
-corrected: 2026-08-31, items 2 and 4. See the note at the foot of each.
+description: Three things are open and one is closed — what each is, why it matters, what would close it, and which are decisions rather than work.
+corrected: 2026-08-31, items 2 and 4. Item 4 is closed as accepted.
 ---
 
 # What is next
 
-Four things are open. This is not the backlog — the exhaustive per-feature
-record is [GO-LIVE-READINESS.md](GO-LIVE-READINESS.md), and the routing
-questions are settled in [ROUTING-DECISIONS.md](ROUTING-DECISIONS.md). This page
-is the short list a person needs when they pick the work up again, with enough
-context to act without reading either.
+**Three things are open, and a fourth is closed.** This is not the backlog — the
+exhaustive per-feature record is
+[GO-LIVE-READINESS.md](GO-LIVE-READINESS.md), and the routing questions are
+settled in [ROUTING-DECISIONS.md](ROUTING-DECISIONS.md). This page is the short
+list a person needs when they pick the work up again, with enough context to act
+without reading either.
 
-**Two are work and two are decisions.** The distinction matters, because a
-decision sitting in a work queue looks like something nobody got round to rather
-than something waiting on a person.
+**Two of the three are work; the third is a decision.** The distinction matters,
+because a decision sitting in a work queue looks like something nobody got round
+to rather than something waiting on a person. Item 4 is kept below rather than
+deleted, because a closed item stops being rediscovered as a new one.
 
 Date: 2026-08-31, at `v1.8.1`.
 
@@ -23,7 +25,7 @@ Date: 2026-08-31, at `v1.8.1`.
 | 1 | CDP has never run against a real cluster | Work, gated on a customer | Three of the five routed scenarios |
 | 2 | Two semantic labels are absent | Work | Attribution and creation dates, everywhere |
 | 3 | No production code-signing certificate | Decision, then work | Any install where an operator checks a signature |
-| 4 | A machine name is in committed history | Decision only | Nothing technical |
+| ~~4~~ | ~~A machine name is in committed history~~ | **Closed — accepted 2026-08-31** | Nothing |
 
 ---
 
@@ -148,7 +150,20 @@ The technical half is done.
 
 ---
 
-## 4 · A machine name is in committed history
+## 4 · A machine name is in committed history — **closed, accepted**
+
+> **Decided 2026-08-31: leave it.** The risk is accepted and recorded in
+> [SECURITY.md](SECURITY.md) section 4, item 8, which is the register that
+> outlives this page. Nothing further is owed on it, and it needs no re-decision
+> unless the trigger below fires.
+>
+> **What would reopen it:** a secret, tenant identifier or production host name
+> found anywhere in the same commit range. That changes the calculus entirely and
+> the rewrite happens regardless of cost. Tidiness does not qualify.
+>
+> The rest of this section is kept as the record of what was weighed, so the
+> decision can be audited rather than taken on trust — and so nobody rediscovers
+> the hostname and opens it a second time.
 
 **What.** A development machine's hostname reached
 [GO-LIVE-READINESS.md](GO-LIVE-READINESS.md) inside a verbatim quotation of a
@@ -186,12 +201,12 @@ decides:
   refusal inside the readiness document. In a regulated estate, altering the
   recorded output of a test is a harder question to answer than the hostname is.
 
-**Whose call, and only yours.** Rewriting shared history is not a change to make
-on someone's behalf. The standing position is that it has **not** been done and
-will not be without an explicit instruction. **"Leave it" is the recommendation**
-— and this entry can then be closed as accepted rather than left open. Knowing
-that the blast radius is half again larger than first recorded, and that removal
-is not even guaranteed at the end of it, only strengthens that.
+**What was decided.** Leave it. Rewriting shared history is not a change to make
+on someone's behalf, and it was not made: **no history has been rewritten, no
+branch force-pushed, and no tag moved.** The repository is exactly as it was. The
+decision was taken with the blast radius measured rather than estimated — twelve
+commits, four tags, and no guarantee of removal at the end of it — against an
+exposure that is a hostname on a development rig.
 
 > **Corrected 2026-08-31.** This item first named `bd7fdc2` as the commit holding
 > the original text. `bd7fdc2` contains it, but is not where it entered: a

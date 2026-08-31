@@ -337,6 +337,36 @@ identity must never be granted.
    put a secret in a configuration file, which is the outcome it is competing
    with.
 
+8. **A development machine's hostname is in committed history, and stays there.**
+   **Accepted 2026-08-31 by the repository owner**, after the cost of removal was
+   established rather than estimated.
+
+   The name entered in `8914197` inside a verbatim quotation of a run-lock
+   refusal message in `docs/GO-LIVE-READINESS.md`, and stands in the tree of six
+   commits. The document itself was corrected in `227a8f9` and reads `<host>`;
+   only the history holds the original.
+
+   **Why it is acceptable.** It is a hostname, not a credential — no secret, no
+   tenant identifier, no connection string, and nothing that grants access to
+   anything. The machine is a development rig, not a production host. `gitleaks`
+   runs over the full history and reports clean. The repository is public, so the
+   name is readable, and that is the entire exposure.
+
+   **Why removal was refused.** A rewrite has to begin at `8914197` — starting
+   later removes nothing, because the text survives in every earlier tree — which
+   rewrites twelve commits, moves four tags including the two the `v1.8.1` notes
+   send installers to, and force-pushes both branches. It also would not reliably
+   work: old objects stay reachable by SHA through the GitHub API and in any fork
+   until a support request purges them, so the full cost can be paid without the
+   benefit arriving. And the line is a quotation of live test output inside the
+   readiness document, which makes altering it a harder question to answer in a
+   regulated estate than leaving a hostname in place.
+
+   **What would reopen this.** A secret, tenant identifier or production host
+   name found anywhere in the same range — in which case the calculus changes
+   entirely and the rewrite happens regardless of cost. Routine history rewrites
+   for tidiness do not qualify.
+
 ---
 
 ## 5. Running the evidence
