@@ -517,6 +517,98 @@ followed either by `Server started.` or by a `Fatal` listing every problem.
 
 ---
 
+## 5a. Standing up a second rig beside a live one
+
+Live Test 2 was run this way, and the point of writing it down is that a second
+rig is the only way to test something without doing it to production: a delete
+guard tripping, a partial run, a schema change, a restore. Everything below is
+reproducible and none of it touches the live pair.
+
+**Nothing is shared except the identity.** Same tenant, same app registration,
+same Credential Manager entry, same Entra group. New source database, new state
+database, new connections, new install directory, new dashboard site.
+
+| Live | Test rig |
+|---|---|
+| `Ops` | `Ops2` |
+| `ConnectorState` | `ConnectorState2` |
+| `sqltickets`, `consultingwork` | `sqltickets2`, `consultingwork2` |
+| `C:\Connectors\*` | `C:\Connectors2\*` |
+| IIS site `ConnectorState`, 8080/8443 | IIS site `ConnectorState2`, 8081/8444 |
+
+### 1. The databases
+
+You cannot point the `sql/` scripts at a database that is not the one they name.
+Every one carries a hard-coded `USE`, and `sqlcmd -d` does not override it — it
+sets the *initial* database and the `USE` moves the session straight back to the
+live one. Use `deploy/Invoke-StateScripts.ps1`, which substitutes the name and
+refuses to run if any reference to the original survives:
+
+```powershell
+.\deploy\Invoke-StateScripts.ps1 -Database Ops2 -OriginalName Ops -TrustServerCertificate -Scripts @(
+    'sql/00-sample-source.sql', 'sql/02-soft-delete.sql', 'sql/10-timesheet-source.sql',
+    'sql/11-timesheet-sample-data.sql', 'sql/12-timesheet-views.sql',
+    'sql/26-timesheet-incremental.sql', 'sql/31-timesheet-trigger-health.sql',
+    'sql/35-timesheet-incremental-parity.sql')
+```
+
+then the state set in the order in
+[CRAWL-STATE-DEPLOYMENT.md](CRAWL-STATE-DEPLOYMENT.md). Add
+`sql/14-timesheet-scale-data.sql` against the *test* source only if you want a
+corpus big enough for the numbers to mean anything — it turns 1,118 items into
+111,800 in about six seconds.
+
+### 2. Least privilege, when `sql/25` will not apply
+
+`sql/25` names domain accounts. On a machine that has none, do not invent them
+and do not skip the roles: read what the live database actually grants and
+regenerate it.
+
+```powershell
+# Generates GRANT/DENY statements from the live database's own permissions,
+# so the test rig gets the real model rather than a remembered one.
+sqlcmd -S . -E -C -d ConnectorState -h -1 -W -Q "<see docs/GO-LIVE-READINESS.md, L1>"
+```
+
+Then add the *test* site's application pool to `crawl_reader`, and run
+`sql/42-verify-least-privilege.sql` — it creates users `WITHOUT LOGIN` and uses
+`EXECUTE AS`, so it needs no accounts at all and proves both roles in both
+directions.
+
+### 3. The dashboard site
+
+`deploy/Install-Dashboard-IIS.ps1` is parameterised, so a second site sits
+beside the first:
+
+```powershell
+.\deploy\Install-Dashboard-IIS.ps1 -SiteName ConnectorState2 `
+    -PhysicalPath C:\inetpub\ConnectorState2 `
+    -SourcePath .\artifacts\dashboard -HttpPort 8081 -HttpsPort 8444
+```
+
+**Run it from Windows PowerShell 5.1, elevated — not PowerShell 7.** It calls
+`Get-WindowsOptionalFeature`, and the DISM module is not available in 7; under
+`pwsh` it fails at the first step with `Class not registered`.
+
+Two things that will otherwise waste an hour:
+
+- **The app does not re-read `appsettings.json`.** After changing
+  `CrawlState:ReaderGroups` or the database, touch `web.config` to recycle. Skip
+  that and the site answers from the configuration it started with — which looks
+  exactly like the change having no effect.
+- **The application pool identity needs its own database access.** It is
+  `IIS APPPOOL\<SiteName>`, so the second site's pool is a different principal
+  from the first's and gets `HTTP 500` until it is added to `crawl_reader`.
+
+### 4. Tearing it down
+
+Delete the two connections through Graph, then drop the two databases and the
+IIS site. Leave the live pair alone — and note that the names differ by one
+character, so name the target explicitly in every command rather than relying on
+a default database or a remembered window.
+
+---
+
 ## 6. The CDP connectors (`CdpGraphPush`)
 
 A different deployment from everything above. `CdpGraphPush` is a console tool
