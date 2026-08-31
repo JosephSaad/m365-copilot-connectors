@@ -13,18 +13,63 @@ query it rather than answering it.
 
 **You do not have to answer all of it.** The connector is three independent
 pieces — **HDFS documents**, **Hive contracts** and the **Atlas catalogue** —
-and a pilot may run any one of them on its own. The **Needed for** column says
-which pieces each question serves. Seventeen of the twenty-seven questions apply
-whichever you choose; beyond those, HDFS adds three, Hive five and Atlas two.
-Leave the rest blank.
+and a pilot may run any one of them on its own. **Section 0 decides which**, and
+the **Needed for** column on every question says which pieces it serves.
+Nineteen of the twenty-nine questions apply whichever you choose; beyond those,
+HDFS adds three, Hive five and Atlas two. Leave the rest blank.
 
 Example values are illustrative and use the reserved `corp.example` domain.
 
 ---
 
+## 0 · Which connector do you need?
+
+**Answer this section first — it decides which of the rest apply.**
+
+CDP is a stack rather than a set of alternatives, and the three connectors read
+different layers of it:
+
+| Layer | What it is | Connector |
+|---|---|---|
+| **HDFS** | The distributed filesystem. Everything ultimately lives here | **HDFS documents** — for files that are genuinely documents |
+| **Hive** | Schema and SQL *over* HDFS. A table is a directory of files, plus an entry in the Metastore saying those files have columns | **Hive contracts** — for the rows |
+| **Atlas** | The catalogue: table names, columns, lineage, classifications. Metadata *about* the data, not the data | **Atlas catalogue** — for "which table holds X" |
+
+So "our cluster is mostly tables" and "our cluster acts like a filesystem" are
+both true at once and describe the same estate from two layers. What decides the
+connector is which layer holds the content you want people to find.
+
+| If the content is | You want | |
+|---|---|---|
+| Rows in Hive tables | **Hive contracts** | The common case |
+| Real documents on HDFS — PDFs, Office files, reports in a landing zone | **HDFS documents** | Only if such files exist |
+| A searchable data dictionary | **Atlas catalogue** | Worth running *alongside* Hive rather than instead of it |
+
+**One trap worth naming.** Pointing the HDFS connector at the Hive warehouse
+directory does not index your tables. The files there are Parquet or ORC —
+binary columnar formats from which no text is extracted — so the crawl produces
+items named `part-00000-a3f2b1c8.snappy.parquet` carrying no content, and looks
+like it worked. On CDP 7.1.9 managed tables are transactional as well, so the
+directory holds `base_` and `delta_` subdirectories that mean nothing until
+they are merged. Tables are read through Hive, always.
+
+**There is a security reason for the same rule.** Two different Ranger services
+decide who may read the same bytes: `cm_hive` governs `select` on the table,
+`cm_hdfs` governs read on the underlying files. They routinely disagree, and
+deliberately — many clusters grant `select` broadly and direct file access to
+almost nobody. Column masking and row filtering exist **only** in the Hive
+layer, so reading the files directly bypasses both and returns the unmasked
+column. This connector refuses to read a Hive table carrying a mask or a row
+filter at all, for the same reason.
+
+| # | Needed for | What we need | Why | Your answer |
+|---|---|---|---|---|
+| 0.1 | All | Which pieces the pilot should run — **HDFS documents**, **Hive contracts**, **Atlas catalogue**, or a combination | This routes every other question on the sheet. It is also reversible: adding a piece later costs configuration rather than redesign | |
+| 0.2 | All | The output of `DESCRIBE FORMATTED <database>.<table>` for **one representative table** | Three fields settle the choice. `Table Type` — managed or external. `Location` — inside the warehouse or not. `InputFormat` and `SerDe` — Parquet, ORC or text. A warehouse path holding Parquet or ORC means Hive is the only sensible route. An external table over CSV or JSON is the one case where both connectors are technically viable, and worth a conversation rather than a guess | |
+
 ## 1 · Identity and trust
 
-**Ask for these first.** Sections 2 to 5 can be answered in any order; these
+**Ask for these next.** Sections 2 to 5 can then be answered in any order; these
 gate everything, and two of them go through other people's queues.
 
 | # | Needed for | What we need | Why | Your answer |

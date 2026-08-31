@@ -27,7 +27,7 @@ documentation that ships with it.
 | | |
 |---|---|
 | [**What a source must guarantee**](SOURCE-CONTRACT.md) | The four hard requirements a source has to meet before a direct push can detect deletions, skip unchanged items and resume — and what a source that meets only some of them still gets |
-| [**What we need from the CDP team**](CDP-PILOT-PARAMETERS.md) | The parameters to collect before a pilot — what is asked, why, and a column to answer in |
+| [**What we need from the CDP team**](CDP-PILOT-PARAMETERS.md) | The parameters to collect before a pilot — what is asked, why, and a column to answer in. Opens by deciding **which of the three connectors** the pilot needs, then marks every question with the pieces it serves, so a customer running one of them answers a third of the sheet |
 | [**What we need from the SQL team**](SQL-PILOT-PARAMETERS.md) | The same, for a SQL Server source — covering both the agent-hosted and direct-push paths |
 | [**Production onboarding**](PRODUCTION-ONBOARDING.md) | The other half of go-live readiness: who owns the connection, who is woken when a run fails, and which numbers somebody has to accept in writing — every row named and owned |
 | [**How the items actually appear**](COPILOT-SURFACING.md) | Result types, verticals and activities: what Microsoft Search renders from, what Copilot renders from instead, which half has a Graph API and which needs a Search Administrator — and why a timesheet database cannot produce activity signals |
