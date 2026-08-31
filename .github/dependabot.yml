@@ -1,27 +1,49 @@
 # ===========================================================================
-# Dependabot configuration.
+# Dependabot configuration. SECURITY UPDATES ONLY.
 #
 # Alerts and security updates are enabled on the repository itself. This file
-# adds scheduled version updates, so the dependency graph is kept current rather
-# than only reacting to advisories, and so the policy is reviewable in the
-# repository instead of living in a settings page nobody reads.
+# used to add scheduled version updates as well; it no longer does, and
+# open-pull-requests-limit: 0 is how that is switched off. Everything else here
+# is kept deliberately - see "why the file survives" below.
 #
-# On the ignore rules below: they suppress version-update pull requests only.
-# Dependabot ALERTS are a separate mechanism and fire for every package whatever
-# this file says, so an ignored package still raises an advisory for a human to
-# judge. That distinction is what makes it safe to ignore the three pinned gRPC
-# and protobuf packages outright: an advisory there needs the migration project
-# described in docs/SECURITY.md section 3, not an automated bump.
+# WHY VERSION UPDATES WERE TURNED OFF, since the reason is structural rather
+# than a preference. Every version-update pull request from here failed
+# build/Test-OfflinePackageList.ps1, and always would have. That check compares
+# the pinned offline package list against the resolved restore graph, so an
+# air-gapped rebuild restores from a known set; a version bump changes the graph
+# by definition, and regenerating the list is a hand-run step Dependabot has no
+# way to perform. The result was a weekly pull request that built green, tested
+# green, and could never go in as raised. Evidence: #15 on 2026-08-31, bumping
+# System.Data.Odbc 9.0.0 to 10.0.11 - 0 errors and 0 warnings on both target
+# frameworks, then "no longer matches the net10.0 restore graph (62 packages
+# resolved, 62 listed for this target)". Same count, different contents, which
+# is the check being content-sensitive on purpose.
 #
-# Every pull request from here fails the offline package list check, because a
-# bump is drift by definition and Dependabot cannot regenerate the list. That is
-# expected, and it is the last check in the job so the build and tests still
-# report first. Before merging one of these, run:
+# SECURITY UPDATES STILL ARRIVE, and that is the whole point of using the limit
+# rather than deleting the block. GitHub's documentation is explicit: "Security
+# update pull requests are not subject to this limit and do not count toward
+# it." Alerts are a third mechanism again and fire regardless of anything here.
+#
+# TAKING A BUMP BY HAND is now the route for a non-security update, and it is
+# one change rather than two:
 #
 #     dotnet restore SqlTicketsConnector.sln
 #     pwsh build/Test-OfflinePackageList.ps1 -Configuration Base -Update
 #
-# and commit the result onto the branch.
+# Commit the edited Directory.Packages.props and the regenerated list together.
+# A security pull request needs the same treatment before it can merge, so
+# expect a red check on one and finish it by hand rather than reading the red as
+# a reason to leave an advisory open.
+#
+# WHY THE FILE SURVIVES rather than being deleted. The ignore rules below have
+# to stay: they carry evidence that took two failed pull requests to establish,
+# and they take effect again the moment somebody restores the limit. They are
+# also, per the same documentation, "only affect[ing] version updates, not
+# security updates" - so they were never suppressing an advisory, and they are
+# not suppressing one now. The consequence worth knowing: an advisory against
+# the three pinned gRPC and protobuf packages WILL raise a pull request that
+# cannot be merged as a bump, because it needs the migration project described
+# in docs/SECURITY.md section 3.
 # ===========================================================================
 
 version: 2
@@ -34,7 +56,13 @@ updates:
       day: "monday"
       time: "07:00"
       timezone: "Europe/London"
-    open-pull-requests-limit: 5
+    # Zero disables VERSION updates for this ecosystem. Security update pull
+    # requests are not subject to this limit and do not count toward it, so they
+    # continue to arrive. Restoring scheduled version updates is this one number
+    # - but read the offline package list note in the header first, because the
+    # pull requests it produces still cannot merge without a hand-run step.
+    open-pull-requests-limit: 0
+
     labels:
       - "dependencies"
       - "security"
