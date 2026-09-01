@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1554 742" width="1554" height="742" role="img" aria-label="Simplified decision tree for routing a Copilot question. Gate one: do the askers hold M365 licences - if not, Azure AI Foundry. Gate two: who owns the data. Owned data passes a content-and-group-access gate and then a freshness-and-deletion-SLA gate before being indexed, splitting into a synced gallery connector, an agent-hosted custom connector and a direct push. Data that is row-level secured or computed, and that models cleanly, goes to a Power BI semantic model as Direct Lake, Import or DirectQuery. Vendor-licensed data goes to a live tool call - a federated connector, an API action, an MCP server you build, or a ready-made one - unless a signed AI rider permits indexing. This is the reduced-text copy: the per-leaf cost, effort and caveat lines are in copilot-route-decision-tree.svg.">
+  <title>Routing a Copilot question by ownership, then by residency, then by cost</title>
+  <desc>Five gates decide between indexing content in a synced Copilot connector, modelling it in Power BI, and fetching it live with a tool call. Ownership routes first; freshness and deletion SLA decide the owned branch; OneLake residency picks the semantic model's storage mode; licensed vendor data goes live by default, and a federated Copilot connector is the live path that still reaches Microsoft 365 Copilot chat.</desc>
+
+  <style>
+    :root, svg {
+      --ground:  #FFFFFF;
+      --surface: #FFFFFF;
+      --alt:     #E8EEF5;
+      --ink:     #1B2733;
+      --muted:   #55636F;
+      --rule:    #AFBECB;
+      --accent:  #0A3B68;
+      --asoft:   #E4EDF6;
+      --risk:    #C0453A;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root, svg {
+        --ground:  #0B1620;
+        --surface: #12202D;
+        --alt:     #1A2C3C;
+        --ink:     #E6EDF3;
+        --muted:   #9AAAB8;
+        --rule:    #33475A;
+        --accent:  #EE7623;
+        --asoft:   #17303F;
+        --risk:    #E38175;
+      }
+    }
+    .bg      { fill: var(--ground); }
+    .n-box   { fill: var(--surface); stroke: var(--rule); stroke-width: 1.25; }
+    .n-gate  { fill: var(--alt); stroke: var(--muted); stroke-width: 1.25; }
+    .n-start { fill: var(--asoft); stroke: var(--accent); stroke-width: 1.5; }
+    .n-index { fill: var(--asoft); stroke: var(--accent); stroke-width: 1.75; }
+    .n-call  { fill: var(--alt);   stroke: var(--ink);   stroke-width: 1.75; }
+    .n-model { fill: var(--asoft); stroke: var(--accent); stroke-width: 1.75; stroke-dasharray: 6 3; }
+    .n-esc   { fill: var(--alt);   stroke: var(--rule);  stroke-width: 1.25; stroke-dasharray: 3 3; }
+
+    text { font-family: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif; }
+    .t-title { fill: var(--ink);   font-size: 13px; font-weight: 600; }
+    .t-body  { fill: var(--ink);   font-size: 12.5px; }
+    .t-cost  { fill: var(--muted); font-size: 10.5px; font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+    .t-edge  { fill: var(--muted); font-size: 10.5px; font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+    .t-accent{ fill: var(--accent); font-size: 13.5px; font-weight: 600; letter-spacing: .05em; }
+    .t-risk  { fill: var(--risk);  font-size: 10.5px; font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+    .t-leaf  { fill: var(--muted); font-size: 9.5px; font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+    .t-leafr { fill: var(--risk);  font-size: 9.5px; font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+
+    .edge      { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+    .edge-risk { stroke: var(--risk);  stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+    .tick      { stroke: var(--rule);  stroke-width: 1.25; fill: none; }
+    .head      { fill: var(--muted); }
+    .head-risk { fill: var(--risk); }
+  </style>
+
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" class="head"/>
+    </marker>
+    <marker id="ar-risk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" class="head-risk"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1554" height="742"/>
+
+  <!-- START -->
+  <rect class="n-start" x="560" y="18" width="200" height="44" rx="3"/>
+  <text class="t-title" x="660" y="45" text-anchor="middle">A question for Copilot</text>
+  <path class="edge" d="M660,62 L660,94" marker-end="url(#ar)"/>
+
+  <!-- GATE 1 -->
+  <rect class="n-gate" x="528" y="96" width="264" height="48" rx="3"/>
+  <text class="t-body" x="660" y="125" text-anchor="middle">Do the askers hold M365 licences?</text>
+
+  <path class="edge" d="M792,120 L934,120" marker-end="url(#ar)"/>
+  <text class="t-edge" x="863" y="111" text-anchor="middle">no</text>
+  <rect class="n-esc" x="936" y="80" width="558" height="44" rx="3"/>
+  <text class="t-title" x="1215" y="107" text-anchor="middle">Azure AI Foundry</text>
+
+  <path class="edge" d="M660,144 L660,178" marker-end="url(#ar)"/>
+  <text class="t-edge" x="672" y="167">yes</text>
+
+  <!-- GATE 2 -->
+  <rect class="n-gate" x="528" y="180" width="264" height="48" rx="3"/>
+  <text class="t-body" x="660" y="209" text-anchor="middle">Who owns the data?</text>
+
+  <path class="edge" d="M660,228 L660,256 L265,256 L265,288" marker-end="url(#ar)"/>
+  <path class="edge" d="M660,256 L1215,256 L1215,288" marker-end="url(#ar)"/>
+  <text class="t-edge" x="452" y="248" text-anchor="middle">we own it</text>
+  <text class="t-edge" x="940" y="248" text-anchor="middle">licensed from a vendor</text>
+
+  <!-- GATE 3 : owned -->
+  <rect class="n-gate" x="110" y="290" width="310" height="74" rx="3"/>
+  <text class="t-body" x="265" y="317" text-anchor="middle">Is it content &#8212; and is access</text>
+  <text class="t-body" x="265" y="336" text-anchor="middle">expressible as Entra groups?</text>
+
+  <!-- GATE 4 : licensed -->
+  <rect class="n-gate" x="1050" y="290" width="330" height="74" rx="3"/>
+  <text class="t-body" x="1215" y="317" text-anchor="middle">Does the licence permit indexing</text>
+  <text class="t-body" x="1215" y="336" text-anchor="middle">and AI grounding?</text>
+
+  <!-- GATE 3 outputs -->
+  <path class="edge" d="M180,364 L180,398" marker-end="url(#ar)"/>
+  <text class="t-edge" x="190" y="386">both yes</text>
+  <path class="edge" d="M390,364 L390,505"/>
+  <text class="t-edge" x="400" y="392">either one is no</text>
+
+  <!-- GATE 3b : the SLA gate -->
+  <rect class="n-gate" x="60" y="400" width="280" height="76" rx="3"/>
+  <text class="t-body" x="200" y="427" text-anchor="middle">Can you live with crawl-interval</text>
+  <text class="t-body" x="200" y="446" text-anchor="middle">freshness and crawl-bound deletion?</text>
+
+  <path class="edge" d="M140,476 L140,598" marker-end="url(#ar)"/>
+  <text class="t-edge" x="150" y="530">yes</text>
+  <path class="edge" d="M300,476 L300,505"/>
+  <text class="t-edge" x="310" y="496">no</text>
+
+  <!-- shared trunk to CALL, with a branch into MODEL -->
+  <path class="edge" d="M300,505 L1080,505 L1080,598" marker-end="url(#ar)"/>
+  <path class="edge" d="M390,505 L390,532 L696,532 L696,598" marker-end="url(#ar)"/>
+  <text class="t-edge" x="543" y="525" text-anchor="middle">row-level or computed, and it models cleanly</text>
+
+  <!-- GATE 4 outputs -->
+  <path class="edge" d="M1330,364 L1330,598" marker-end="url(#ar)"/>
+  <text class="t-edge" x="1340" y="430">no &#8212; the usual answer</text>
+
+  <path class="edge-risk" d="M1100,364 L1100,578 L250,578 L250,598" marker-end="url(#ar-risk)"/>
+  <text class="t-risk" x="480" y="570" text-anchor="middle">yes, with a signed AI rider &#8212; rare, and audited</text>
+
+  <!-- OUTCOME BANDS -->
+  <rect class="n-index" x="60" y="600" width="388" height="52" rx="3"/>
+  <text class="t-accent" x="254" y="630" text-anchor="middle">INDEX IT</text>
+
+  <rect class="n-model" x="478" y="600" width="436" height="52" rx="3"/>
+  <text class="t-title" x="696" y="630" text-anchor="middle">MODEL IT</text>
+
+  <rect class="n-call" x="944" y="600" width="550" height="52" rx="3"/>
+  <text class="t-title" x="1219" y="630" text-anchor="middle">CALL IT</text>
+
+  <!-- ticks -->
+  <path class="tick" d="M122,652 L122,676"/>
+  <path class="tick" d="M254,652 L254,676"/>
+  <path class="tick" d="M386,652 L386,676"/>
+  <path class="tick" d="M548,652 L548,676"/>
+  <path class="tick" d="M696,652 L696,676"/>
+  <path class="tick" d="M844,652 L844,676"/>
+  <path class="tick" d="M1010,652 L1010,676"/>
+  <path class="tick" d="M1149,652 L1149,676"/>
+  <path class="tick" d="M1288,652 L1288,676"/>
+  <path class="tick" d="M1427,652 L1427,676"/>
+
+  <!-- INDEX leaves -->
+  <rect class="n-box" x="60" y="678" width="124" height="40" rx="3"/>
+  <text class="t-title" x="122" y="702" text-anchor="middle">Gallery: synced</text>
+
+  <rect class="n-box" x="192" y="678" width="124" height="40" rx="3"/>
+  <text class="t-title" x="254" y="702" text-anchor="middle">Custom: agent</text>
+
+  <rect class="n-box" x="324" y="678" width="124" height="40" rx="3"/>
+  <text class="t-title" x="386" y="702" text-anchor="middle">Custom: push</text>
+
+  <!-- MODEL leaves -->
+  <rect class="n-box" x="478" y="678" width="140" height="40" rx="3"/>
+  <text class="t-title" x="548" y="702" text-anchor="middle">Direct Lake</text>
+
+  <rect class="n-box" x="626" y="678" width="140" height="40" rx="3"/>
+  <text class="t-title" x="696" y="702" text-anchor="middle">Import</text>
+
+  <rect class="n-box" x="774" y="678" width="140" height="40" rx="3"/>
+  <text class="t-title" x="844" y="702" text-anchor="middle">DirectQuery</text>
+
+  <!-- CALL leaves -->
+  <rect class="n-index" x="944" y="678" width="133" height="40" rx="3"/>
+  <text class="t-title" x="1010" y="702" text-anchor="middle">Federated</text>
+
+  <rect class="n-box" x="1083" y="678" width="133" height="40" rx="3"/>
+  <text class="t-title" x="1149" y="702" text-anchor="middle">API action</text>
+
+  <rect class="n-box" x="1222" y="678" width="133" height="40" rx="3"/>
+  <text class="t-title" x="1288" y="702" text-anchor="middle">MCP server</text>
+
+  <rect class="n-esc" x="1361" y="678" width="133" height="40" rx="3"/>
+  <text class="t-title" x="1427" y="702" text-anchor="middle">Ready-made MCP</text>
+</svg>

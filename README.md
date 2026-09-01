@@ -149,6 +149,7 @@ docs/
   release-diff.html                   What changed in the current release range, file by file - published at
                                       josephsaad.github.io/m365-copilot-connectors/release-diff.html
   copilot-route-decision-tree.png / .svg / -dark.png  The routing drawing embedded by COPILOT-ROUTING.md
+  copilot-route-decision-tree-simple.png / .svg       The same drawing with the small print dropped, for slides
   copilot-surface-matrix.png           The capability-by-surface matrix as a standalone image
   copilot-delivery-paths.png           The delivery-path matrix as a standalone image
   GENESIS-PROMPT.md                    The prompt that produces this repository, and why it looks like this
