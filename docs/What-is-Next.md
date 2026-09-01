@@ -1,31 +1,86 @@
 ---
 title: What is next
-description: Three things are open and one is closed — what each is, why it matters, what would close it, and which are decisions rather than work.
-corrected: 2026-08-31, items 2 and 4. Item 4 is closed as accepted.
+description: What is open and what is closed — the Ranger constructs that fail open, the CDP cluster gate, the two absent labels, the signing certificate, and one accepted risk.
+corrected: 2026-08-31. Item 0 added from the first CDP answers; items 2 and 4 corrected; item 4 closed as accepted.
 ---
 
 # What is next
 
-**Three things are open, and a fourth is closed.** This is not the backlog — the
+**Four things are open, and a fifth is closed.** This is not the backlog — the
 exhaustive per-feature record is
 [GO-LIVE-READINESS.md](GO-LIVE-READINESS.md), and the routing questions are
 settled in [ROUTING-DECISIONS.md](ROUTING-DECISIONS.md). This page is the short
 list a person needs when they pick the work up again, with enough context to act
 without reading either.
 
-**Two of the three are work; the third is a decision.** The distinction matters,
-because a decision sitting in a work queue looks like something nobody got round
-to rather than something waiting on a person. Item 4 is kept below rather than
-deleted, because a closed item stops being rediscovered as a new one.
+**Three of the four are work; the fourth is a decision.** The distinction
+matters, because a decision sitting in a work queue looks like something nobody
+got round to rather than something waiting on a person. Item 4 is kept below
+rather than deleted, because a closed item stops being rediscovered as a new one.
+
+**Start at item 0.** It is the only open item that is blocking and waiting on
+nobody, and one half of it writes an over-permissive ACL rather than failing.
 
 Date: 2026-08-31, at `v1.8.1`.
 
 | # | | Kind | Blocks |
 |---|---|---|---|
+| **0** | **The Ranger evaluator ignores four constructs, and two fail open** | **Work, ours, blocking** | **Any CDP pilot at this customer** |
 | 1 | CDP has never run against a real cluster | Work, gated on a customer | Three of the five routed scenarios |
 | 2 | Two semantic labels are absent | Work | Attribution and creation dates, everywhere |
 | 3 | No production code-signing certificate | Decision, then work | Any install where an operator checks a signature |
 | ~~4~~ | ~~A machine name is in committed history~~ | **Closed — accepted 2026-08-31** | Nothing |
+
+Item 0 is numbered zero because it arrived after the others and displaces all of
+them. It is the only thing on this page that is **blocking, unblocked and ours**
+at once — no customer, no procurement and no decision standing in front of it.
+
+---
+
+## 0 · The Ranger evaluator ignores four constructs, and two fail open
+
+**What.** A first customer answered section 5 of
+[CDP-PILOT-PARAMETERS.md](CDP-PILOT-PARAMETERS.md) on 2026-08-31: **no Security
+Zones**, **`cm_tag` policies configured**, **policy exceptions configured**. The
+first answer is good — `RefuseSecurityZones` will not fire. The other two name
+constructs this connector does not read.
+
+| Construct | Where | Behaviour | Direction |
+|---|---|---|---|
+| `allowExceptions`, `denyExceptions` | `RangerPolicyClient.cs:340` reads `policyItems` and `denyPolicyItems` only | Silently ignored | **Fails open** |
+| Tag policies on `cm_tag` | only `RangerHdfsService` and `RangerSqlService` are fetched | Never seen | **Fails open** |
+| User-level grants | `RoutingEvaluator` reads `item.Groups`, never `item.Users` | Silently dropped | Fails closed |
+| `validitySchedules`, item `conditions`, `isDenyAllElse` | not parsed anywhere | Read as absent | Mixed |
+
+**Why it matters, and why it is item 0.** An `allowExceptions` block exists
+precisely to carve principals **out** of a grant. Ignoring it means the connector
+computes an ACL that admits exactly the people the policy excludes, and writes
+that to the index — which is the failure this codebase exists to refuse. It is
+worse than the tag gap because it is silent: Security Zones stop the run with a
+message, and these do not. The user-level gap points the other way and is
+therefore only expensive — content quietly missing rather than quietly exposed.
+
+**What would close it.** The fix shape already exists **in the same file**.
+`RefuseSecurityZones` is the precedent: detect the construct, refuse the run,
+name what to do. In rough order of value:
+
+1. **Refuse on a non-empty `allowExceptions`/`denyExceptions`**, before anything
+   is written. That converts a silent over-grant into a stopped run, and it is a
+   day's work rather than a design.
+2. **Then evaluate them**, which is the real fix and needs Ranger's precedence
+   rules honoured rather than guessed.
+3. **Refuse, or warn loudly, when `cm_tag` holds any masking or deny policy** —
+   already documented as a known gap in
+   [SENSITIVITY-LABELS.md](SENSITIVITY-LABELS.md), now a live one.
+4. **Decide what a user-level grant means.** A Graph ACL here carries Entra group
+   object IDs, so a Ranger grant to an individual may be unrepresentable rather
+   than merely unimplemented. That is a design answer, not a code change.
+
+**Gated on nothing.** The five follow-up questions that size it — masking and
+row-filter policies in scope, whether the exceptions name groups or users, how
+many in-scope policies carry one, whether any tag policy denies or masks, and a
+read-only JSON export of `cm_hive` and `cm_hdfs` — are with the customer. The
+refusal at step 1 does not wait for any of them.
 
 ---
 
@@ -59,7 +114,10 @@ these three.
 3. Let the failures set the build order. Writing more CDP code before a cluster
    has answered a single request is how the second untested thing gets built.
 
-**Gated on** a customer answering the sheet. Nothing here is blocked on us.
+**Gated on** a customer answering the sheet — but no longer *only* on them. The
+first three answers arrived on 2026-08-31 and produced **item 0**, which is
+entirely ours. Point 3 above said the failures should set the build order; these
+are the first failures, and they landed before a single cluster call.
 
 ---
 
