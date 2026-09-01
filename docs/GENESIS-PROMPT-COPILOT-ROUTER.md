@@ -82,10 +82,14 @@ the short-version questions; and a caveats section holding **only what the
 reader alone can check**.
 
 Self-containment is absolute: fonts embedded as base64 `@font-face` data URIs
-(IBM Plex Sans variable, IBM Plex Mono, Spectral — all SIL OFL), every colour
-from CSS custom properties, the tree inline. The page is pinned dark
-(`color-scheme: dark` on `:root`) because it is a reference read on screens,
-and the palette is part of how it reads.
+(IBM Plex Sans variable, IBM Plex Mono — both SIL OFL), every colour
+from CSS custom properties, the tree inline. The page is pinned light
+(`color-scheme: light` on `:root`) because it is a reference read on screens,
+and the palette is part of how it reads. Keep `color-scheme` in step with the
+palette whenever the palette changes: left on `dark` under a light palette, the
+browser draws dark radios, focus rings and scrollbars onto a white page, and
+only the controls give it away. Carry no typeface the page has stopped using —
+dropping the heading serif took 40KB of dead base64 with it.
 
 A visible **revision stamp** sits in the footer — date, `rN`, and a one-line
 delta. It exists because stale browser caches produced three rounds of "your
@@ -283,10 +287,15 @@ weeks of being written the first time.
 
 ## 7. Design system
 
-Dark, pinned. Ground `#0C1214`, surfaces `#141C1E`/`#1B2427`, ink `#E4EBEA`,
-muted `#94A3A6`, rules `#253032`/`#354245`, accent `#58C4AF` on `#16302E`,
-semantic marks: full `#4FB187`, partial `#D3A244`, risk `#E38175` on
-`#33201D`. Spectral for headings, IBM Plex Sans for body, IBM Plex Mono for
+Light, pinned. Ground `#F4F7FA`, surfaces `#FFFFFF`/`#E8EEF5`, ink `#1B2733`,
+muted `#55636F`, rules `#D4DCE4`/`#AFBECB`, navy `#0A3B68` on `#E4EDF6`, and a
+warm accent `#EE7623` carrying the eyebrows, the short rule under every
+heading, the step counters and the left edge of every callout card. Semantic
+marks: full `#4C9A51`, partial `#C0801C`, risk `#C0453A` on `#FBEEEC`. Table
+heads are navy bands with white text, and the "added" markers on them go pale
+orange `#FFB877` so they stay legible against the navy. IBM Plex Sans for
+headings and body — 600 is the heaviest weight the embedded variable font
+carries, so never ask for 700 — and IBM Plex Mono for
 eyebrows, stamps, table captions and everything tabular. Tables live in
 `overflow-x: auto` scrollers; the wide delivery table gets `table.wide` with a
 raised min-width. Marks are `<span class="mark m-full|m-partial|m-none">` —
@@ -299,8 +308,10 @@ misalignment.
 
 ## 8. The tree
 
-One drawing, two homes: inline in the page (sharing the page's tokens) and a
-standalone SVG with its own light palette plus a `prefers-color-scheme` block.
+One drawing, three homes: inline in the page (sharing the page's tokens), a
+standalone SVG with its own light palette plus a `prefers-color-scheme` block,
+and a reduced-text copy of that standalone for slides, which keeps the gates,
+the edges and the outcome bands and drops every line of small print.
 Keep a single source for the body and assemble; after every change assert
 **every `<text>` node of the standalone SVG appears verbatim in the page** —
 the parity check that catches a half-applied edit.

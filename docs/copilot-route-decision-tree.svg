@@ -4,26 +4,26 @@
 
   <style>
     :root, svg {
-      --ground:  #FBFCFC;
-      --surface: #FBFCFC;
-      --alt:     #E9EEEC;
-      --ink:     #111819;
-      --muted:   #55656A;
-      --rule:    #B6C2BF;
-      --accent:  #12514E;
-      --asoft:   #E0EAE8;
-      --risk:    #A0392F;
+      --ground:  #FFFFFF;
+      --surface: #FFFFFF;
+      --alt:     #E8EEF5;
+      --ink:     #1B2733;
+      --muted:   #55636F;
+      --rule:    #AFBECB;
+      --accent:  #0A3B68;
+      --asoft:   #E4EDF6;
+      --risk:    #C0453A;
     }
     @media (prefers-color-scheme: dark) {
       :root, svg {
-        --ground:  #0C1214;
-        --surface: #141C1E;
-        --alt:     #1B2427;
-        --ink:     #E4EBEA;
-        --muted:   #94A3A6;
-        --rule:    #354245;
-        --accent:  #58C4AF;
-        --asoft:   #16302E;
+        --ground:  #0B1620;
+        --surface: #12202D;
+        --alt:     #1A2C3C;
+        --ink:     #E6EDF3;
+        --muted:   #9AAAB8;
+        --rule:    #33475A;
+        --accent:  #EE7623;
+        --asoft:   #17303F;
         --risk:    #E38175;
       }
     }

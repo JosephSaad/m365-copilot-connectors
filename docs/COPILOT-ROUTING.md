@@ -271,11 +271,21 @@ calls.
 
 The editable source of the drawing is
 [`copilot-route-decision-tree.svg`](copilot-route-decision-tree.svg); the PNG
-above (2480×1692) is what the markdown embeds, so the picture renders
+above (3108×2132) is what the markdown embeds, so the picture renders
 identically everywhere — including viewers that do not rasterise SVG. A
 dark-theme render of the same drawing ships as
 [`copilot-route-decision-tree-dark.png`](copilot-route-decision-tree-dark.png)
 for decks and dark documents.
+
+A reduced-text copy ships as
+[`copilot-route-decision-tree-simple.svg`](copilot-route-decision-tree-simple.svg),
+rendered to
+[`copilot-route-decision-tree-simple.png`](copilot-route-decision-tree-simple.png).
+It keeps the gates, the edge labels and the three outcome bands with their
+leaves; it drops the per-leaf cost and effort lines, the *asked in words by*
+box and the footnote paragraph — 34 text nodes against 95, on a canvas 742px
+tall rather than 1066. Use it on a slide, where the full drawing's small print
+does not survive projection, and the full one wherever the reader can zoom.
 
 **Read the four `CALL IT` leaves as wire protocols, not deployables.** An API
 action is an OpenAPI spec and a manifest that a declarative agent or a Copilot
