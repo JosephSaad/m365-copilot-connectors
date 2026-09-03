@@ -235,7 +235,21 @@ for both `Settings:RangerHdfsService` (default `cm_hdfs`) and
 `Settings:RangerSqlService` (default `cm_hive`). Ranger Admin must accept
 Kerberos — the connector authenticates with SPNEGO and has no other mode.
 
-`cdpatlascatalog` reads only `Settings:RangerSqlService`. The policies on a
+`cdpatlascatalog` reads only `Settings:RangerSqlService`.
+
+**`Settings:RangerTagService` (default `cm_tag`) is read too, and only ever to
+refuse on.** This connector evaluates the resource plane; a tag policy is
+invisible to it, so a tag DENY would be read as absent and an indexed item
+granted to people the cluster refuses. Control CDP-19 therefore reads the tag
+service once per run and stops with exit 4 when any enabled policy on it denies
+or masks. A tag policy that only **grants** is ignored, because not reading one
+under-grants and costs content rather than exposing it.
+
+Set it to empty **only** once you have established the cluster has no tag
+service. Empty means "there is nothing to check", and on a cluster that simply
+did not configure the name here that is a silent over-grant rather than a
+clean run. The crawl identity needs read on the tag service to make the check
+possible at all. The policies on a
 table are what decide who may see its catalogue entry, and this connector asks
 Ranger no other question.
 

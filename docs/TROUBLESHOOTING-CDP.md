@@ -101,6 +101,8 @@ command after any configuration change.
 | A deleted file or dropped row is still returned | [7](#stage-7--a-push-never-deletes) |
 | Exit 3, "Atlas refused this identity" | [8](#exit-3-and-the-ranger-service-that-is-not-hadoop-sql) — `cm_atlas`, which is not the Hadoop SQL service |
 | Exit 4, "Atlas at ... could not be reached" or "... returned N" | [8](#an-atlas-that-cannot-be-read-stops-the-run) |
+| Exit 4, "has polic(y/ies) carrying an allowExceptions block / a condition / a validity schedule / isDenyAllElse" | [Ranger constructs](#a-policy-carrying-something-the-evaluator-cannot-honour) — control CDP-18 |
+| Exit 4, "tag service ... holds N polic(y/ies) that deny or mask" | [The tag plane](#a-tag-policy-that-denies-or-masks) — control CDP-19 |
 | A table has no catalogue entry in search | [8](#an-entry-missing-from-search) — four causes, only one of which logs |
 | A catalogue entry exists but the table's rows are not indexed | [8](#the-entry-is-there-and-the-data-is-not) — **correct, and not a defect** |
 | A catalogue entry describes fewer columns than the table has | [8](#fewer-columns-described-than-the-table-has) |
@@ -1290,3 +1292,55 @@ logged, because they echo the request and a Java stack trace into a file a wider
 group can read than can read the cluster. `klist` prints principal names and
 ticket lifetimes, not keys, and the Atlas status document is a service state,
 not a catalogue: it names no database, table or column.
+
+
+## A policy carrying something the evaluator cannot honour
+
+**Symptom.** Exit 4 before anything is written, naming one or more of
+`allowExceptions`, `a condition`, `a validity schedule` or `isDenyAllElse`, with
+policy ids.
+
+**What it means.** This connector evaluates `policyItems`, `denyPolicyItems` and
+`allowExceptions`. It does **not** evaluate conditions or validity schedules,
+and reading either as absent makes the cluster more permissive than it is — so
+the run stops rather than writing an access-control list it knows to be too
+generous. Control CDP-18.
+
+**Why it is not a warning.** A warning is read once and then not again, and the
+failure it would be warning about is invisible: nothing downstream can tell an
+over-granted item from a correct one.
+
+**What to do.** Either remove the construct from the policies covering the
+crawled resources, or scope the crawl to resources no such policy covers. The
+message names the policy ids so you can open them directly in Ranger Admin.
+
+**What will not work.** There is no setting that disables it. A time-varying
+rule — a condition on a date, a validity window — has no representation in a
+Microsoft 365 permission at all, which is a static snapshot with no clock, so
+there is nothing to fall back to that would not be a guess.
+
+**One case that does not stop the run:** `denyExceptions`, and a grant to a
+named user. Both are logged as a warning. They fail closed — content the cluster
+would show is left out of the index rather than content it hides being put in —
+and a guard that fired on the safe direction would teach operators to disable
+guards.
+
+## A tag policy that denies or masks
+
+**Symptom.** Exit 4, naming `Settings:RangerTagService` and a count of policies
+that deny or mask.
+
+**What it means.** Tag-based policies live on a separate Ranger service and are
+evaluated against Atlas classifications rather than against resources. This
+connector reads resource services only, so a tag deny is invisible to it.
+Control CDP-19.
+
+**What to do.** Establish whether Tagsync is running against Atlas and whether
+any in-scope table or column actually carries a classification one of those
+policies acts on. If nothing in scope does, the risk is theoretical and the
+service name can be cleared with that established. If something does, tag
+fidelity has to be designed for before the first crawl.
+
+**What will not work.** Pointing `Settings:RangerTagService` at a service that
+does not exist, to make the message go away. A missing service is treated as
+absence and skips the check, which is correct only when the absence is real.
