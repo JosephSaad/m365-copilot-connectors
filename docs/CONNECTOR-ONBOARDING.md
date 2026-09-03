@@ -155,6 +155,8 @@ running.
 | 7.2 | Who is woken when a run fails? | **OPERATIONAL** | A connector nobody is paged for is a connector that stops silently |
 | 7.3 | What reconciles source against index? | **OPERATIONAL** | Without a per-source reconciliation query, a silent divergence is never detected |
 | 7.4 | Who owns the connection, and who accepts the staleness bound in writing? | **OPERATIONAL** | Not an engineering question, and it blocks go-live regardless |
+| 7.5 | Is a **ConnectorState** database available, and who owns it? | **BLOCKING** | Four things need it: incremental reads, the single-instance run lock, run history, and both reconcilers. Without it the connector reads in full every run and cannot be reconciled at all — and an empty inventory is not evidence the index is empty |
+| 7.6 | Which **read-only login** will run the reconcilers? | **OPERATIONAL** | Not the connector's own: `sql/25` DENYs `crawl_writer` SELECT on the crawl views on purpose |
 
 ---
 
@@ -164,9 +166,9 @@ running.
 
 | # | Question | Marker | How to answer it |
 |---|---|---|---|
-| S.1 | Is **Row-Level Security** applied? | **BLOCKING** | `SELECT * FROM sys.security_predicates` — and note the SQL connector does **not** currently guard this |
-| S.2 | Is **Dynamic Data Masking** applied to any column? | **BLOCKING** | `SELECT * FROM sys.masked_columns WHERE object_id = OBJECT_ID('<VIEW>')` |
-| S.3 | Are any columns **Always Encrypted**? | **BLOCKING** | Ciphertext indexes silently and is useless to every reader |
+| S.1 | Is **Row-Level Security** applied? | **BLOCKING** | `SELECT * FROM sys.security_predicates`. **Stops nothing in code:** four connectors refuse a source that enforces per user, the SQL one does not, so this answer is the only control |
+| S.2 | Is **Dynamic Data Masking** applied to any column? | **BLOCKING** | `SELECT * FROM sys.masked_columns WHERE object_id = OBJECT_ID('<VIEW>')`. Also unguarded |
+| S.3 | Are any columns **Always Encrypted**? | **BLOCKING** | Ciphertext indexes silently and is useless to every reader. Also unguarded — MongoDB refuses its equivalent, SQL Server does not |
 | S.4 | Which view is authoritative, and can the push identity read **views only**? | **BLOCKING** | Control SQL-7: the crawl identity should not reach the base tables |
 | S.5 | Entra token, Windows integrated, or SQL login from the vault? | **BLOCKING** | Control SQL-1 sets the preference order |
 | S.6 | Modification timestamp, and does it **cascade from children**? | **BLOCKING** | `sql/26` installs the cascading triggers; without them incremental misses hierarchy edits |
@@ -179,12 +181,12 @@ running.
 | # | Question | Marker | How to answer it |
 |---|---|---|---|
 | C.1 | Which of the **three connectors** are in scope? | **BLOCKING** | Section 0 of `CDP-PILOT-PARAMETERS.md`. Decides whether one, two or three get built |
-| C.2 | Are Ranger **security zones** in use? | **BLOCKING** | Yes stops the run: `RefuseSecurityZones`, exit 4, control CDP-17 |
-| C.3 | **Tag policies** on `cm_tag`, and is **Tagsync** running against Atlas? | **BLOCKING** | The connector reads resource services only and never the tag service |
-| C.4 | Any **allowExceptions / denyExceptions** on read-carrying policies? | **BLOCKING** | Neither is parsed. An unread `allowExceptions` admits exactly the people the policy excludes |
+| C.2 | Are Ranger **security zones** in use? | **BLOCKING** | **Stops the run.** Exit 4, `RefuseSecurityZones`, control CDP-17 |
+| C.3 | **Tag policies** on `cm_tag`, and is **Tagsync** running against Atlas? | **BLOCKING** | **Stops the run** if any tag policy denies or masks: exit 4, control CDP-19. One that only grants is ignored. `Settings:RangerTagService` defaults to `cm_tag` |
+| C.4 | Any **allowExceptions / denyExceptions** on read-carrying policies? | **BLOCKING** | `allowExceptions` are now **evaluated** — the groups are subtracted from the grant. `denyExceptions` are read and logged. Control CDP-18 |
 | C.5 | Do any policies grant to **named users** rather than groups? | **BLOCKING** | `RoutingEvaluator` reads `item.Groups` and never `item.Users` |
-| C.6 | Any **validitySchedules** or item **conditions**? | **BLOCKING** | Not parsed, and a time-varying grant has no representation in a Graph ACL |
-| C.7 | Any in-scope Hive table carrying a **row filter or column mask**? | **BLOCKING** | Those tables cannot be indexed at all: CDP-1 and CDP-2 |
+| C.6 | Any **validitySchedules** or item **conditions**? | **BLOCKING** | **Stops the run.** A time-varying grant has no representation in a Graph permission, which is a static snapshot with no clock. Control CDP-18 |
+| C.7 | Any in-scope Hive table carrying a **row filter or column mask**? | **BLOCKING** | **Stops that table.** Controls CDP-1 and CDP-2 |
 | C.8 | The exact **Ranger service names**? | **BLOCKING** | `cm_hive` and `cm_hdfs` are assumptions until confirmed |
 | C.9 | Columns **tokenized at rest**, or masked by Ranger? | **BLOCKING** | Opposite outcomes: a mask skips the table, at-rest indexes tokens |
 | C.10 | HDFS **encryption zone**, and does the account need a KMS key ACL? | **BLOCKING** | KMS appears in the tag policy permission set |
@@ -205,6 +207,7 @@ running.
 | O.7 | Is there a modification timestamp column? | **BLOCKING** | `ORA_ROWSCN` is **not** an answer: it is block-level unless the table was built with `ROWDEPENDENCIES`, so rows sharing a block share a marker |
 | O.8 | Easy Connect string or TNS alias, and is a wallet in play? | **OPERATIONAL** | Oracle has no Server-plus-Database pair; one value carries both |
 | O.9 | Database version 12c or later? | **SIZING** | The reader uses `FETCH FIRST`, which 11g does not have |
+| O.10 | Which column carries **classifications**, if labels are wanted? | **OPERATIONAL** | The connector reads a `CLASSIFICATIONS` column, comma-separated. The label property is registered whether or not you use it, because a registered schema is append-only |
 
 ## MongoDB
 
@@ -218,6 +221,8 @@ running.
 | M.6 | Which **roles** grant read, and how do they map to Entra groups? | **BLOCKING** | `db.getRoles({showPrivileges: true})` |
 | M.7 | Are documents deleted outright, or flagged? | **BLOCKING** | A hard delete needs a full-crawl inventory diff |
 | M.8 | Replica set or sharded, and is there a read-preference requirement? | **OPERATIONAL** | A crawl should read from a secondary where one exists |
+| M.9 | Is the source a **GridFS bucket** rather than a collection? | **SIZING** | Detected, not configured — a bucket is the pair `<name>.files` and `<name>.chunks`. In bucket mode each file's text is extracted and items are typed File |
+| M.10 | Which field carries **classifications**, if labels are wanted? | **OPERATIONAL** | An array or a comma-separated string |
 
 ## Teradata
 
@@ -230,6 +235,7 @@ running.
 | T.5 | Is there a modification timestamp per in-scope table? | **BLOCKING** | Teradata has no universal one |
 | T.6 | Is the estate the system of record, or a downstream copy? | **SIZING** | Indexing a copy indexes yesterday's answer, and nobody reading the result will know |
 | T.7 | Is there a query band or workload rule a crawl must set? | **OPERATIONAL** | A long full-corpus read can land in the wrong workload class and be throttled |
+| T.9 | Which column carries **classifications**, if labels are wanted? | **OPERATIONAL** | Same `CLASSIFICATIONS` contract as Oracle |
 
 ---
 
