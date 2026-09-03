@@ -368,8 +368,19 @@ larger, more narrative items ground better and cost less.
 | 8 | Which tables are text rather than measures — the split is the scoping question here; a `DBC.SecConstraintsV` inventory; a modification timestamp per in-scope table |
 
 **Sources 6 to 8 have no code at all yet.** They are routed, not built: the
-verdicts above are the design input to `ADDING-A-PUSH-CONNECTOR.md`, and nothing
-in `src/` reads Oracle, MongoDB or Teradata today. Three further facts govern
+verdicts above are the design input to `ADDING-A-PUSH-CONNECTOR.md`.
+
+**Reconciliation now covers all five**, which it did not when this page was
+written. `Compare-SourceToIndex.ps1` reads `dbo.Tickets` and does not
+generalise — four of the five sources have no SQL Server table to read.
+`Compare-InventoryToIndex.ps1` needs no source at all: it reconciles
+`crawl.vwItemInventory`, the connector's own record of every item it wrote, kept
+in `ConnectorState` by the `PushCore.State` every connector shares. It reports
+per item type, because the reference path is the **hierarchy** connector, which
+writes three types into one connection and would hide a single-type divergence
+in a combined total. What it cannot see is a source record that was never
+pushed — that direction needs a source query, which is the half that does not
+generalise, and the run says so rather than implying coverage it does not have. Three further facts govern
 what building them costs: `PushCore.Sql` is bound to `Microsoft.Data.SqlClient`
 rather than `DbConnection`, so the relational path does not extend to Oracle or
 Teradata unchanged; each new driver adds a pin to `Directory.Packages.props` and
