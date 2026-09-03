@@ -17,7 +17,7 @@
 
 namespace CdpGraphPush;
 
-using CdpConnector.Extraction;
+using Connector.Extraction;
 using CdpConnector.Source;
 using CdpConnector.Source.Acl;
 using CdpConnector.Source.Hdfs;

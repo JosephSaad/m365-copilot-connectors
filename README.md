@@ -25,7 +25,7 @@ byte and unmodified.
 | `SqlHierarchyPush` | The same, for a three level hierarchy: Customer → Engagement → TimeEntry | Same |
 | `CdpGraphPush` | The same, for Cloudera CDP 7.1.9. **Three connectors in one executable**, each with its own connection and configuration file: HDFS documents (`cdphdfsdocs`), Hive tables (`cdphivecontracts`) and the Apache Atlas catalogue (`cdpatlascatalog`), with per-item ACLs and Ranger routing | Windows host with Kerberos to the cluster and outbound HTTPS to Graph |
 | `CdpConnector.Source` | HttpFS/WebHDFS, Hive over ODBC, the Atlas catalogue over SPNEGO, Ranger policies, ACL mapping, watermarks | Class library, referenced by `CdpGraphPush` |
-| `CdpConnector.Extraction` | File bytes to indexable text: text formats and Open XML with the BCL, PDF behind a build flag | Class library, referenced by `CdpGraphPush` |
+| `Connector.Extraction` | File bytes to indexable text: text formats and Open XML with the BCL, PDF behind a build flag | Class library, referenced by `CdpGraphPush` |
 
 Connector ID: `9e5e2b95-e7ab-4266-98c7-4f7868d377bf`
 Default port: `30303`
@@ -214,7 +214,7 @@ src/
     Ranger/                            Policy client, and the rules deciding what may be indexed at all
     Acl/                               Cluster groups to Entra grants, fail closed
     Watermark/                         The composite marker and its atomic checkpoint file
-  CdpConnector.Extraction/
+  Connector.Extraction/
     Text, HTML and Open XML with the BCL; PDF only with -p:EnablePdfExtraction=true
 hadoop/
   00-create-hdfs-test-data.sh          Documents with three different permission shapes

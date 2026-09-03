@@ -50,7 +50,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PushCore", "src\PushCore\Pu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PushCore.Sql", "src\PushCore.Sql\PushCore.Sql.csproj", "{6A7BD01A-0D90-4F98-802A-E3798192A65E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CdpConnector.Extraction", "src\CdpConnector.Extraction\CdpConnector.Extraction.csproj", "{02F304F9-EFA9-4429-9040-95CA5BE0C9AD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Connector.Extraction", "src\Connector.Extraction\Connector.Extraction.csproj", "{02F304F9-EFA9-4429-9040-95CA5BE0C9AD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CdpConnector.Source", "src\CdpConnector.Source\CdpConnector.Source.csproj", "{641B3E80-F738-4057-8908-DD012A05D2E4}"
 EndProject

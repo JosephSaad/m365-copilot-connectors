@@ -18,7 +18,7 @@
 // megabytes of shared strings and this runs against thousands of them.
 // ---------------------------------------------------------------------------
 
-namespace CdpConnector.Extraction;
+namespace Connector.Extraction;
 
 using System.IO.Compression;
 using System.Text;

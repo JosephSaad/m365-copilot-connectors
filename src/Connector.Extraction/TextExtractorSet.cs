@@ -28,7 +28,7 @@
 // the code.
 // ---------------------------------------------------------------------------
 
-namespace CdpConnector.Extraction;
+namespace Connector.Extraction;
 
 /// <summary>The extractors available, indexed by extension.</summary>
 public sealed class TextExtractorSet

@@ -39,7 +39,7 @@
 namespace CdpConnector.Source.Hdfs;
 
 using System.Runtime.CompilerServices;
-using CdpConnector.Extraction;
+using Connector.Extraction;
 using CdpConnector.Source.Acl;
 using CdpConnector.Source.Ranger;
 using CdpConnector.Source.Watermark;

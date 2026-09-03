@@ -26,8 +26,8 @@
     <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>CdpConnector.Extraction</RootNamespace>
-    <AssemblyName>CdpConnector.Extraction</AssemblyName>
+    <RootNamespace>Connector.Extraction</RootNamespace>
+    <AssemblyName>Connector.Extraction</AssemblyName>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(EnablePdfExtraction)' == 'true'">

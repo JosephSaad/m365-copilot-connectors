@@ -69,7 +69,7 @@ Nine projects in one Visual Studio solution, plus the test project:
 | `SqlGraphPush` | Direct `PUT /external/connections/{id}/items/{itemId}` — one flat table | Operator workstation |
 | `SqlHierarchyPush` | The same, for a three level hierarchy | Operator workstation |
 | `CdpGraphPush` | The same, for Cloudera CDP 7.1.9: HDFS documents, Hive tables, and the Atlas catalogue | Windows host with Kerberos to the cluster |
-| `CdpConnector.Source` + `CdpConnector.Extraction` | HttpFS/WebHDFS, Hive over ODBC, Ranger, Atlas, ACLs, watermarks; and file bytes to text | Class libraries, referenced by `CdpGraphPush` |
+| `CdpConnector.Source` + `Connector.Extraction` | HttpFS/WebHDFS, Hive over ODBC, Ranger, Atlas, ACLs, watermarks; and file bytes to text | Class libraries, referenced by `CdpGraphPush` |
 
 Two connector models are being demonstrated deliberately: the **SDK** model,
 where Microsoft's agent holds the tenant relationship and calls your gRPC
