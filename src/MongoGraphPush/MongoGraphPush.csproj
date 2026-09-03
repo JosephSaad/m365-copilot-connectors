@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MongoGraphPush</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      PushCore.Db is deliberately absent. MongoDB is not relational: there is no
+      query-and-row-mapping shape to slot into, so this connector implements
+      IPushSource directly - Path B in ADDING-A-PUSH-CONNECTOR.md. It still sits
+      on the same engine, and inherits $batch, throttling, change detection, the
+      delete sweep, checkpointing and redaction unchanged.
+    -->
+    <ProjectReference Include="..\PushCore\PushCore.csproj" />
+    <ProjectReference Include="..\PushCore.State\PushCore.State.csproj" />
+    <ProjectReference Include="..\Connector.Security\Connector.Security.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MongoDB.Driver" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>

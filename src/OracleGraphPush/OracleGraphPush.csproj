@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>OracleGraphPush</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The engine, the state store, and the provider-agnostic relational source
+      family. PushCore.Sql is deliberately absent: this tool opens no SQL Server
+      connection and should not carry SqlClient's advisories.
+    -->
+    <ProjectReference Include="..\PushCore\PushCore.csproj" />
+    <ProjectReference Include="..\PushCore.State\PushCore.State.csproj" />
+    <ProjectReference Include="..\PushCore.Db\PushCore.Db.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The one place Oracle's driver is referenced in this solution. -->
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>
