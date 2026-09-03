@@ -71,16 +71,19 @@ namespace SqlTicketsConnector.Tests
         }
 
         [Fact]
-        public async Task An_allowExceptions_block_stops_the_run()
+        public async Task An_allowExceptions_block_no_longer_stops_the_run()
         {
-            string message = await Refusal(
+            // Step 2: it is EVALUATED now rather than refused. It is static, so
+            // honouring it is permanent, and it can only ever remove groups from
+            // a grant - see RoutingEvaluator.NarrowByExceptions.
+            IReadOnlyList<RangerPolicy> policies = await Read(
                 "{\"id\":7,\"isEnabled\":true,\"policyType\":0," +
                 "\"policyItems\":[{\"groups\":[\"analysts\"],\"accesses\":[{\"type\":\"select\",\"isAllowed\":true}]}]," +
                 "\"allowExceptions\":[{\"groups\":[\"contractors\"]}]}");
 
-            Assert.Contains("allowExceptions", message, StringComparison.Ordinal);
-            Assert.Contains("7", message, StringComparison.Ordinal);
-            Assert.Contains("too generous", message, StringComparison.Ordinal);
+            Assert.Single(policies);
+            Assert.True(policies[0].HasAllowExceptions);
+            Assert.Equal("contractors", policies[0].AllowExceptions[0].Groups[0]);
         }
 
         [Fact]
@@ -120,12 +123,15 @@ namespace SqlTicketsConnector.Tests
         }
 
         [Fact]
-        public async Task isDenyAllElse_stops_the_run()
+        public async Task isDenyAllElse_no_longer_stops_the_run()
         {
-            string message = await Refusal(
+            // Also evaluated: the grant is intersected with the policy's own
+            // allow list rather than unioned with it.
+            IReadOnlyList<RangerPolicy> policies = await Read(
                 "{\"id\":10,\"isEnabled\":true,\"policyType\":0,\"isDenyAllElse\":true}");
 
-            Assert.Contains("isDenyAllElse", message, StringComparison.Ordinal);
+            Assert.Single(policies);
+            Assert.True(policies[0].DeniesAllElse);
         }
 
         [Fact]
@@ -170,17 +176,22 @@ namespace SqlTicketsConnector.Tests
         }
 
         [Fact]
-        public async Task The_refusal_names_every_construct_it_found()
+        public async Task Only_the_time_varying_constructs_are_named_in_the_refusal()
         {
+            // A policy carrying all three stops on the schedule alone. Naming
+            // the evaluated two would send an operator to remove something the
+            // connector now handles.
             string message = await Refusal(
                 "{\"id\":14,\"isEnabled\":true,\"policyType\":0," +
                 "\"allowExceptions\":[{\"groups\":[\"c\"]}]," +
                 "\"validitySchedules\":[{\"startTime\":\"2026/01/01 00:00:00\"}]," +
                 "\"isDenyAllElse\":true}");
 
-            Assert.Contains("allowExceptions", message, StringComparison.Ordinal);
-            Assert.Contains("validity schedule", message, StringComparison.Ordinal);
-            Assert.Contains("isDenyAllElse", message, StringComparison.Ordinal);
+            // The message still MENTIONS both, to say they are handled - what it
+            // must not do is list them as reasons the run stopped.
+            Assert.Contains("carrying a validity schedule", message, StringComparison.Ordinal);
+            Assert.DoesNotContain("an allowExceptions block", message, StringComparison.Ordinal);
+            Assert.Contains("no longer refused here", message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -188,7 +199,7 @@ namespace SqlTicketsConnector.Tests
         {
             string message = await Refusal(
                 "{\"id\":15,\"isEnabled\":true,\"policyType\":0," +
-                "\"allowExceptions\":[{\"groups\":[\"c\"]}]}");
+                "\"validitySchedules\":[{\"startTime\":\"2026/01/01 00:00:00\"}]}");
 
             Assert.Contains("no setting that disables this", message, StringComparison.Ordinal);
         }

@@ -151,7 +151,7 @@ public sealed class RangerPolicy
     /// as absent - which grants an indexed item to exactly the people the
     /// policy excludes. It OVER-grants, so a policy carrying one stops the run.
     /// </summary>
-    public bool HasAllowExceptions { get; set; }
+    public bool HasAllowExceptions => this.AllowExceptions.Count > 0;
 
     /// <summary>
     /// Gets or sets a value indicating whether the policy carries a
@@ -161,7 +161,7 @@ public sealed class RangerPolicy
     /// the cluster exempts, which costs content rather than exposing it. Warned
     /// about, not refused.
     /// </summary>
-    public bool HasDenyExceptions { get; set; }
+    public bool HasDenyExceptions => this.DenyExceptions.Count > 0;
 
     /// <summary>
     /// Gets or sets a value indicating whether any item or the policy itself
@@ -207,6 +207,27 @@ public sealed class RangerPolicy
 
     /// <summary>Gets the items that deny.</summary>
     public IList<RangerPolicyItem> Deny { get; } = new List<RangerPolicyItem>();
+
+    /// <summary>Gets the items carved OUT of this policy's grants.</summary>
+    /// <remarks>
+    /// Now evaluated rather than merely detected. A principal named here is not
+    /// granted by this policy however many of its allow items match, so the
+    /// groups are SUBTRACTED from what Allow produces. Ignoring the block was
+    /// the over-grant CDP-18 refused on: it admitted exactly the people the
+    /// policy excludes.
+    /// </remarks>
+    public IList<RangerPolicyItem> AllowExceptions { get; } = new List<RangerPolicyItem>();
+
+    /// <summary>Gets the items carved OUT of this policy's denies.</summary>
+    /// <remarks>
+    /// Read, and deliberately NOT used to grant. This connector already refuses
+    /// to index any resource a deny covers rather than mirroring the deny, so
+    /// exempting somebody from that deny could only widen what is indexed - and
+    /// the exemption is exactly the sort of narrow, conditional carve-out that
+    /// should not be the reason a table becomes indexable. Not honouring it
+    /// under-grants, which costs content rather than exposing it.
+    /// </remarks>
+    public IList<RangerPolicyItem> DenyExceptions { get; } = new List<RangerPolicyItem>();
 
     /// <summary>Gets the values configured for one resource, or an empty list.</summary>
     /// <param name="name">The resource name, for example "table".</param>

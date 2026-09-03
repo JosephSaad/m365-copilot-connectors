@@ -312,10 +312,13 @@ public sealed class RangerPolicyClient : IDisposable
 
         var reasons = new List<string>();
 
-        Count("an allowExceptions block", policy => policy.HasAllowExceptions);
+        // allowExceptions and isDenyAllElse are no longer here: RoutingEvaluator
+        // evaluates both, and both are static so evaluating them is permanent.
+        // What remains is the pair that depends on the clock, which a static
+        // Graph permission cannot express at all - so refusing is not a
+        // stop-gap for them, it is the answer.
         Count("a condition", policy => policy.HasConditions);
         Count("a validity schedule", policy => policy.HasValiditySchedules);
-        Count("isDenyAllElse", policy => policy.DeniesAllElse);
 
         if (reasons.Count == 0)
         {
@@ -323,8 +326,7 @@ public sealed class RangerPolicyClient : IDisposable
         }
 
         List<long> ids = live
-            .Where(policy => policy.HasAllowExceptions || policy.HasConditions ||
-                             policy.HasValiditySchedules || policy.DeniesAllElse)
+            .Where(policy => policy.HasConditions || policy.HasValiditySchedules)
             .Select(policy => policy.Id)
             .ToList();
 
@@ -336,13 +338,16 @@ public sealed class RangerPolicyClient : IDisposable
         }
 
         throw new InvalidOperationException(
-            $"Ranger service '{serviceName}' has polic(y/ies) carrying {string.Join(", ", reasons)}, and this " +
-            "connector evaluates none of them. It reads policyItems and denyPolicyItems only, so each of these " +
-            "is read as absent - and every one of them makes the cluster MORE restrictive than this connector " +
-            "would compute, which means an indexed item would be granted to people Ranger refuses. The run " +
-            "stops rather than writing an access-control list it knows to be too generous. Either remove the " +
-            "construct from the policies covering the crawled resources, or scope the crawl to resources no " +
-            $"such policy covers. Policy ids: {named}. There is no setting that disables this.");
+            $"Ranger service '{serviceName}' has polic(y/ies) carrying {string.Join(", ", reasons)}, and " +
+            "neither can be honoured by ANY amount of evaluation. Both make the policy's answer depend on the " +
+            "clock - an expiry date, a time window - and a Graph permission is a static snapshot written when " +
+            "the crawl runs, with nowhere to put one. Reading them correctly would produce an access-control " +
+            "list that is right at the moment it is written and silently wrong afterwards, which is worse than " +
+            "stopping: a loud refusal would become a quiet divergence nobody is watching for. Exceptions and " +
+            "isDenyAllElse are no longer refused here - they are static, and RoutingEvaluator now evaluates " +
+            "them. Either remove the time-varying construct from the policies covering the crawled resources, " +
+            $"or scope the crawl to resources no such policy covers. Policy ids: {named}. There is no setting " +
+            "that disables this.");
 
         void Count(string description, Func<RangerPolicy, bool> predicate)
         {
@@ -547,8 +552,11 @@ public sealed class RangerPolicyClient : IDisposable
             // The constructs this evaluator does not honour. They are read only
             // so the guard below can refuse them: none of them is acted on, and
             // reading one as absent is exactly the failure being guarded.
-            policy.HasAllowExceptions = HasEntries(element, "allowExceptions");
-            policy.HasDenyExceptions = HasEntries(element, "denyExceptions");
+            // Read as ITEMS now, not merely counted: the evaluator subtracts
+            // the allow exceptions from what the allow items grant.
+            ReadItems(element, "allowExceptions", policy.AllowExceptions);
+            ReadItems(element, "denyExceptions", policy.DenyExceptions);
+
             policy.HasValiditySchedules = HasEntries(element, "validitySchedules");
 
             policy.DeniesAllElse = element.TryGetProperty("isDenyAllElse", out JsonElement denyAll) &&

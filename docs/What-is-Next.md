@@ -71,6 +71,13 @@ fires on the safe direction teaches operators to disable guards. A disabled
 policy is exempt, because it decides nothing. Eleven tests pin it, including one
 asserting the guard does **not** fire on an ordinary policy set.
 
+**Step 2 is done for the half that can be done.** `RoutingEvaluator` now
+evaluates `allowExceptions` and `isDenyAllElse` — the two static constructs —
+rather than refusing on them. The other half is not pending work: `conditions`
+and `validitySchedules` depend on the clock, and a Graph permission has nowhere
+to put one, so evaluating them would replace a loud refusal with a quiet
+divergence. They stay refused, and that is the answer rather than a stop-gap.
+
 **Step 3 is done too, as control CDP-19.** `RefuseTagPoliciesAsync` reads
 `Settings:RangerTagService` once per client and stops the run when any enabled
 tag policy denies or masks. A tag policy that only grants is ignored: not
