@@ -61,6 +61,25 @@ public sealed class MongoRecordsPushConnector : IPushConnector
             PushSchema.Prop("lastModified", PropertyType.DateTime, queryable: true, retrievable: true,
                 label: Label.LastModifiedDateTime),
 
+
+            // The label the engine derives from the source's classifications,
+            // when a Sensitivity mapping is configured. Registered
+            // UNCONDITIONALLY and written only when the mapping is on, for the
+            // reason AtlasCatalogueConnector gives: a registered schema is
+            // append-only, so a property added after a connection reaches Ready
+            // cannot be PATCHed in - the alternative is deleting the connection
+            // and every item in it the day somebody wants the mapping.
+            //
+            // String, not StringCollection: one item has ONE label. Several
+            // classifications collapse to the most restrictive, which is why the
+            // mapping is an ordered list.
+            PushSchema.Prop(
+                SensitivityOptions.DefaultProperty,
+                PropertyType.String,
+                queryable: true,
+                retrievable: true,
+                refinable: true),
+
             PushSchema.Prop("url", PropertyType.String, retrievable: true, label: Label.Url));
     }
 

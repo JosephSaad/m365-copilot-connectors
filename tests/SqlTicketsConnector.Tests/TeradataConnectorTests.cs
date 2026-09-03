@@ -48,7 +48,11 @@ namespace SqlTicketsConnector.Tests
         [Fact]
         public void The_schema_matches_the_other_relational_connectors()
         {
-            string[] expected = { "recordId", "title", "status", "owner", "lastModified", "url" };
+            string[] expected =
+            {
+                "recordId", "title", "status", "owner", "lastModified",
+                SensitivityOptions.DefaultProperty, "url",
+            };
 
             Assert.Equal(
                 expected,
@@ -180,6 +184,7 @@ namespace SqlTicketsConnector.Tests
                 ["OWNER"] = "jsmith",
                 ["BODY"] = "The body",
                 ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc),
+                ["CLASSIFICATIONS"] = null,
             });
 
             PushItem? item = new TeradataRecordsPushConnector().MapRow(reader, Options());
@@ -200,6 +205,7 @@ namespace SqlTicketsConnector.Tests
                 ["OWNER"] = "jsmith",
                 ["BODY"] = "Body",
                 ["LAST_MODIFIED"] = DateTime.UtcNow,
+                ["CLASSIFICATIONS"] = null,
             });
 
             Assert.Null(new TeradataRecordsPushConnector().MapRow(reader, Options()));
@@ -219,6 +225,7 @@ namespace SqlTicketsConnector.Tests
                 ["OWNER"] = "o",
                 ["BODY"] = "b",
                 ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                ["CLASSIFICATIONS"] = null,
             };
 
             PushItem? teradata = new TeradataRecordsPushConnector()
@@ -308,12 +315,36 @@ namespace SqlTicketsConnector.Tests
                 ["OWNER"] = "o",
                 ["BODY"] = "b",
                 ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc),
+                ["CLASSIFICATIONS"] = null,
             });
 
             PushItem? item = new TeradataRecordsPushConnector().MapRow(reader, Options());
 
             Assert.NotNull(item!.LastModifiedUtc);
             Assert.Equal(DateTimeKind.Utc, item.LastModifiedUtc!.Value.Kind);
+        }
+
+        [Fact]
+        public void The_schema_registers_the_sensitivity_label_property()
+        {
+            Assert.Contains(
+                SensitivityOptions.DefaultProperty,
+                new TeradataRecordsPushConnector().BuildSchema().Properties!.Select(p => p.Name));
+        }
+
+        [Fact]
+        public void Classifications_are_reported_from_the_source()
+        {
+            var reader = new FakeDbDataReader(new Dictionary<string, object?>
+            {
+                ["RECORD_ID"] = (byte)1, ["TITLE"] = "t", ["STATUS"] = "s", ["OWNER"] = "o", ["BODY"] = "b",
+                ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                ["CLASSIFICATIONS"] = "Restricted",
+            });
+
+            PushItem? item = new TeradataRecordsPushConnector().MapRow(reader, Options());
+
+            Assert.Equal(new[] { "Restricted" }, item!.Classifications);
         }
     }
 }

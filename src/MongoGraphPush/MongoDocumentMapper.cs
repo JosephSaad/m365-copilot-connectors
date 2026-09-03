@@ -12,6 +12,7 @@
 namespace MongoGraphPush;
 
 using System.Globalization;
+using System.Linq;
 using MongoDB.Bson;
 using PushCore;
 
@@ -70,6 +71,18 @@ public static class MongoDocumentMapper
         item.Properties["lastModified"] = Modified(document, id);
         item.Properties["url"] = string.Format(
             CultureInfo.InvariantCulture, options.DataSource.ItemUrlTemplate, key);
+
+        // The engine maps these to a label and decides indexability; the mapper
+        // only reports what the document said.
+        if (document.TryGetValue("classifications", out BsonValue tags) && tags.IsBsonArray)
+        {
+            string[] values = tags.AsBsonArray
+                .Where(v => v.IsString && v.AsString.Length > 0)
+                .Select(v => v.AsString)
+                .ToArray();
+
+            item.Classifications = values.Length > 0 ? values : null;
+        }
 
         return item;
     }

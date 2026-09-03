@@ -73,6 +73,25 @@ public sealed class TeradataRecordsPushConnector : IDbPushConnector
             PushSchema.Prop("lastModified", PropertyType.DateTime, queryable: true, retrievable: true,
                 label: Label.LastModifiedDateTime),
 
+
+            // The label the engine derives from the source's classifications,
+            // when a Sensitivity mapping is configured. Registered
+            // UNCONDITIONALLY and written only when the mapping is on, for the
+            // reason AtlasCatalogueConnector gives: a registered schema is
+            // append-only, so a property added after a connection reaches Ready
+            // cannot be PATCHed in - the alternative is deleting the connection
+            // and every item in it the day somebody wants the mapping.
+            //
+            // String, not StringCollection: one item has ONE label. Several
+            // classifications collapse to the most restrictive, which is why the
+            // mapping is an ordered list.
+            PushSchema.Prop(
+                SensitivityOptions.DefaultProperty,
+                PropertyType.String,
+                queryable: true,
+                retrievable: true,
+                refinable: true),
+
             PushSchema.Prop("url", PropertyType.String, retrievable: true, label: Label.Url));
     }
 
@@ -131,7 +150,7 @@ public sealed class TeradataRecordsPushConnector : IDbPushConnector
             : string.Empty;
 
         string select =
-            $"SELECT {top}RECORD_ID, TITLE, STATUS, OWNER, BODY, LAST_MODIFIED " +
+            $"SELECT {top}RECORD_ID, TITLE, STATUS, OWNER, BODY, LAST_MODIFIED, CLASSIFICATIONS " +
             $"FROM {options.Source.ItemView}";
 
         var where = new List<string>();
@@ -329,7 +348,28 @@ public sealed class TeradataRecordsPushConnector : IDbPushConnector
         item.Properties["url"] = string.Format(
             CultureInfo.InvariantCulture, options.DataSource.ItemUrlTemplate, id);
 
+        // The raw source classifications. The ENGINE maps them to a label and
+        // decides whether the item is indexable at all; this connector only
+        // reports what the source said, which is the split that keeps the
+        // policy in one place for every connector.
+        item.Classifications = Classifications(DbRead.Text(reader, "CLASSIFICATIONS"));
+
         return item;
+    }
+
+    /// <summary>Splits a delimited classification list, or none.</summary>
+    /// <param name="value">The column value.</param>
+    /// <returns>The classifications, or null when the column is empty.</returns>
+    private static IReadOnlyList<string>? Classifications(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        string[] parts = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        return parts.Length > 0 ? parts : null;
     }
 
     /// <summary>Splits a possibly qualified object name into database and table.</summary>
@@ -343,5 +383,5 @@ public sealed class TeradataRecordsPushConnector : IDbPushConnector
         return dot >= 0 && dot < view.Length - 1
             ? (view[..dot].Trim('"'), view[(dot + 1)..].Trim('"'))
             : (fallback ?? string.Empty, view.Trim('"'));
-    }
+}
 }

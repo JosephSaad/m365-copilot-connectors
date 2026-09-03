@@ -66,7 +66,11 @@ namespace SqlTicketsConnector.Tests
             // One schema across SQL, Oracle and Teradata, so an operator reading
             // three connections reads one shape. A property added to one and not
             // the others is a divergence worth failing a build over.
-            string[] expected = { "recordId", "title", "status", "owner", "lastModified", "url" };
+            string[] expected =
+            {
+                "recordId", "title", "status", "owner", "lastModified",
+                SensitivityOptions.DefaultProperty, "url",
+            };
 
             Assert.Equal(
                 expected,
@@ -213,6 +217,7 @@ namespace SqlTicketsConnector.Tests
                 ["OWNER"] = "jsmith",
                 ["BODY"] = "The body",
                 ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc),
+                ["CLASSIFICATIONS"] = null,
             });
 
             PushItem? item = new OracleRecordsPushConnector().MapRow(reader, Options());
@@ -238,6 +243,7 @@ namespace SqlTicketsConnector.Tests
                 ["OWNER"] = "jsmith",
                 ["BODY"] = "Body",
                 ["LAST_MODIFIED"] = DateTime.UtcNow,
+                ["CLASSIFICATIONS"] = null,
             });
 
             Assert.Null(new OracleRecordsPushConnector().MapRow(reader, Options()));
@@ -254,6 +260,7 @@ namespace SqlTicketsConnector.Tests
                 ["OWNER"] = null,
                 ["BODY"] = null,
                 ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                ["CLASSIFICATIONS"] = null,
             });
 
             PushItem? item = new OracleRecordsPushConnector().MapRow(reader, Options());
@@ -274,6 +281,7 @@ namespace SqlTicketsConnector.Tests
                 ["OWNER"] = "o",
                 ["BODY"] = "b",
                 ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 12, 30, 0, DateTimeKind.Utc),
+                ["CLASSIFICATIONS"] = null,
             });
 
             PushItem? item = new OracleRecordsPushConnector().MapRow(reader, Options());
@@ -347,6 +355,7 @@ namespace SqlTicketsConnector.Tests
                 ["OWNER"] = "o",
                 ["BODY"] = "b",
                 ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc),
+                ["CLASSIFICATIONS"] = null,
             });
 
             PushItem? item = new OracleRecordsPushConnector().MapRow(reader, Options());
@@ -354,6 +363,55 @@ namespace SqlTicketsConnector.Tests
             Assert.NotNull(item!.LastModifiedUtc);
             Assert.Equal(DateTimeKind.Utc, item.LastModifiedUtc!.Value.Kind);
             Assert.Equal(new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc), item.LastModifiedUtc.Value);
+        }
+
+        [Fact]
+        public void The_schema_registers_the_sensitivity_label_property()
+        {
+            // Registered unconditionally and written only when a mapping is
+            // configured. A registered schema is append-only, so a property
+            // added after a connection reaches Ready cannot be PATCHed in - the
+            // alternative is deleting the connection and every item in it.
+            Assert.Contains(
+                SensitivityOptions.DefaultProperty,
+                new OracleRecordsPushConnector().BuildSchema().Properties!.Select(p => p.Name));
+        }
+
+        [Fact]
+        public void Classifications_are_reported_from_the_source_not_interpreted()
+        {
+            var reader = new FakeDbDataReader(new Dictionary<string, object?>
+            {
+                ["RECORD_ID"] = 1m, ["TITLE"] = "t", ["STATUS"] = "s", ["OWNER"] = "o", ["BODY"] = "b",
+                ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                ["CLASSIFICATIONS"] = "PII, Confidential",
+            });
+
+            PushItem? item = new OracleRecordsPushConnector().MapRow(reader, Options());
+
+            Assert.Equal(new[] { "PII", "Confidential" }, item!.Classifications);
+        }
+
+        [Fact]
+        public void An_empty_classification_column_yields_none_rather_than_a_blank_label()
+        {
+            var reader = new FakeDbDataReader(new Dictionary<string, object?>
+            {
+                ["RECORD_ID"] = 1m, ["TITLE"] = "t", ["STATUS"] = "s", ["OWNER"] = "o", ["BODY"] = "b",
+                ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                ["CLASSIFICATIONS"] = "",
+            });
+
+            Assert.Null(new OracleRecordsPushConnector().MapRow(reader, Options())!.Classifications);
+        }
+
+        [Fact]
+        public void The_query_reads_the_classification_column()
+        {
+            Assert.Contains(
+                "CLASSIFICATIONS",
+                new OracleRecordsPushConnector().BuildQuery(Options(), null),
+                StringComparison.Ordinal);
         }
     }
 }

@@ -56,7 +56,11 @@ namespace SqlTicketsConnector.Tests
         [Fact]
         public void The_schema_matches_the_relational_connectors()
         {
-            string[] expected = { "recordId", "title", "status", "owner", "lastModified", "url" };
+            string[] expected =
+            {
+                "recordId", "title", "status", "owner", "lastModified",
+                SensitivityOptions.DefaultProperty, "url",
+            };
 
             Assert.Equal(
                 expected,
@@ -255,6 +259,32 @@ namespace SqlTicketsConnector.Tests
             PushItem? item = MongoDocumentMapper.Map(document, Options());
 
             Assert.StartsWith("mongorecord", item!.Id, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void The_schema_registers_the_sensitivity_label_property()
+        {
+            Assert.Contains(
+                SensitivityOptions.DefaultProperty,
+                new MongoRecordsPushConnector().BuildSchema().Properties!.Select(p => p.Name));
+        }
+
+        [Fact]
+        public void A_classifications_array_is_reported_from_the_document()
+        {
+            BsonDocument document = Document(
+                ("title", "t"),
+                ("classifications", new BsonArray(new[] { "PII", "Confidential" })));
+
+            PushItem? item = MongoDocumentMapper.Map(document, Options());
+
+            Assert.Equal(new[] { "PII", "Confidential" }, item!.Classifications);
+        }
+
+        [Fact]
+        public void A_document_with_no_classifications_carries_none()
+        {
+            Assert.Null(MongoDocumentMapper.Map(Document(("title", "t")), Options())!.Classifications);
         }
     }
 }
