@@ -60,6 +60,10 @@
     <ProjectReference Include="..\..\src\CdpGraphPush\CdpGraphPush.csproj" />
     <ProjectReference Include="..\..\src\CdpConnector.Source\CdpConnector.Source.csproj" />
     <ProjectReference Include="..\..\src\CdpConnector.Extraction\CdpConnector.Extraction.csproj" />
+    <ProjectReference Include="..\..\src\PushCore.Db\PushCore.Db.csproj" />
+    <ProjectReference Include="..\..\src\OracleGraphPush\OracleGraphPush.csproj" />
+    <ProjectReference Include="..\..\src\TeradataGraphPush\TeradataGraphPush.csproj" />
+    <ProjectReference Include="..\..\src\MongoGraphPush\MongoGraphPush.csproj" />
   </ItemGroup>
 
   <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
