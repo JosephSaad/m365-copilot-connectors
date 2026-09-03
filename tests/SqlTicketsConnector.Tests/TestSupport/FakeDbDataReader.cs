@@ -15,6 +15,8 @@
 // default.
 // ---------------------------------------------------------------------------
 
+#nullable enable
+
 namespace SqlTicketsConnector.Tests.TestSupport
 {
     using System;
