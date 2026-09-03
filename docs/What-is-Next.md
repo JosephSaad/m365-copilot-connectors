@@ -25,7 +25,7 @@ Date: 2026-08-31, at `v1.8.1`.
 
 | # | | Kind | Blocks |
 |---|---|---|---|
-| **0** | **The Ranger evaluator ignores four constructs, and two fail open** | **Work, ours, blocking** | **Any CDP pilot at this customer** |
+| ~~**0**~~ | ~~The Ranger evaluator ignores four constructs, and two fail open~~ | **Step 1 done — the four now refuse** | Steps 2 to 4 remain |
 | 1 | CDP has never run against a real cluster | Work, gated on a customer | Three of the five routed scenarios |
 | 2 | Two semantic labels are absent | Work | Attribution and creation dates, everywhere |
 | 3 | No production code-signing certificate | Decision, then work | Any install where an operator checks a signature |
@@ -59,6 +59,23 @@ that to the index — which is the failure this codebase exists to refuse. It is
 worse than the tag gap because it is silent: Security Zones stop the run with a
 message, and these do not. The user-level gap points the other way and is
 therefore only expensive — content quietly missing rather than quietly exposed.
+
+**Step 1 is done, and control CDP-18 records it.**
+`RangerPolicyClient.RefuseUnreadableConstructs` now stops the run when a live
+policy carries `allowExceptions`, a condition on the policy or on any item, a
+`validitySchedule`, or `isDenyAllElse` — the four that make the cluster more
+restrictive than this connector computes, and therefore the four whose absence
+writes an ACL that is too generous. `denyExceptions` and grants to named users
+are logged instead: both cost content rather than exposing it, and a guard that
+fires on the safe direction teaches operators to disable guards. A disabled
+policy is exempt, because it decides nothing. Eleven tests pin it, including one
+asserting the guard does **not** fire on an ordinary policy set.
+
+**That converts the silent over-grant into a stopped run, which is what step 1
+was for. It does not evaluate anything**, so steps 2 to 4 stand unchanged, and a
+customer whose policies use these constructs now cannot crawl at all until they
+are evaluated or the crawl is scoped around them. That is the intended trade:
+the alternative was indexing under an ACL known to be wrong.
 
 **What would close it.** The fix shape already exists **in the same file**.
 `RefuseSecurityZones` is the precedent: detect the construct, refuse the run,

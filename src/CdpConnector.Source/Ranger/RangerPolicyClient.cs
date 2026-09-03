@@ -141,6 +141,7 @@ public sealed class RangerPolicyClient : IDisposable
         }
 
         RefuseSecurityZones(serviceName, policies);
+        this.RefuseUnreadableConstructs(serviceName, policies);
 
         this.log.Information(
             "Read {Count} Ranger polic(y/ies) from service {Service} over {Pages} page(s).",
@@ -149,6 +150,107 @@ public sealed class RangerPolicyClient : IDisposable
             pages);
 
         return policies;
+    }
+
+    /// <summary>
+    /// Stops the run when a policy carries a construct this evaluator cannot
+    /// honour AND ignoring it would over-grant.
+    ///
+    /// RefuseSecurityZones' sibling, and the same argument. Four constructs are
+    /// read as absent by an evaluator that does not implement them, and reading
+    /// them as absent makes the policy MORE permissive than the cluster:
+    ///
+    ///   allowExceptions    principals carved OUT of a grant. Ignoring it hands
+    ///                      the item to exactly the people the policy excludes.
+    ///   conditions         the answer depends on something not visible here -
+    ///                      an expiry date, an IP, a time. Ignoring one on a
+    ///                      deny drops the deny; on an allow it grants
+    ///                      unconditionally.
+    ///   validitySchedules  a start or end date on the policy. Worse than a
+    ///                      condition, because a Graph permission is a static
+    ///                      snapshot with no clock: even a fully-honouring
+    ///                      evaluator could not mirror it.
+    ///   isDenyAllElse      denies everything not explicitly allowed, so the
+    ///                      policy is more restrictive than its items read.
+    ///
+    /// Two more are read as absent and fail the OTHER way, so they are logged
+    /// rather than refused - they cost content instead of exposing it:
+    /// denyExceptions (principals exempted from a deny) and grants to named
+    /// users, which RoutingEvaluator drops because it reads item.Groups only.
+    /// A Graph ACL carries Entra GROUP object IDs, so an individual grant may
+    /// be unrepresentable rather than merely unimplemented - see
+    /// docs/What-is-Next.md item 0, step 4.
+    ///
+    /// Like the zone guard there is no setting that disables this, and for the
+    /// same reason: a warning is read once and then not again, and there is no
+    /// partial evaluation to fall back to that would not be a guess.
+    /// </summary>
+    /// <param name="serviceName">The Ranger service the policies came from.</param>
+    /// <param name="policies">Everything read for it.</param>
+    private void RefuseUnreadableConstructs(string serviceName, IReadOnlyList<RangerPolicy> policies)
+    {
+        // A disabled policy decides nothing, so it cannot over-grant either.
+        List<RangerPolicy> live = policies.Where(policy => policy.Enabled).ToList();
+
+        List<RangerPolicy> underGranting = live
+            .Where(policy => policy.HasDenyExceptions || policy.NamesUsers)
+            .ToList();
+
+        if (underGranting.Count > 0)
+        {
+            this.log.Warning(
+                "{Count} polic(y/ies) on Ranger service {Service} carry a denyExceptions block or a grant to " +
+                "a named user. Neither is evaluated here, and both fail CLOSED - content the cluster would " +
+                "show is left out of the index rather than content it hides being put in. The run continues. " +
+                "Policy ids: {Ids}.",
+                underGranting.Count,
+                serviceName,
+                string.Join(", ", underGranting.Select(policy => policy.Id).Take(20)));
+        }
+
+        var reasons = new List<string>();
+
+        Count("an allowExceptions block", policy => policy.HasAllowExceptions);
+        Count("a condition", policy => policy.HasConditions);
+        Count("a validity schedule", policy => policy.HasValiditySchedules);
+        Count("isDenyAllElse", policy => policy.DeniesAllElse);
+
+        if (reasons.Count == 0)
+        {
+            return;
+        }
+
+        List<long> ids = live
+            .Where(policy => policy.HasAllowExceptions || policy.HasConditions ||
+                             policy.HasValiditySchedules || policy.DeniesAllElse)
+            .Select(policy => policy.Id)
+            .ToList();
+
+        string named = string.Join(", ", ids.Take(10));
+
+        if (ids.Count > 10)
+        {
+            named += $" and {ids.Count - 10} more";
+        }
+
+        throw new InvalidOperationException(
+            $"Ranger service '{serviceName}' has polic(y/ies) carrying {string.Join(", ", reasons)}, and this " +
+            "connector evaluates none of them. It reads policyItems and denyPolicyItems only, so each of these " +
+            "is read as absent - and every one of them makes the cluster MORE restrictive than this connector " +
+            "would compute, which means an indexed item would be granted to people Ranger refuses. The run " +
+            "stops rather than writing an access-control list it knows to be too generous. Either remove the " +
+            "construct from the policies covering the crawled resources, or scope the crawl to resources no " +
+            $"such policy covers. Policy ids: {named}. There is no setting that disables this.");
+
+        void Count(string description, Func<RangerPolicy, bool> predicate)
+        {
+            int count = live.Count(predicate);
+
+            if (count > 0)
+            {
+                reasons.Add($"{description} ({count})");
+            }
+        }
     }
 
     /// <summary>
@@ -340,6 +442,25 @@ public sealed class RangerPolicyClient : IDisposable
             ReadItems(element, "policyItems", policy.Allow);
             ReadItems(element, "denyPolicyItems", policy.Deny);
 
+            // The constructs this evaluator does not honour. They are read only
+            // so the guard below can refuse them: none of them is acted on, and
+            // reading one as absent is exactly the failure being guarded.
+            policy.HasAllowExceptions = HasEntries(element, "allowExceptions");
+            policy.HasDenyExceptions = HasEntries(element, "denyExceptions");
+            policy.HasValiditySchedules = HasEntries(element, "validitySchedules");
+
+            policy.DeniesAllElse = element.TryGetProperty("isDenyAllElse", out JsonElement denyAll) &&
+                                   denyAll.ValueKind == JsonValueKind.True;
+
+            // A condition can sit on the policy or on any individual item, and
+            // both change the answer, so both have to be looked for.
+            policy.HasConditions =
+                HasEntries(element, "conditions") ||
+                AnyEntryHasConditions(element, "policyItems") ||
+                AnyEntryHasConditions(element, "denyPolicyItems") ||
+                AnyEntryHasConditions(element, "allowExceptions") ||
+                AnyEntryHasConditions(element, "denyExceptions");
+
             // A masking or row-filter policy carries its items under its own
             // name. They are read into Allow because what this connector needs
             // from them is only "these exist", which the policy type already
@@ -373,6 +494,33 @@ public sealed class RangerPolicyClient : IDisposable
                (flag.ValueKind == JsonValueKind.String &&
                 bool.TryParse(flag.GetString(), out bool parsed) &&
                 parsed);
+    }
+
+    /// <summary>True when the named property is an array with something in it.</summary>
+    private static bool HasEntries(JsonElement element, string name)
+    {
+        return element.TryGetProperty(name, out JsonElement array) &&
+               array.ValueKind == JsonValueKind.Array &&
+               array.GetArrayLength() > 0;
+    }
+
+    /// <summary>True when any entry of the named item array carries a condition.</summary>
+    private static bool AnyEntryHasConditions(JsonElement policy, string name)
+    {
+        if (!policy.TryGetProperty(name, out JsonElement items) || items.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (JsonElement item in items.EnumerateArray())
+        {
+            if (HasEntries(item, "conditions"))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void ReadItems(JsonElement policy, string name, IList<RangerPolicyItem> into)
