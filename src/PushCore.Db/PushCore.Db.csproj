@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The provider-agnostic relational half of the push engine.
+
+    PushCore.Sql teaches the engine one source family: a SQL Server table or
+    view. This project teaches it the same family over ANY ADO.NET provider, and
+    exists because Oracle and Teradata land on the identical shape - a query, a
+    row mapping, role-shaped grants, and a per-user security feature that forces
+    the same live-query split Ranger forces on Hive - while PushCore.Sql is bound
+    to SqlConnection and cannot be pointed at either.
+
+    PushCore.Sql is deliberately NOT rewritten to sit on this. That project is
+    the one carrying a near-go-live pilot that has been live-tested twice at
+    111,800 items, and moving it onto a new abstraction to save duplication would
+    put regression risk exactly where the project can least afford it. The two
+    coexist; if SQL Server is ever migrated here it is its own change, made when
+    nothing is waiting on it.
+
+    THIS PROJECT REFERENCES NO DATABASE DRIVER, and that is the point. The
+    connector supplies its own DbProviderFactory, so the Oracle and Teradata
+    packages are pinned in the leaf connector projects that actually open those
+    connections - which keeps the offline package list's blast radius to the leaf
+    and leaves every existing project's dependency set untouched.
+
+    Everything a connector needs from here is IDbPushConnector.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(ConnectorTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PushCore.Db</RootNamespace>
+    <AssemblyName>PushCore.Db</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PushCore\PushCore.csproj" />
+    <ProjectReference Include="..\Connector.Security\Connector.Security.csproj" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />
+
+</Project>
