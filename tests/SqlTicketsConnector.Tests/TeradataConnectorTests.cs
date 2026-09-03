@@ -20,6 +20,7 @@ namespace SqlTicketsConnector.Tests
     using global::Connector.Security.Configuration;
     using Microsoft.Graph.Models.ExternalConnectors;
     using PushCore;
+    using PushCore.State;
     using SqlTicketsConnector.Tests.TestSupport;
     using TeradataGraphPush;
     using Xunit;
@@ -70,7 +71,7 @@ namespace SqlTicketsConnector.Tests
         public void A_row_cap_is_expressed_as_TOP_before_the_ORDER_BY()
         {
             // The opposite of Oracle. See the file header.
-            string sql = new TeradataRecordsPushConnector().BuildQuery(Options(maxItems: 25));
+            string sql = new TeradataRecordsPushConnector().BuildQuery(Options(maxItems: 25), null);
 
             int top = sql.IndexOf("TOP 25", StringComparison.Ordinal);
             int order = sql.IndexOf("ORDER BY", StringComparison.Ordinal);
@@ -85,7 +86,7 @@ namespace SqlTicketsConnector.Tests
         {
             Assert.DoesNotContain(
                 "TOP ",
-                new TeradataRecordsPushConnector().BuildQuery(Options(maxItems: 0)),
+                new TeradataRecordsPushConnector().BuildQuery(Options(maxItems: 0), null),
                 StringComparison.Ordinal);
         }
 
@@ -96,12 +97,12 @@ namespace SqlTicketsConnector.Tests
 
             Assert.Contains(
                 "WHERE IS_DELETED = 0",
-                connector.BuildQuery(Options(softDelete: true)),
+                connector.BuildQuery(Options(softDelete: true), null),
                 StringComparison.Ordinal);
 
             Assert.DoesNotContain(
                 "IS_DELETED",
-                connector.BuildQuery(Options(softDelete: false)),
+                connector.BuildQuery(Options(softDelete: false), null),
                 StringComparison.Ordinal);
         }
 
@@ -110,7 +111,7 @@ namespace SqlTicketsConnector.Tests
         {
             Assert.Contains(
                 "ORDER BY RECORD_ID",
-                new TeradataRecordsPushConnector().BuildQuery(Options()),
+                new TeradataRecordsPushConnector().BuildQuery(Options(), null),
                 StringComparison.Ordinal);
         }
 
@@ -227,6 +228,92 @@ namespace SqlTicketsConnector.Tests
                 .MapRow(new FakeDbDataReader(row), Options());
 
             Assert.NotEqual(oracle!.Id, teradata!.Id);
+        }
+
+        [Fact]
+        public void A_resume_marker_produces_a_composite_predicate_with_positional_parameters()
+        {
+            // Teradata binds by position, not by name, so the marker appears
+            // twice in the predicate and must be bound twice.
+            var marker = new CrawlMarker(new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc), "500");
+
+            string sql = new TeradataRecordsPushConnector().BuildQuery(Options(), marker);
+
+            Assert.Contains("LAST_MODIFIED > ?", sql, StringComparison.Ordinal);
+            Assert.Contains("LAST_MODIFIED = ? AND RECORD_ID > ?", sql, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void The_positional_binding_supplies_one_value_per_placeholder()
+        {
+            // The defect this guards: binding the marker ONCE leaves the third
+            // placeholder unbound and the second reading the key as a date.
+            var marker = new CrawlMarker(new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc), "500");
+            var connector = new TeradataRecordsPushConnector();
+
+            string sql = connector.BuildQuery(Options(), marker);
+            int placeholders = sql.Count(c => c == '?');
+
+            using var command = new System.Data.Odbc.OdbcCommand();
+            connector.BindParameters(command, Options(), marker);
+
+            Assert.Equal(placeholders, command.Parameters.Count);
+        }
+
+        [Fact]
+        public void No_marker_binds_nothing()
+        {
+            using var command = new System.Data.Odbc.OdbcCommand();
+
+            new TeradataRecordsPushConnector().BindParameters(command, Options(), null);
+
+            Assert.Empty(command.Parameters);
+        }
+
+        [Fact]
+        public void The_ORDER_BY_matches_the_resume_predicate_exactly()
+        {
+            var marker = new CrawlMarker(new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc), "500");
+
+            string sql = new TeradataRecordsPushConnector().BuildQuery(Options(), marker);
+
+            Assert.Contains("ORDER BY LAST_MODIFIED, RECORD_ID", sql, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void TOP_still_precedes_the_resume_predicate_and_the_ordering()
+        {
+            var marker = new CrawlMarker(new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc), "500");
+
+            string sql = new TeradataRecordsPushConnector().BuildQuery(Options(maxItems: 10), marker);
+
+            Assert.True(sql.IndexOf("TOP 10", StringComparison.Ordinal) <
+                        sql.IndexOf("WHERE", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void The_connector_declares_a_watermark_column()
+        {
+            Assert.Equal("LAST_MODIFIED", new TeradataRecordsPushConnector().WatermarkColumn);
+        }
+
+        [Fact]
+        public void A_mapped_row_carries_LastModifiedUtc_so_the_checkpoint_can_advance()
+        {
+            var reader = new FakeDbDataReader(new Dictionary<string, object?>
+            {
+                ["RECORD_ID"] = (byte)3,
+                ["TITLE"] = "t",
+                ["STATUS"] = "s",
+                ["OWNER"] = "o",
+                ["BODY"] = "b",
+                ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc),
+            });
+
+            PushItem? item = new TeradataRecordsPushConnector().MapRow(reader, Options());
+
+            Assert.NotNull(item!.LastModifiedUtc);
+            Assert.Equal(DateTimeKind.Utc, item.LastModifiedUtc!.Value.Kind);
         }
     }
 }

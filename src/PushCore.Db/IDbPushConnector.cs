@@ -25,6 +25,7 @@ namespace PushCore.Db;
 
 using System.Data.Common;
 using Connector.Security.Configuration;
+using PushCore.State;
 
 /// <summary>One relational source on any provider, described well enough for the engine to index it.</summary>
 public interface IDbPushConnector : IPushConnector
@@ -101,8 +102,44 @@ public interface IDbPushConnector : IPushConnector
     /// <see cref="SourceSection.ItemView"/> is checked in configuration.
     /// </summary>
     /// <param name="options">Validated configuration.</param>
+    /// <param name="resumeFrom">
+    /// Where the last completed run reached, or null for a full read. Always
+    /// null unless <see cref="WatermarkColumn"/> is set.
+    /// </param>
     /// <returns>The SQL to execute, in this provider's dialect.</returns>
-    string BuildQuery(PushOptions options);
+    string BuildQuery(PushOptions options, CrawlMarker? resumeFrom);
+
+    /// <summary>
+    /// The modification-time column, or null when the source has none.
+    ///
+    /// Setting it is what makes this connector incremental, and it is a claim
+    /// about the source rather than a preference: the column must be UTC,
+    /// monotonic, and must move on EVERY change including bulk updates and
+    /// direct edits. IPushSource spells out why - declaring the marker tier
+    /// without a column that behaves is how a connector silently stops indexing
+    /// the changes its timestamp missed.
+    ///
+    /// Oracle's ORA_ROWSCN does NOT qualify: it is block-level unless the table
+    /// was created with ROWDEPENDENCIES, so two rows sharing a block share a
+    /// marker and one of them is skipped for ever.
+    /// </summary>
+    string? WatermarkColumn => null;
+
+    /// <summary>
+    /// Binds whatever <see cref="BuildQuery"/> parameterised.
+    ///
+    /// A resume predicate compares against the marker, and a marker is data:
+    /// interpolating it into the SQL would be the injection this family avoids
+    /// everywhere else. Providers disagree about parameter syntax - Oracle
+    /// names them, Teradata positions them - so the binding belongs with the
+    /// query that wrote it rather than in the shared source.
+    /// </summary>
+    /// <param name="command">The command about to execute.</param>
+    /// <param name="options">Validated configuration.</param>
+    /// <param name="resumeFrom">The marker the query was built for, or null.</param>
+    void BindParameters(DbCommand command, PushOptions options, CrawlMarker? resumeFrom)
+    {
+    }
 
     /// <summary>
     /// Turns the reader's current row into an item, or returns null to skip it.

@@ -21,6 +21,7 @@ namespace PushCore.Db;
 using System.Data.Common;
 using System.Runtime.CompilerServices;
 using Connector.Security.Configuration;
+using PushCore.State;
 
 /// <summary>Reads a connector's query on its own provider and yields one item per row.</summary>
 public sealed class DbPushSource : IPushSource
@@ -43,16 +44,39 @@ public sealed class DbPushSource : IPushSource
     public int Skipped => this.skipped;
 
     /// <inheritdoc/>
-    /// <remarks>See the file header: no marker here, so nothing for out-of-order
-    /// completion to move past.</remarks>
-    public bool RequiresOrderedCommit => false;
+    /// <remarks>
+    /// False for a differencing connector - no marker, so nothing for
+    /// out-of-order completion to move past - and TRUE the moment one declares
+    /// a watermark column, because it then has a position that out-of-order
+    /// completion could move past an item the index does not hold.
+    /// </remarks>
+    public bool RequiresOrderedCommit => this.connector.WatermarkColumn is not null;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Derived rather than declared, so a connector cannot claim the marker
+    /// tier without supplying the column the tier depends on. The two are the
+    /// same claim.
+    /// </remarks>
+    public SourceChangeDetection ChangeDetection =>
+        this.connector.WatermarkColumn is not null
+            ? SourceChangeDetection.ChangeMarker
+            : SourceChangeDetection.Differencing;
 
     /// <inheritdoc/>
     public async IAsyncEnumerable<PushItem> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         PushOptions options = this.context.Options;
-        string query = this.connector.BuildQuery(options);
+
+        // Null for a differencing connector even when the engine has a
+        // checkpoint: resuming from a marker a source does not order by would
+        // skip whatever sorts before it.
+        CrawlMarker? resumeFrom = this.connector.WatermarkColumn is not null
+            ? this.context.ResumeFrom
+            : null;
+
+        string query = this.connector.BuildQuery(options, resumeFrom);
 
         // Resolved here rather than in the connector so that every credential on
         // this path goes through the caching provider the engine redacts around.
@@ -104,6 +128,8 @@ public sealed class DbPushSource : IPushSource
             // Query timeout, not connect timeout: a full-corpus read of a large
             // view legitimately outlives the seconds a connection attempt gets.
             command.CommandTimeout = options.DataSource.CommandTimeoutSeconds;
+
+            this.connector.BindParameters(command, options, resumeFrom);
 
             await using DbDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 

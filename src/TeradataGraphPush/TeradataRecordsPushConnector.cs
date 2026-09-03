@@ -19,6 +19,7 @@ using Connector.Security.Configuration;
 using Microsoft.Graph.Models.ExternalConnectors;
 using PushCore;
 using PushCore.Db;
+using PushCore.State;
 using Teradata.Client.Provider;
 
 /// <summary>Records from a Teradata view, one item per row.</summary>
@@ -111,8 +112,15 @@ public sealed class TeradataRecordsPushConnector : IDbPushConnector
         return builder.ConnectionString;
     }
 
+    /// <summary>
+    /// LAST_MODIFIED, which makes this connector incremental. Same claim about
+    /// the source as the Oracle connector's: UTC, monotonic, and moving on every
+    /// change. Override to null where the table cannot promise it.
+    /// </summary>
+    public string? WatermarkColumn => "LAST_MODIFIED";
+
     /// <inheritdoc/>
-    public string BuildQuery(PushOptions options)
+    public string BuildQuery(PushOptions options, CrawlMarker? resumeFrom)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -126,12 +134,53 @@ public sealed class TeradataRecordsPushConnector : IDbPushConnector
             $"SELECT {top}RECORD_ID, TITLE, STATUS, OWNER, BODY, LAST_MODIFIED " +
             $"FROM {options.Source.ItemView}";
 
+        var where = new List<string>();
+
         if (options.DataSource.SoftDeleteEnabled)
         {
-            select += " WHERE IS_DELETED = 0";
+            where.Add("IS_DELETED = 0");
         }
 
-        return select + " ORDER BY RECORD_ID";
+        if (resumeFrom is not null)
+        {
+            // Positional parameters, so the marker appears twice and is bound
+            // twice, in the order written. See BindParameters.
+            where.Add("(LAST_MODIFIED > ? OR (LAST_MODIFIED = ? AND RECORD_ID > ?))");
+        }
+
+        if (where.Count > 0)
+        {
+            select += " WHERE " + string.Join(" AND ", where);
+        }
+
+        return select + (resumeFrom is not null
+            ? " ORDER BY LAST_MODIFIED, RECORD_ID"
+            : " ORDER BY RECORD_ID");
+    }
+
+    /// <inheritdoc/>
+    public void BindParameters(DbCommand command, PushOptions options, CrawlMarker? resumeFrom)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        if (resumeFrom is null)
+        {
+            return;
+        }
+
+        // Teradata binds by POSITION, so the marker is added twice rather than
+        // once and referenced twice. Adding it once would leave the third
+        // placeholder unbound and the second reading the key as a date.
+        Add(resumeFrom.Value.MarkerTime);
+        Add(resumeFrom.Value.MarkerTime);
+        Add(resumeFrom.Value.MarkerKey);
+
+        void Add(object value)
+        {
+            DbParameter parameter = command.CreateParameter();
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
+        }
     }
 
     /// <summary>
@@ -272,6 +321,11 @@ public sealed class TeradataRecordsPushConnector : IDbPushConnector
         item.Properties["status"] = DbRead.Text(reader, "STATUS");
         item.Properties["owner"] = DbRead.Text(reader, "OWNER");
         item.Properties["lastModified"] = DbRead.Utc(reader, "LAST_MODIFIED");
+
+        // The engine checkpoints (LastModifiedUtc, Id); leaving this null makes
+        // a marker-tier source read in full for ever without saying so.
+        item.LastModifiedUtc = DateTime.SpecifyKind(
+            reader.GetDateTime(reader.GetOrdinal("LAST_MODIFIED")), DateTimeKind.Utc);
         item.Properties["url"] = string.Format(
             CultureInfo.InvariantCulture, options.DataSource.ItemUrlTemplate, id);
 

@@ -20,6 +20,7 @@ using Microsoft.Graph.Models.ExternalConnectors;
 using Oracle.ManagedDataAccess.Client;
 using PushCore;
 using PushCore.Db;
+using PushCore.State;
 
 /// <summary>Records from an Oracle view, one item per row.</summary>
 public sealed class OracleRecordsPushConnector : IDbPushConnector
@@ -112,8 +113,17 @@ public sealed class OracleRecordsPushConnector : IDbPushConnector
         return builder.ConnectionString;
     }
 
+    /// <summary>
+    /// LAST_MODIFIED, which makes this connector incremental.
+    ///
+    /// It is a claim about the view: the column must be UTC, monotonic and must
+    /// move on every change. Where the source cannot promise that, override this
+    /// to null and the connector reads in full every run, which is always safe.
+    /// </summary>
+    public string? WatermarkColumn => "LAST_MODIFIED";
+
     /// <inheritdoc/>
-    public string BuildQuery(PushOptions options)
+    public string BuildQuery(PushOptions options, CrawlMarker? resumeFrom)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -125,12 +135,31 @@ public sealed class OracleRecordsPushConnector : IDbPushConnector
             "SELECT RECORD_ID, TITLE, STATUS, OWNER, BODY, LAST_MODIFIED " +
             $"FROM {options.Source.ItemView}";
 
+        var where = new List<string>();
+
         if (options.DataSource.SoftDeleteEnabled)
         {
-            select += " WHERE IS_DELETED = 0";
+            where.Add("IS_DELETED = 0");
         }
 
-        select += " ORDER BY RECORD_ID";
+        if (resumeFrom is not null)
+        {
+            // The composite marker, spelled out. A predicate on the timestamp
+            // alone either re-reads every row sharing the last second for ever,
+            // or loses whichever of them had not been written when the run
+            // stopped. Comparing the pair makes "strictly after the marker"
+            // exact - and it is why the ORDER BY below must match it exactly.
+            where.Add("(LAST_MODIFIED > :marker OR (LAST_MODIFIED = :marker AND RECORD_ID > :markerKey))");
+        }
+
+        if (where.Count > 0)
+        {
+            select += " WHERE " + string.Join(" AND ", where);
+        }
+
+        select += resumeFrom is not null
+            ? " ORDER BY LAST_MODIFIED, RECORD_ID"
+            : " ORDER BY RECORD_ID";
 
         if (options.Source.MaxItems > 0)
         {
@@ -139,6 +168,37 @@ public sealed class OracleRecordsPushConnector : IDbPushConnector
         }
 
         return select;
+    }
+
+    /// <inheritdoc/>
+    public void BindParameters(DbCommand command, PushOptions options, CrawlMarker? resumeFrom)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        if (resumeFrom is null)
+        {
+            return;
+        }
+
+        // Oracle binds by name, and the same name appears twice in the
+        // predicate, so BindByName has to be on or the second reference takes
+        // the next positional value and the comparison silently reads the key
+        // as a date.
+        if (command is OracleCommand oracle)
+        {
+            oracle.BindByName = true;
+        }
+
+        Add("marker", resumeFrom.Value.MarkerTime);
+        Add("markerKey", resumeFrom.Value.MarkerKey);
+
+        void Add(string name, object value)
+        {
+            DbParameter parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
+        }
     }
 
     /// <summary>
@@ -294,6 +354,12 @@ public sealed class OracleRecordsPushConnector : IDbPushConnector
         item.Properties["status"] = DbRead.Text(reader, "STATUS");
         item.Properties["owner"] = DbRead.Text(reader, "OWNER");
         item.Properties["lastModified"] = DbRead.Utc(reader, "LAST_MODIFIED");
+
+        // The engine advances the checkpoint to (LastModifiedUtc, Id), so a
+        // marker-tier source that leaves this null checkpoints nothing and
+        // silently reads in full for ever.
+        item.LastModifiedUtc = DateTime.SpecifyKind(
+            reader.GetDateTime(reader.GetOrdinal("LAST_MODIFIED")), DateTimeKind.Utc);
         item.Properties["url"] = string.Format(
             CultureInfo.InvariantCulture, options.DataSource.ItemUrlTemplate, id);
 

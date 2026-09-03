@@ -23,6 +23,7 @@ namespace SqlTicketsConnector.Tests
     using Microsoft.Graph.Models.ExternalConnectors;
     using OracleGraphPush;
     using PushCore;
+    using PushCore.State;
     using SqlTicketsConnector.Tests.TestSupport;
     using Xunit;
 
@@ -75,7 +76,7 @@ namespace SqlTicketsConnector.Tests
         [Fact]
         public void The_soft_delete_filter_is_applied_when_enabled()
         {
-            string sql = new OracleRecordsPushConnector().BuildQuery(Options(softDelete: true));
+            string sql = new OracleRecordsPushConnector().BuildQuery(Options(softDelete: true), null);
 
             Assert.Contains("WHERE IS_DELETED = 0", sql, StringComparison.Ordinal);
         }
@@ -83,7 +84,7 @@ namespace SqlTicketsConnector.Tests
         [Fact]
         public void The_soft_delete_filter_is_absent_when_disabled()
         {
-            string sql = new OracleRecordsPushConnector().BuildQuery(Options(softDelete: false));
+            string sql = new OracleRecordsPushConnector().BuildQuery(Options(softDelete: false), null);
 
             Assert.DoesNotContain("IS_DELETED", sql, StringComparison.Ordinal);
         }
@@ -94,7 +95,7 @@ namespace SqlTicketsConnector.Tests
             // Oracle's row-limiting clause binds AFTER ordering, unlike SQL
             // Server's TOP. Emitting it before ORDER BY caps an unordered read,
             // which returns a different arbitrary subset on every crawl.
-            string sql = new OracleRecordsPushConnector().BuildQuery(Options(maxItems: 25));
+            string sql = new OracleRecordsPushConnector().BuildQuery(Options(maxItems: 25), null);
 
             int order = sql.IndexOf("ORDER BY", StringComparison.Ordinal);
             int fetch = sql.IndexOf("FETCH FIRST 25 ROWS ONLY", StringComparison.Ordinal);
@@ -108,14 +109,14 @@ namespace SqlTicketsConnector.Tests
         {
             Assert.DoesNotContain(
                 "FETCH FIRST",
-                new OracleRecordsPushConnector().BuildQuery(Options(maxItems: 0)),
+                new OracleRecordsPushConnector().BuildQuery(Options(maxItems: 0), null),
                 StringComparison.Ordinal);
         }
 
         [Fact]
         public void The_query_reads_every_column_the_mapping_needs()
         {
-            string sql = new OracleRecordsPushConnector().BuildQuery(Options());
+            string sql = new OracleRecordsPushConnector().BuildQuery(Options(), null);
 
             foreach (string column in new[] { "RECORD_ID", "TITLE", "STATUS", "OWNER", "BODY", "LAST_MODIFIED" })
             {
@@ -278,6 +279,81 @@ namespace SqlTicketsConnector.Tests
             PushItem? item = new OracleRecordsPushConnector().MapRow(reader, Options());
 
             Assert.StartsWith("2026-09-01T12:30:00", (string)item!.Properties["lastModified"], StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Without_a_resume_marker_the_query_carries_no_predicate()
+        {
+            string sql = new OracleRecordsPushConnector().BuildQuery(Options(), null);
+
+            Assert.DoesNotContain(":marker", sql, StringComparison.Ordinal);
+            Assert.Contains("ORDER BY RECORD_ID", sql, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void A_resume_marker_produces_a_composite_predicate_not_a_timestamp_one()
+        {
+            // A predicate on the timestamp alone either re-reads every row
+            // sharing the last second for ever, or loses whichever of them had
+            // not been written when the run stopped.
+            var marker = new CrawlMarker(new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc), "500");
+
+            string sql = new OracleRecordsPushConnector().BuildQuery(Options(), marker);
+
+            Assert.Contains("LAST_MODIFIED > :marker", sql, StringComparison.Ordinal);
+            Assert.Contains("LAST_MODIFIED = :marker AND RECORD_ID > :markerKey", sql, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void The_ORDER_BY_matches_the_resume_predicate_exactly()
+        {
+            // If the ordering and the predicate disagree, the checkpoint can
+            // advance past a row the next run's predicate then excludes - the
+            // row is never indexed and nothing reports it.
+            var marker = new CrawlMarker(new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc), "500");
+
+            string sql = new OracleRecordsPushConnector().BuildQuery(Options(), marker);
+
+            Assert.Contains("ORDER BY LAST_MODIFIED, RECORD_ID", sql, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void The_soft_delete_filter_survives_a_resume_predicate()
+        {
+            var marker = new CrawlMarker(new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc), "500");
+
+            string sql = new OracleRecordsPushConnector().BuildQuery(Options(softDelete: true), marker);
+
+            Assert.Contains("IS_DELETED = 0", sql, StringComparison.Ordinal);
+            Assert.Contains(" AND ", sql, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void The_connector_declares_a_watermark_column()
+        {
+            Assert.Equal("LAST_MODIFIED", new OracleRecordsPushConnector().WatermarkColumn);
+        }
+
+        [Fact]
+        public void A_mapped_row_carries_LastModifiedUtc_so_the_checkpoint_can_advance()
+        {
+            // A marker-tier source that leaves this null checkpoints nothing and
+            // reads in full for ever without saying so.
+            var reader = new FakeDbDataReader(new Dictionary<string, object?>
+            {
+                ["RECORD_ID"] = 3m,
+                ["TITLE"] = "t",
+                ["STATUS"] = "s",
+                ["OWNER"] = "o",
+                ["BODY"] = "b",
+                ["LAST_MODIFIED"] = new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc),
+            });
+
+            PushItem? item = new OracleRecordsPushConnector().MapRow(reader, Options());
+
+            Assert.NotNull(item!.LastModifiedUtc);
+            Assert.Equal(DateTimeKind.Utc, item.LastModifiedUtc!.Value.Kind);
+            Assert.Equal(new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc), item.LastModifiedUtc.Value);
         }
     }
 }
