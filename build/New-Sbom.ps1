@@ -140,7 +140,7 @@ foreach ($file in $assetsFiles) {
     # .Properties.Name. Under Set-StrictMode -Version Latest, reading .Name off
     # an EMPTY property collection throws "The property 'Name' cannot be found
     # on this object" instead of yielding nothing, and a project with no package
-    # references at all - CdpConnector.Extraction is one - has exactly that.
+    # references at all - Connector.Extraction is one - has exactly that.
     # The short form works on ten of the eleven projects and fails on the
     # eleventh, which is the worst way for it to be wrong.
     foreach ($tfmProperty in $targets.PSObject.Properties) {

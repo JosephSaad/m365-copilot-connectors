@@ -72,6 +72,27 @@ public sealed class HiveContractsConnector : IPushConnector
             PushSchema.Prop("startDate", PropertyType.DateTime, queryable: true, retrievable: true),
             PushSchema.Prop("endDate", PropertyType.DateTime, queryable: true, retrievable: true),
             PushSchema.Prop("modifiedUtc", PropertyType.DateTime, queryable: true, retrievable: true, label: Label.LastModifiedDateTime),
+
+            // The sensitivity label, registered UNCONDITIONALLY and not yet
+            // populated. The registration is the irreversible half: a schema is
+            // append-only, so a property added after this connection reaches
+            // Ready cannot be PATCHed in, and the alternative then is deleting
+            // the connection and every item in it. Registering costs nothing
+            // now and this connector has never run against a cluster, so the
+            // window is open exactly once.
+            //
+            // Populating it needs the classifications, which live in ATLAS
+            // rather than in this source - one lookup per table. That is a
+            // separate integration and is deliberately not bundled here;
+            // AtlasCatalogueConnector already reads them for the entities it
+            // indexes, and its AtlasClient is what a future change would reuse.
+            PushSchema.Prop(
+                SensitivityOptions.DefaultProperty,
+                PropertyType.String,
+                queryable: true,
+                retrievable: true,
+                refinable: true),
+
             PushSchema.Prop("sourceTable", PropertyType.String, queryable: true, retrievable: true, refinable: true));
     }
 

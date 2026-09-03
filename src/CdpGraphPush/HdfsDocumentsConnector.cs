@@ -17,7 +17,7 @@
 
 namespace CdpGraphPush;
 
-using CdpConnector.Extraction;
+using Connector.Extraction;
 using CdpConnector.Source;
 using CdpConnector.Source.Acl;
 using CdpConnector.Source.Hdfs;
@@ -70,6 +70,27 @@ public sealed class HdfsDocumentsConnector : IPushConnector
             // Why a document has no body. Refinable so an operator can ask the
             // index itself how much of the lake failed extraction, which is the
             // question that decides whether OCR is worth buying.
+
+            // The sensitivity label, registered UNCONDITIONALLY and not yet
+            // populated. The registration is the irreversible half: a schema is
+            // append-only, so a property added after this connection reaches
+            // Ready cannot be PATCHed in, and the alternative then is deleting
+            // the connection and every item in it. Registering costs nothing
+            // now and this connector has never run against a cluster, so the
+            // window is open exactly once.
+            //
+            // Populating it needs the classifications, which live in ATLAS
+            // rather than in this source - one lookup per path. That is a
+            // separate integration and is deliberately not bundled here;
+            // AtlasCatalogueConnector already reads them for the entities it
+            // indexes, and its AtlasClient is what a future change would reuse.
+            PushSchema.Prop(
+                SensitivityOptions.DefaultProperty,
+                PropertyType.String,
+                queryable: true,
+                retrievable: true,
+                refinable: true),
+
             PushSchema.Prop("extractStatus", PropertyType.String, queryable: true, retrievable: true, refinable: true));
     }
 
@@ -105,7 +126,10 @@ public sealed class HdfsDocumentsConnector : IPushConnector
         CdpSettings settings = CdpSettings.From(context.Options);
 
         var hdfs = new WebHdfsClient(settings.HdfsBaseUrl, context.Log);
-        var ranger = new RangerPolicyClient(settings.RangerBaseUrl, context.Log);
+        var ranger = new RangerPolicyClient(settings.RangerBaseUrl, context.Log)
+        {
+            TagService = settings.RangerTagService,
+        };
 
         GraphServiceClient? directory = context.Options.Setting("ResolveGroupsFromDirectory", false)
             ? new GraphServiceClient(context.Credential, ["https://graph.microsoft.com/.default"])

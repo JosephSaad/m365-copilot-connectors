@@ -9,7 +9,7 @@
 // trade, and the file is still findable by everything else about it.
 // ---------------------------------------------------------------------------
 
-namespace CdpConnector.Extraction;
+namespace Connector.Extraction;
 
 using System.Text;
 using System.Text.RegularExpressions;

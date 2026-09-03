@@ -885,3 +885,29 @@ stale can this be" needs the distinction:
   reads only new rows, so rows already indexed keep the ACL they were written
   with. Clearing that setting reads the table whole every run, which is the
   trade to make when a table's grants change more often than its rows do.
+
+
+## Reconciling a connection
+
+Two scripts, and neither is sufficient alone. Run both.
+
+| Script | Direction | Covers | Finds |
+|---|---|---|---|
+| `Compare-InventoryToIndex.ps1` | inventory → Graph | **all five** connectors | `LOST` (recorded as written, not in the index) and `ORPHAN` (recorded as deleted, still served and still cited) |
+| `Compare-SourceToInventory.ps1` | source → inventory | Oracle, Teradata, MongoDB | records the connector has **never** written |
+| `Compare-SourceToIndex.ps1` | source → Graph | SQL Server only | all of the above for `dbo.Tickets` |
+
+The first needs no source at all — it reads `crawl.vwItemInventory`, which every
+connector keeps through `PushCore.State` — which is why it is the only one that
+works for CDP. The second reads the source, which is the half that does not
+generalise: CDP would need a Kerberos ODBC connection, a WebHDFS client and an
+Atlas call before it could name one item, so **CDP's source direction stays
+open** and no script here closes it.
+
+Both are read-only, both print the commands that would fix what they find
+without running any, and both end by stating what they did not check. A clean
+result from one is not coverage.
+
+Use a read-only login: `sql/25` DENYs the connector's own `crawl_writer` SELECT
+on the crawl views, so running either with the push host's credentials fails on
+purpose.

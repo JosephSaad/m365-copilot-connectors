@@ -24,7 +24,7 @@
     <ProjectReference Include="..\PushCore\PushCore.csproj" />
     <ProjectReference Include="..\PushCore.State\PushCore.State.csproj" />
     <ProjectReference Include="..\CdpConnector.Source\CdpConnector.Source.csproj" />
-    <ProjectReference Include="..\CdpConnector.Extraction\CdpConnector.Extraction.csproj" />
+    <ProjectReference Include="..\Connector.Extraction\Connector.Extraction.csproj" />
   </ItemGroup>
 
   <ItemGroup>

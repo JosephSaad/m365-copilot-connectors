@@ -1,11 +1,12 @@
 ---
-title: The five sources, routed
-description: Two SQL sources and three CDP sources put through the Copilot Router — the verdict for each, the two premises that close half the gates, and what would change any of them.
+title: The eight sources, routed
+description: Two SQL, three CDP and three warehouse sources put through the Copilot Router — the verdict for each, the two premises that close half the gates, and what would change any of them.
 ---
 
-# The five sources, routed
+# The eight sources, routed
 
-The five sources this repository can read — two SQL, three CDP — put through the
+The eight sources this repository can read or is being extended to read — two
+SQL, three CDP, and three warehouse platforms — put through the
 [Copilot Router](copilot-router.html) and the rule behind it in
 [COPILOT-ROUTING.md](COPILOT-ROUTING.md).
 
@@ -25,7 +26,14 @@ considered. Both were stated by the customer rather than assumed.
 | # | Stated | What it closes |
 |---|---|---|
 | **P1** | Every asker holds a Microsoft 365 Copilot licence | The **reach** gate. Foundry and Copilot Studio drop out; every route below stays on the Microsoft 365 and Graph plane, funded by M365 licensing with no Fabric footprint |
-| **P2** | The organisation owns all five sources outright — none is vendor-licensed | The **ownership** gate, and the entire vendor branch with it: no redistribution clause, no per-seat entitlement, no derived-data restriction, no AI-use clause, and no need for the negotiated rider the dashed path requires |
+| **P2** | The organisation owns all eight sources outright — none is vendor-licensed | The **ownership** gate, and the entire vendor branch with it: no redistribution clause, no per-seat entitlement, no derived-data restriction, no AI-use clause, and no need for the negotiated rider the dashed path requires |
+
+> **P2 was stated for the original five, and is assumed for sources 6 to 8.**
+> Nobody has confirmed that the Oracle, MongoDB and Teradata estates are free of
+> vendor-licensed content, and a warehouse is exactly where a market-data,
+> credit-bureau or reference feed lands. One licensed feed joined into a table
+> moves that table to the vendor branch entirely, and the join is invisible from
+> the connector's side. Confirm per schema before any of the three is designed.
 
 **P1 also decides the economics, not only the eligibility.** A crawl costs the
 same whether ten people search or ten thousand, so the index is the one route
@@ -48,8 +56,8 @@ Three gates survive the premises. None of them is settled by owning the data.
 
 | Gate | The question | Bites |
 |---|---|---|
-| **Shape of access** | Group-shaped, or enforced per user at the source? | CDP Hive |
-| **Content or computed** | Text that sits still, or a number derived across rows? | SQL hierarchy |
+| **Shape of access** | Group-shaped, or enforced per user at the source? | CDP Hive, **Oracle**, **Teradata**, **MongoDB views** |
+| **Content or computed** | Text that sits still, or a number derived across rows? | SQL hierarchy, **Teradata** |
 | **Deletion SLA** | Must a removed record stop appearing immediately? | None — see the note below |
 
 **The deletion gate no longer splits the index leaf here.** It used to pick
@@ -63,7 +71,7 @@ deleted, no index path qualifies at all.
 
 ---
 
-## The five verdicts
+## The eight verdicts
 
 | | Source | Route | Leaf |
 |---|---|---|---|
@@ -72,6 +80,9 @@ deleted, no index path qualifies at all.
 | **3** | CDP HDFS documents | `INDEX IT` | Synced connector, direct push |
 | **4** | CDP Hive contracts | **Split on Ranger** — `INDEX IT` *or* `MODEL IT` | Direct push where unmasked; a semantic model where not |
 | **5** | CDP Atlas catalogue | `INDEX IT` | Synced connector, direct push |
+| **6** | Oracle | **Split on VPD, OLS and redaction** — `INDEX IT` *or* `MODEL IT` | Direct push where no per-user policy applies; a semantic model where one does |
+| **7** | MongoDB | `INDEX IT`, **with a declared projection** | Direct push per collection; refuses a redacting view, and needs encrypted fields excluded rather than indexed |
+| **8** | Teradata | **Mostly `MODEL IT`**, split on row-level security | A semantic model for the computed majority; direct push for text tables carrying no security constraint |
 
 ---
 
@@ -225,9 +236,109 @@ parameter sheet.
 
 ---
 
+## 6 · Oracle
+
+**Split, and Oracle's own per-user features decide — the same shape as Hive.**
+
+Grants are role-shaped and survive the copy, when they are grants to a role.
+`DBA_ROLE_PRIVS` and `DBA_TAB_PRIVS` give the mapping; a grant made directly to a
+database user does not survive, for the reason item 0 gives about Ranger
+user-level grants — a Graph ACL carries Entra **group** object IDs and has
+nowhere to put an individual.
+
+Four features enforce per user at query time, and any one of them on an
+in-scope table refuses the index:
+
+| Feature | Where it shows | What it does |
+|---|---|---|
+| **VPD** (Virtual Private Database) | `DBA_POLICIES` | A policy function appends a predicate per session, so two callers running one query see different rows |
+| **Oracle Label Security** | `DBA_SA_TABLE_POLICIES` | Compares a row's label against the session's clearance |
+| **Real Application Security** | `DBA_XS_*` | Application users and ACLs evaluated inside the database |
+| **Data Redaction** | `REDACTION_POLICIES` | Masks column values per session — the column-mask analogue exactly |
+
+The refusal is the Hive refusal, restated: the rows the service account sees are
+the rows *its* policy admits, so indexing them publishes one identity's view to
+everyone granted the item.
+
+**The identity mapping is the harder half.** Oracle roles are database-local.
+Unless Enterprise User Security or Kerberos maps them to directory principals,
+the grants are not merely unread — they are **unrepresentable**, and no amount of
+connector work fixes that. Settle it before design, not during.
+
+**The watermark needs choosing.** `ORA_ROWSCN` is tempting and wrong by default:
+it is block-level unless the table was created with `ROWDEPENDENCIES`, so two
+rows sharing a block share a marker. Either the table carries its own
+modification timestamp or the source is not incrementally readable.
+
+---
+
+## 7 · MongoDB
+
+**`INDEX IT` per collection — but a projection has to be declared first, and two
+things can make a collection unindexable.**
+
+Mongo differs from every other source here in that **access is collection-scoped
+and there is no document-level security in the engine.** RBAC roles grant on a
+database or a collection, so the ACL is a property of the collection rather than
+of the item. That is simpler than SQL, and it means one resolved ACL serves
+every document in the collection.
+
+Two cases still refuse:
+
+| Case | Why |
+|---|---|
+| **A view that redacts per caller** — `$redact` against `$$USER_ROLES`, or a `$match` on the caller | Per-user at query time. The same refusal as a Ranger mask |
+| **Encrypted fields** — CSFLE or Queryable Encryption | The field is ciphertext at rest, so the connector would index ciphertext without knowing. Not a leak; the indexed content is simply useless |
+
+That second row is the tokenized-at-rest case the CDP parameter sheet asks
+about, arriving on a different platform. It fails **usefully closed only if
+somebody notices** — nothing in the pipeline can tell ciphertext from text.
+Encrypted fields have to be excluded from the projection by name.
+
+**The projection is not optional.** Graph indexes declared properties and Mongo
+has no fixed schema, so the mapping has to be declared per collection rather than
+inferred. An inferred schema changes the moment a document does, and a schema
+change means re-registration — which is a connection-level operation, not a
+per-item one.
+
+**Change detection is the real risk.** There is no universal modification
+timestamp. An ObjectId `_id` encodes a **creation** time, not a modification
+time, so it cannot carry the marker. Either the collection maintains its own
+`updatedAt`, or the connector runs full crawls only, or it consumes change
+streams — and a tailed oplog is a different engine from a resumable
+`(marker, id)` checkpoint and does not satisfy that contract. **Establish which
+before committing to incremental reads on Mongo at all.**
+
+---
+
+## 8 · Teradata
+
+**Mostly `MODEL IT`, and the split that remains is row-level security.**
+
+Teradata is usually the warehouse, and that decides more than its security model
+does. The *content or computed* gate bites here the way it bites SQL hierarchy:
+most of what a warehouse holds is a measure, and every real question of it is a
+sum across rows. A sum is not text that sits still, an index cannot compute one,
+and publishing pre-aggregated rows answers only the questions somebody
+anticipated. **Model the computed majority and index the text minority** — the
+descriptive tables, the reference data, the documentation-shaped columns.
+
+For what remains indexable, the access shape is the familiar one:
+
+| Teradata state of the table | Route |
+|---|---|
+| Role grants only — `DBC.AllRightsV`, `DBC.RoleMembersV` | `INDEX IT` → direct push. Role-shaped and survives the copy |
+| **A row-level or column-level security constraint** — `DBC.SecConstraintsV`, and a constraint column on the table | **Cannot be indexed.** Constraint UDFs are evaluated per session, so the service account's rows are not everyone's rows |
+
+The watermark question is SQL Server's, unchanged: Teradata has no universal
+modification timestamp, so an in-scope table either carries one or is read in
+full.
+
+---
+
 ## The constraint that is actually binding
 
-With P1 and P2 granted, the limit on all five is no longer legal or
+With P1 and P2 granted, the limit on all eight is no longer legal or
 architectural. It is **the Copilot connector item quota and the quality of the
 grounding**, in that order.
 
@@ -252,6 +363,30 @@ larger, more narrative items ground better and cost less.
 | 3 | Parameter sheet **0.1**, **0.2**, **3.6** — and confirmation that documents exist outside the warehouse |
 | 4 | Parameter sheet **5.2** and **5.3**. Cannot be scoped until Ranger's masking is known |
 | 5 | Parameter sheet **2.5**, **3.5**, and entity-read in the `cm_atlas` Ranger service |
+| 6 | Confirmation of P2 per schema; whether Oracle roles map to directory principals at all; a `DBA_POLICIES` / `REDACTION_POLICIES` inventory; a modification-timestamp column, since `ORA_ROWSCN` will not serve |
+| 7 | A declared projection per collection; the list of encrypted fields to exclude; and an answer on change detection, because without an `updatedAt` there is no resumable marker |
+| 8 | Which tables are text rather than measures — the split is the scoping question here; a `DBC.SecConstraintsV` inventory; a modification timestamp per in-scope table |
+
+**Sources 6 to 8 have no code at all yet.** They are routed, not built: the
+verdicts above are the design input to `ADDING-A-PUSH-CONNECTOR.md`.
+
+**Reconciliation now covers all five**, which it did not when this page was
+written. `Compare-SourceToIndex.ps1` reads `dbo.Tickets` and does not
+generalise — four of the five sources have no SQL Server table to read.
+`Compare-InventoryToIndex.ps1` needs no source at all: it reconciles
+`crawl.vwItemInventory`, the connector's own record of every item it wrote, kept
+in `ConnectorState` by the `PushCore.State` every connector shares. It reports
+per item type, because the reference path is the **hierarchy** connector, which
+writes three types into one connection and would hide a single-type divergence
+in a combined total. What it cannot see is a source record that was never
+pushed — that direction needs a source query, which is the half that does not
+generalise, and the run says so rather than implying coverage it does not have. Three further facts govern
+what building them costs: `PushCore.Sql` is bound to `Microsoft.Data.SqlClient`
+rather than `DbConnection`, so the relational path does not extend to Oracle or
+Teradata unchanged; each new driver adds a pin to `Directory.Packages.props` and
+a regeneration of the offline package list that `Test-OfflinePackageList.ps1`
+gates on; and each source needs its ACL derivation settled before its reader,
+not after.
 
 **All three CDP scenarios share one caveat: none has ever run against a real
 cluster.** Both live tests exercised the SQL direct-push path. The CDP code is
@@ -270,7 +405,7 @@ which can pass while the service account fails.
 - **Askers without a Copilot licence** — Foundry or Copilot Studio return to the
   table, and the M365 plane stops being the only destination.
 - **A requirement that deleted records disappear immediately** — no index path
-  qualifies, and all five change.
+  qualifies, and all eight change.
 - **Ranger masking arriving on a table that did not have it** — scenario 4 moves
   from indexable to not, silently, unless somebody is watching. The connector
   will refuse rather than leak, but the refusal is the first anyone hears of it.

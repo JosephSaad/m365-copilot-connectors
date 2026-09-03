@@ -16,7 +16,7 @@
 // travel as exceptions.
 // ---------------------------------------------------------------------------
 
-namespace CdpConnector.Extraction;
+namespace Connector.Extraction;
 
 /// <summary>What happened when a file was turned into text.</summary>
 public enum ExtractionStatus

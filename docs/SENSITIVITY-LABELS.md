@@ -299,3 +299,27 @@ see "Existing connections" above.
 - [TELEMETRY.md](TELEMETRY.md) — the refusal counter and the rest of the metrics
 - [CDP-PILOT-PARAMETERS.md](CDP-PILOT-PARAMETERS.md) — the Ranger tag-policy gap
 - [SECURITY.md](SECURITY.md) — where this sits among the other controls
+
+
+## Which connectors publish the label
+
+Every connector on the direct-push path registers the sensitivity property in
+its schema, and writes it only when a mapping is configured.
+
+| Connector | Classifications come from |
+|---|---|
+| `cdpatlascatalog` | Atlas classifications on the entity |
+| `cdphivecontracts`, `cdphdfsdocuments` | The property is registered; nothing populates it yet |
+| `oracle`, `teradata` | The `CLASSIFICATIONS` column of the configured view, comma-separated |
+| `mongodb` | The `classifications` field, an array or a comma-separated string |
+| `tickets`, `hierarchy` | Not registered |
+
+**The property is registered even where nothing populates it, and that is
+deliberate.** A registered schema is append-only: a property cannot be PATCHed
+onto a connection that has reached Ready, so the alternative to registering it
+now is deleting the connection and every item in it the day somebody wants the
+mapping. The cost of registering an unused property is one string per item;
+the cost of not registering it is a rebuild.
+
+That window is open for `oracle`, `teradata` and `mongodb` only because none of
+them has been deployed. It closes the first time one reaches Ready.

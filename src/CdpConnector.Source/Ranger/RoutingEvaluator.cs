@@ -191,6 +191,8 @@ public sealed class RoutingEvaluator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        groups = NarrowByExceptions(groups, relevant);
+
         if (groups.Count == 0)
         {
             // Not a refusal to index - a refusal to guess. Without a group grant
@@ -271,6 +273,8 @@ public sealed class RoutingEvaluator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        groups = NarrowByExceptions(groups, relevant);
+
         if (groups.Count == 0)
         {
             return new RoutingDecision(
@@ -340,6 +344,8 @@ public sealed class RoutingEvaluator
             .Where(group => !string.IsNullOrWhiteSpace(group))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        groups = NarrowByExceptions(groups, relevant);
 
         return groups.Count == 0
             ? new RoutingDecision(
@@ -445,6 +451,8 @@ public sealed class RoutingEvaluator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        groups = NarrowByExceptions(groups, relevant);
+
         // Unlike a table, a path with no Ranger grant is not refused here: the
         // Ranger HDFS plugin falls back to the file's own POSIX permissions and
         // ACL when no policy matches, and those are read separately. An empty
@@ -457,5 +465,63 @@ public sealed class RoutingEvaluator
                 : "Ranger grants read to " + groups.Count + " group(s) on this path.",
             relevant.Select(policy => policy.Id).ToList(),
             groups);
+    }
+
+    /// <summary>
+    /// Narrows a computed grant by the two STATIC constructs Ranger applies to
+    /// it: allowExceptions, and isDenyAllElse.
+    ///
+    /// WHY ONLY THESE TWO. Ranger also has conditions and validity schedules,
+    /// and this evaluates neither - deliberately. Both make a policy's answer
+    /// depend on the clock, and a Graph permission is a static snapshot written
+    /// at crawl time with nowhere to put a clock. Evaluating them here would
+    /// produce an ACL correct at the instant of the crawl and silently wrong
+    /// afterwards, which is WORSE than the refusal it would replace: a loud stop
+    /// becomes a quiet decay. They stay refused by CDP-18.
+    ///
+    /// These two do not move, so honouring them is permanent - and it is
+    /// strictly safer than not, because both can only ever REMOVE groups.
+    ///
+    ///   allowExceptions   principals carved out of the grant. Subtracted.
+    ///   isDenyAllElse     the policy denies everything it does not itself
+    ///                     allow, including what ANOTHER policy allows - so the
+    ///                     result is intersected with that policy's allow list
+    ///                     rather than unioned with it.
+    ///
+    /// denyExceptions are read and not used, and that is safe by construction:
+    /// this connector already refuses to index any resource a deny covers rather
+    /// than mirroring the deny, so exempting somebody from that deny could only
+    /// widen what is indexed.
+    /// </summary>
+    /// <param name="granted">The groups the allow items produced.</param>
+    /// <param name="relevant">Every policy covering the resource.</param>
+    /// <returns>What survives.</returns>
+    private static List<string> NarrowByExceptions(
+        List<string> granted, IReadOnlyList<RangerPolicy> relevant)
+    {
+        List<RangerPolicy> access = relevant
+            .Where(policy => policy.Enabled && policy.PolicyType == RangerPolicyType.Access)
+            .ToList();
+
+        var excluded = new HashSet<string>(
+            access.SelectMany(policy => policy.AllowExceptions.SelectMany(item => item.Groups)),
+            StringComparer.OrdinalIgnoreCase);
+
+        IEnumerable<string> surviving = granted.Where(group => !excluded.Contains(group));
+
+        foreach (RangerPolicy policy in access.Where(policy => policy.DeniesAllElse))
+        {
+            var permitted = new HashSet<string>(
+                policy.Allow.Where(item => item.GrantsRead).SelectMany(item => item.Groups),
+                StringComparer.OrdinalIgnoreCase);
+
+            // Its own exceptions bind it too: a group this policy allows and
+            // then carves out is not permitted by it.
+            permitted.ExceptWith(policy.AllowExceptions.SelectMany(item => item.Groups));
+
+            surviving = surviving.Where(permitted.Contains);
+        }
+
+        return surviving.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 }

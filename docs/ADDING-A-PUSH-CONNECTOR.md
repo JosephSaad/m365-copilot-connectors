@@ -89,7 +89,37 @@ widen the audience of exactly the item whose permissions could not be establishe
 
 ## Step 1 — write the connector
 
-One file, either way.
+One file, whichever path you take. There are now **three**, and the choice is
+decided by the source rather than by preference.
+
+| Path | Interface | Use it when |
+|---|---|---|
+| **A** | [`ISqlPushConnector`](../src/PushCore.Sql/ISqlPushConnector.cs) | The source is a **SQL Server** table or view |
+| **A′** | [`IDbPushConnector`](../src/PushCore.Db/IDbPushConnector.cs) | The source is a table or view on **any other ADO.NET provider** — Oracle and Teradata are the two that exist |
+| **B** | [`IPushSource`](../src/PushCore/IPushSource.cs) directly | The source is not relational at all. MongoDB is the example |
+
+**Why A and A′ are separate rather than one generalised path.** `PushCore.Sql`
+is bound to `SqlConnection` throughout, and it carries the pilot that has been
+live-tested twice at 111,800 items. Rewriting it onto the provider-agnostic
+abstraction to save the duplication would put regression risk exactly where this
+project can least afford it, so the two coexist. If SQL Server ever moves across
+it is its own change, made when nothing is waiting on it.
+
+**What A′ asks for that A does not.** The connector supplies its own
+`DbProviderFactory` and builds its own connection string, which is what keeps
+`PushCore.Db` free of every database driver — the Oracle and Teradata packages
+are referenced by the leaf executables that open those connections and by
+nothing else. It may also declare a `WatermarkColumn`, and doing so is what puts
+it on the marker tier: `DbPushSource` then derives `ChangeDetection` and flips
+`RequiresOrderedCommit` to true, rather than letting a connector claim the tier
+without the column the tier depends on.
+
+**Both A′ and B carry a guard.** `IDbPushConnector.GuardAsync` runs on the open
+connection before the query, and it is where a provider that enforces per user
+is refused — Oracle's VPD, Label Security and data redaction; Teradata's
+row-level security constraints. Path B does the same in its own `ReadAsync`, as
+MongoDB does for views and encrypted fields. That is not optional politeness:
+see [SECURITY.md](SECURITY.md) controls CDP-1, CDP-17 and DB-1.
 
 ### Path A — a SQL table or view
 

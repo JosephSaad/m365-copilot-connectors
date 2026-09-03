@@ -34,6 +34,8 @@
 
 namespace CdpConnector.Source.Ranger;
 
+using System.Linq;
+
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -141,11 +143,91 @@ public sealed class RangerPolicy
     public IDictionary<string, RangerResourceFlags> ResourceFlags { get; } =
         new Dictionary<string, RangerResourceFlags>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the policy carries an
+    /// allowExceptions block: principals carved OUT of the grant.
+    ///
+    /// This evaluator does not honour one, and ignoring it reads the exception
+    /// as absent - which grants an indexed item to exactly the people the
+    /// policy excludes. It OVER-grants, so a policy carrying one stops the run.
+    /// </summary>
+    public bool HasAllowExceptions => this.AllowExceptions.Count > 0;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the policy carries a
+    /// denyExceptions block: principals carved OUT of the deny.
+    ///
+    /// Also unhonoured, but it fails the other way - ignoring it denies people
+    /// the cluster exempts, which costs content rather than exposing it. Warned
+    /// about, not refused.
+    /// </summary>
+    public bool HasDenyExceptions => this.DenyExceptions.Count > 0;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether any item or the policy itself
+    /// carries a condition.
+    ///
+    /// A condition makes the policy's answer depend on something this evaluator
+    /// cannot see - the accessing IP, the time, an expiry date. Ignoring one on
+    /// a deny drops the deny entirely; ignoring one on an allow grants
+    /// unconditionally. Both over-grant, so it stops the run.
+    /// </summary>
+    public bool HasConditions { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the policy carries a validity
+    /// schedule - a start or end date on the policy itself.
+    ///
+    /// Same shape as a condition, and worse in one respect: a Graph permission
+    /// is a static snapshot with no clock, so even a fully-honouring evaluator
+    /// could not mirror it. It stops the run.
+    /// </summary>
+    public bool HasValiditySchedules { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the policy denies everything not
+    /// explicitly allowed.
+    ///
+    /// It makes the policy MORE restrictive than its items read, so ignoring it
+    /// over-grants. It stops the run.
+    /// </summary>
+    public bool DeniesAllElse { get; set; }
+
+    /// <summary>Gets a value indicating whether any item names an individual user.</summary>
+    /// <remarks>
+    /// RoutingEvaluator reads item.Groups and never item.Users, so a grant to a
+    /// named person is dropped. That under-grants - and a Graph ACL carries
+    /// Entra GROUP object IDs, so an individual may be unrepresentable rather
+    /// than merely unimplemented. Warned about, not refused.
+    /// </remarks>
+    public bool NamesUsers => this.Allow.Concat(this.Deny).Any(item => item.Users.Count > 0);
+
     /// <summary>Gets the items that grant.</summary>
     public IList<RangerPolicyItem> Allow { get; } = new List<RangerPolicyItem>();
 
     /// <summary>Gets the items that deny.</summary>
     public IList<RangerPolicyItem> Deny { get; } = new List<RangerPolicyItem>();
+
+    /// <summary>Gets the items carved OUT of this policy's grants.</summary>
+    /// <remarks>
+    /// Now evaluated rather than merely detected. A principal named here is not
+    /// granted by this policy however many of its allow items match, so the
+    /// groups are SUBTRACTED from what Allow produces. Ignoring the block was
+    /// the over-grant CDP-18 refused on: it admitted exactly the people the
+    /// policy excludes.
+    /// </remarks>
+    public IList<RangerPolicyItem> AllowExceptions { get; } = new List<RangerPolicyItem>();
+
+    /// <summary>Gets the items carved OUT of this policy's denies.</summary>
+    /// <remarks>
+    /// Read, and deliberately NOT used to grant. This connector already refuses
+    /// to index any resource a deny covers rather than mirroring the deny, so
+    /// exempting somebody from that deny could only widen what is indexed - and
+    /// the exemption is exactly the sort of narrow, conditional carve-out that
+    /// should not be the reason a table becomes indexable. Not honouring it
+    /// under-grants, which costs content rather than exposing it.
+    /// </remarks>
+    public IList<RangerPolicyItem> DenyExceptions { get; } = new List<RangerPolicyItem>();
 
     /// <summary>Gets the values configured for one resource, or an empty list.</summary>
     /// <param name="name">The resource name, for example "table".</param>

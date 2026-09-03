@@ -40,7 +40,7 @@ namespace SqlTicketsConnector.Tests
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
-    using CdpConnector.Extraction;
+    using global::Connector.Extraction;
     using CdpConnector.Source;
     using CdpConnector.Source.Acl;
     using CdpConnector.Source.Hdfs;

@@ -23,7 +23,7 @@
 
 #if PDF_EXTRACTION
 
-namespace CdpConnector.Extraction;
+namespace Connector.Extraction;
 
 using System.Text;
 using UglyToad.PdfPig;

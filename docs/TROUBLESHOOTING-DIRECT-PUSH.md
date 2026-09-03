@@ -466,3 +466,28 @@ is which stage was the **last one that passed**.
 None of those three files contains a ticket title, a body, a property value or a
 credential — the log writes item IDs and byte counts only, by design
 (`SECURITY.md` LOG-3), and the scripts print names and thumbprint prefixes.
+
+---
+
+## A run stops with a refusal it will not let you disable
+
+Five guards stop a crawl outright rather than warning, and none of them has a
+setting that turns it off. They exist because the alternative is an index whose
+access-control list is knowingly too generous, and a warning is read once and
+then not again.
+
+| The message names | Source | What it means | What to do |
+|---|---|---|---|
+| a VPD, Label Security or Data Redaction policy | Oracle | The view is enforced per session, so the rows and values this crawl reads are the crawl identity's rather than every reader's | Exclude the view, or replace it with one that applies the restriction at rest and is granted role-wise |
+| a row- or column-level security constraint | Teradata | The same, expressed as a Teradata constraint | The same |
+| `DBC.SecConstraintsV` could not be read | Teradata | **Not** "there is no constraint" — the crawl identity lacks a grant, and an unknown answer to "is this enforced per user" fails closed | Grant `SELECT` on `DBC.ColumnsV` and `DBC.SecConstraintsV` |
+| is a MongoDB view | MongoDB | A view can redact per caller and the driver cannot tell one that does from one that does not, so the category is refused | Point at the underlying collection, or materialise the view |
+| a field is encrypted (CSFLE or Queryable Encryption) | MongoDB | Not a leak — ciphertext indexes silently and is useless to every reader | Exclude the field from the projection, or decrypt it into a materialised collection |
+
+All five surface as **exit 4**, and all five happen before the first item is
+read, so a refused run has indexed nothing.
+
+**The Ranger refusals are the same shape** and are documented separately —
+CDP-17 (security zones), CDP-18 (a policy whose answer depends on the clock) and
+CDP-19 (a tag policy that denies or masks) in
+[SECURITY.md](SECURITY.md).

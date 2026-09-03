@@ -51,7 +51,8 @@ calendar.
 
 ## 2. Exit codes, and the one that must not page
 
-Every push tool — `SqlGraphPush`, `SqlHierarchyPush`, `CdpGraphPush` — runs on
+Every push tool — `SqlGraphPush`, `SqlHierarchyPush`, `CdpGraphPush`,
+`OracleGraphPush`, `TeradataGraphPush`, `MongoGraphPush` — runs on
 `PushCore` and returns the same codes. A scheduled task's **Last Run Result** is
 this number, and for a connector with no queue in front of it, it is the only
 signal anybody gets.
@@ -119,10 +120,34 @@ edits read exactly **3**; one customer rename read exactly **69** — the
 customer, its 4 engagements and their 64 time entries — matching the SQL delta
 exactly.
 
-**It is still not true for the others.** `SqlGraphPush` and `CdpGraphPush` do
-not implement `ChangeMarker`. Turning `Settings:Incremental` on for them
-produces the old behaviour: a request that `uspBeginRun` escalates, a full read,
-and a line in the log saying it did. Nothing breaks; nothing is gained.
+**`OracleGraphPush` and `TeradataGraphPush` implement it too**, on the same
+contract: each declares `LAST_MODIFIED` as its watermark column, reads from the
+resume marker, orders by the composite `(LAST_MODIFIED, RECORD_ID)` and sets
+`LastModifiedUtc` on every item. Unlike the hierarchy connector, **neither has
+been run against a real database**, so the mechanism is asserted by tests rather
+than observed against a source — read the numbers above as the hierarchy
+connector's, not theirs.
+
+Declaring the column is a claim about the source rather than a preference: it
+must be UTC, monotonic and must move on **every** change, including bulk updates
+and direct edits. Where a view cannot promise that, override `WatermarkColumn`
+to null and the connector reads in full every run, which is always safe. Oracle's
+`ORA_ROWSCN` does not qualify — it is block-level unless the table was created
+with `ROWDEPENDENCIES`, so two rows sharing a block share a marker and one of
+them is skipped for ever.
+
+**It is still not true for the rest.** `SqlGraphPush`, `CdpGraphPush` and
+`MongoGraphPush` do not implement `ChangeMarker`. Turning `Settings:Incremental`
+on for them produces the old behaviour: a request that `uspBeginRun` escalates,
+a full read, and a line in the log saying it did. Nothing breaks; nothing is
+gained.
+
+MongoDB is the one that may never implement it. An ObjectId `_id` encodes a
+**creation** time, not a modification time, so it cannot carry a marker at all;
+without an `updatedAt` maintained by the application there is nothing to resume
+from, and change streams are a tailed oplog rather than a resumable
+`(marker, id)` checkpoint. That is a question for whoever owns the collection,
+not a gap in the connector.
 
 ### 3.2 Turning it on
 

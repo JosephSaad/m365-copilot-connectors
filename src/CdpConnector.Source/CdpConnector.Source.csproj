@@ -36,7 +36,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PushCore\PushCore.csproj" />
     <ProjectReference Include="..\Connector.Security\Connector.Security.csproj" />
-    <ProjectReference Include="..\CdpConnector.Extraction\CdpConnector.Extraction.csproj" />
+    <ProjectReference Include="..\Connector.Extraction\Connector.Extraction.csproj" />
   </ItemGroup>
 
   <Import Project="$(MSBuildThisFileDirectory)..\..\build\SecretHygiene.targets" />

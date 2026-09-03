@@ -22,6 +22,7 @@ documentation that ships with it.
 | [**The five sources, routed**](ROUTING-DECISIONS.md) | The routing rule applied: two SQL sources and three CDP sources, one verdict each, the two premises that close half the gates — and the two scenarios that split rather than landing on one leaf |
 | [**Assumptions**](ASSUMPTIONS.md) | Every decision taken on the reader's behalf, and what would change if it were wrong |
 | [**Go-live readiness**](GO-LIVE-READINESS.md) | Every feature in the direct-push path at v1.5.0 — what is built, what is part-built, what is not — and the six verification tasks between the current release and a supported service |
+| [**What is next**](What-is-Next.md) | The four things still open — three work, one decision — starting with the Ranger constructs the evaluator reads as absent, two of which grant more widely than the policy says. Plus the fifth, closed as an accepted risk with the record of what was weighed |
 
 ## Deploying
 
@@ -33,6 +34,8 @@ documentation that ships with it.
 | [**Production onboarding**](PRODUCTION-ONBOARDING.md) | The other half of go-live readiness: who owns the connection, who is woken when a run fails, and which numbers somebody has to accept in writing — every row named and owned |
 | [**How the items actually appear**](COPILOT-SURFACING.md) | Result types, verticals and activities: what Microsoft Search renders from, what Copilot renders from instead, which half has a Graph API and which needs a Search Administrator — and why a timesheet database cannot produce activity signals |
 | [CDP connector](CDP-DEPLOYMENT.md) | HDFS documents, Hive tables and the Atlas catalogue, from a Kerberised cluster |
+| [**Oracle, Teradata and MongoDB**](WAREHOUSE-DEPLOYMENT.md) | The three warehouse connectors: the document contract each reads, the per-session feature each refuses and why the refusal cannot be disabled, which two read incrementally and which cannot, and the two questions that decide whether a pilot is worth running at all |
+| [**Onboarding a new connector**](CONNECTOR-ONBOARDING.md) | The questions to answer before any source is connected — 42 general and 47 across five source types, each marked blocking, sizing or operational, and each carrying why it exists. Captured with [a form](connector-onboarding-form.html) that exports Markdown or JSON |
 | [Hierarchy connector](HIERARCHY-DEPLOYMENT.md) | The worked three-level example, flattened for a flat index |
 | [Crawl state database](CRAWL-STATE-DEPLOYMENT.md) | Standing up `ConnectorState`: the six state-database scripts in order, the two service accounts, retention, and the delete guard an operator has to know before the first refusal — plus `sql/26`, the seventh, which changes the source rather than the state |
 | [App registration](APP-REGISTRATION.md) | Entra setup, certificate auth, and the permissions each path actually needs |
