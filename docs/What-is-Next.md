@@ -71,6 +71,14 @@ fires on the safe direction teaches operators to disable guards. A disabled
 policy is exempt, because it decides nothing. Eleven tests pin it, including one
 asserting the guard does **not** fire on an ordinary policy set.
 
+**Step 3 is done too, as control CDP-19.** `RefuseTagPoliciesAsync` reads
+`Settings:RangerTagService` once per client and stops the run when any enabled
+tag policy denies or masks. A tag policy that only grants is ignored: not
+reading it under-grants, and refusing on it would block a crawl over a policy
+that could only have made this connector more cautious. The check sits inside
+`PoliciesAsync` rather than beside the three call sites that construct the
+client, so a fourth cannot forget it.
+
 **That converts the silent over-grant into a stopped run, which is what step 1
 was for. It does not evaluate anything**, so steps 2 to 4 stand unchanged, and a
 customer whose policies use these constructs now cannot crawl at all until they

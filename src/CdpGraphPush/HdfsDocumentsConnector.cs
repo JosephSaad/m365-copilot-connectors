@@ -105,7 +105,10 @@ public sealed class HdfsDocumentsConnector : IPushConnector
         CdpSettings settings = CdpSettings.From(context.Options);
 
         var hdfs = new WebHdfsClient(settings.HdfsBaseUrl, context.Log);
-        var ranger = new RangerPolicyClient(settings.RangerBaseUrl, context.Log);
+        var ranger = new RangerPolicyClient(settings.RangerBaseUrl, context.Log)
+        {
+            TagService = settings.RangerTagService,
+        };
 
         GraphServiceClient? directory = context.Options.Setting("ResolveGroupsFromDirectory", false)
             ? new GraphServiceClient(context.Credential, ["https://graph.microsoft.com/.default"])

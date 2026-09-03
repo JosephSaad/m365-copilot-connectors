@@ -153,7 +153,7 @@ public sealed class AtlasCatalogueConnector : IPushConnector
         return new AtlasPushSource(
             settings,
             new AtlasClient(settings.AtlasBaseUrl, context.Log),
-            new RangerPolicyClient(settings.RangerBaseUrl, context.Log),
+            new RangerPolicyClient(settings.RangerBaseUrl, context.Log) { TagService = settings.RangerTagService },
             principals,
             new CheckpointStore(settings.CheckpointDirectory, this.Key, context.Log),
             context.Log);

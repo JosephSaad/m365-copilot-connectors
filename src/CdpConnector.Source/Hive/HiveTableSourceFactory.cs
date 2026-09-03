@@ -76,7 +76,10 @@ public sealed class HiveTableSourceFactory
     /// <returns>The source.</returns>
     public IPushSource Create(PushSourceContext context, IHiveRowReader reader, string connectorKey)
     {
-        var ranger = new RangerPolicyClient(this.settings.RangerBaseUrl, context.Log);
+        var ranger = new RangerPolicyClient(this.settings.RangerBaseUrl, context.Log)
+        {
+            TagService = this.settings.RangerTagService,
+        };
 
         return new HiveRoutedSource(
             this.settings,

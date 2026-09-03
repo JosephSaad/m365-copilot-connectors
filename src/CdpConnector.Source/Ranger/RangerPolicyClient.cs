@@ -39,6 +39,11 @@ public sealed class RangerPolicyClient : IDisposable
     private readonly ILogger log;
     private readonly bool ownsClient;
 
+    // Checked once per client, not once per service. The tag plane is a
+    // property of the cluster, and two resource services read through one
+    // client would otherwise fetch it twice.
+    private bool tagPlaneChecked;
+
     /// <summary>Initializes a new instance of the <see cref="RangerPolicyClient"/> class.</summary>
     /// <param name="baseUrl">The Ranger Admin base URL.</param>
     /// <param name="log">Where to report progress.</param>
@@ -81,6 +86,16 @@ public sealed class RangerPolicyClient : IDisposable
     private const int MaxPolicies = 100_000;
 
     /// <summary>Reads every policy defined on one service.</summary>
+    /// <summary>
+    /// The Ranger TAG service to refuse on, or empty to skip that check.
+    ///
+    /// Set from Settings:RangerTagService. Empty is correct for a cluster with
+    /// no tag service, and wrong for one that simply did not configure it -
+    /// which is why the deployment guide names it rather than leaving it to a
+    /// default nobody reads.
+    /// </summary>
+    public string TagService { get; init; } = string.Empty;
+
     /// <param name="serviceName">The Ranger service, for example cm_hdfs or cm_hive.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>The enabled and disabled policies, as Ranger returned them.</returns>
@@ -143,6 +158,15 @@ public sealed class RangerPolicyClient : IDisposable
         RefuseSecurityZones(serviceName, policies);
         this.RefuseUnreadableConstructs(serviceName, policies);
 
+        // The tag plane, once. Inside the read rather than beside it at the
+        // three call sites that construct this client, so a fourth cannot
+        // forget it - the same reason RefuseSecurityZones lives here.
+        if (!this.tagPlaneChecked && this.TagService.Length > 0)
+        {
+            this.tagPlaneChecked = true;
+            await this.RefuseTagPoliciesAsync(this.TagService, cancellationToken);
+        }
+
         this.log.Information(
             "Read {Count} Ranger polic(y/ies) from service {Service} over {Pages} page(s).",
             policies.Count,
@@ -150,6 +174,84 @@ public sealed class RangerPolicyClient : IDisposable
             pages);
 
         return policies;
+    }
+
+    /// <summary>
+    /// Stops the run when the TAG service holds a policy that could deny or
+    /// mask.
+    ///
+    /// Item 0, step 3. This connector reads resource services only, so a tag
+    /// policy is invisible to it and a tag DENY is read as absent - the same
+    /// over-grant CDP-18 refuses on the resource plane, arriving by a route
+    /// CDP-18 cannot see because it never fetches the service.
+    ///
+    /// Only DENY and MASK policies stop the run. A tag policy that merely GRANTS
+    /// is ignorable: not reading it under-grants, which costs content rather
+    /// than exposing it, and refusing on it would block a crawl over a policy
+    /// that can only ever have made this connector too cautious. That is the
+    /// same direction rule the resource-plane guard applies.
+    ///
+    /// Call it with the tag service configured. An empty service name skips the
+    /// check, which is right for a cluster that has no tag service and wrong for
+    /// one that simply did not configure it - so the caller names it explicitly.
+    /// </summary>
+    /// <param name="tagService">The Ranger tag service, or empty to skip.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>A task that completes when the tag plane is cleared.</returns>
+    public async Task RefuseTagPoliciesAsync(string tagService, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(tagService))
+        {
+            return;
+        }
+
+        IReadOnlyList<RangerPolicy> policies;
+
+        try
+        {
+            policies = await this.PoliciesAsync(tagService, cancellationToken);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("404", StringComparison.Ordinal))
+        {
+            // No tag service on this cluster. Absent is not the same as
+            // unreadable, and only absence is safe to read as "no tag policies".
+            this.log.Information(
+                "Ranger has no tag service {Service}, so there are no tag policies to honour.", tagService);
+            return;
+        }
+
+        List<RangerPolicy> dangerous = policies
+            .Where(policy => policy.Enabled)
+            .Where(policy =>
+                policy.Deny.Count > 0 ||
+                policy.PolicyType is RangerPolicyType.Masking or RangerPolicyType.RowFilter)
+            .ToList();
+
+        if (dangerous.Count == 0)
+        {
+            this.log.Information(
+                "Ranger tag service {Service} holds {Count} polic(y/ies), none of which denies or masks.",
+                tagService,
+                policies.Count);
+            return;
+        }
+
+        string ids = string.Join(", ", dangerous.Select(policy => policy.Id).Take(10));
+
+        if (dangerous.Count > 10)
+        {
+            ids += $" and {dangerous.Count - 10} more";
+        }
+
+        throw new InvalidOperationException(
+            $"Ranger tag service '{tagService}' holds {dangerous.Count} polic(y/ies) that deny or mask, and " +
+            "this connector evaluates the tag plane not at all - it reads resource services only. A tag deny " +
+            "is therefore read as absent, so an indexed item would be granted to people the cluster refuses, " +
+            "and a tag policy carrying a condition diverges silently the moment that condition changes. " +
+            "The run stops rather than writing an access-control list computed from half the policy model. " +
+            "Either scope the crawl to resources no tag policy reaches, or clear Settings:RangerTagService " +
+            $"once that is established and re-run. Policy ids: {ids}. There is no setting that weakens this " +
+            "beyond naming a different service.");
     }
 
     /// <summary>

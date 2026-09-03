@@ -19,6 +19,18 @@
     <ProjectReference Include="..\PushCore\PushCore.csproj" />
     <ProjectReference Include="..\PushCore.State\PushCore.State.csproj" />
     <ProjectReference Include="..\Connector.Security\Connector.Security.csproj" />
+
+    <!--
+      Text extraction, for GridFS buckets. NOTE THE NAME: this project is called
+      CdpConnector.Extraction and has nothing CDP about it - it reads PDF,
+      OpenXML and plain text from a stream. Referencing it here makes it a
+      SHARED component with a technology prefix, which is the naming this
+      repository otherwise avoids (PushCore, Connector.Security). It should be
+      renamed Connector.Extraction; that is a mechanical change across the
+      solution, the tests and the harness, and it is deliberately not bundled
+      into the change that first needed it.
+    -->
+    <ProjectReference Include="..\CdpConnector.Extraction\CdpConnector.Extraction.csproj" />
   </ItemGroup>
 
   <ItemGroup>

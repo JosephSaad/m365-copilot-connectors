@@ -286,5 +286,15 @@ namespace SqlTicketsConnector.Tests
         {
             Assert.Null(MongoDocumentMapper.Map(Document(("title", "t")), Options())!.Classifications);
         }
+
+        [Fact]
+        public void A_GridFS_item_identifier_cannot_collide_with_a_document_one()
+        {
+            // Bucket mode composes "mongofile" and collection mode
+            // "mongorecord". Sharing a prefix would let a file and a document
+            // with the same ObjectId upsert onto each other.
+            Assert.NotEqual("mongofile", MongoDocumentMapper.IdPrefix);
+            Assert.Equal("mongorecord", MongoDocumentMapper.IdPrefix);
+        }
     }
 }

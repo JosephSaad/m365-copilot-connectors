@@ -108,6 +108,22 @@ public sealed class CdpSettings
     public string RangerSqlService { get; private init; } = string.Empty;
 
     /// <summary>
+    /// The Ranger TAG service, checked but never evaluated.
+    ///
+    /// This connector reads resource services only. A tag policy on cm_tag is
+    /// invisible to it, and a tag DENY is therefore read as absent - which is
+    /// the over-grant CDP-18 exists to refuse for the resource services. The
+    /// service is named here so the same refusal can cover the tag plane:
+    /// RangerPolicyClient reads it, refuses when it holds anything that could
+    /// deny or mask, and never uses it to grant.
+    ///
+    /// Empty disables the check, which is correct for a cluster with no tag
+    /// service at all and wrong for one that simply did not configure it here -
+    /// so the deployment guide names it rather than leaving it to default.
+    /// </summary>
+    public string RangerTagService { get; private init; } = string.Empty;
+
+    /// <summary>
     /// Gets the Apache Atlas base URL, without the /api/atlas suffix.
     ///
     /// Required with no default on purpose. Atlas answers on 31000 or 31443 in
@@ -247,6 +263,7 @@ public sealed class CdpSettings
             RangerBaseUrl = options.Setting("RangerBaseUrl").TrimEnd('/'),
             RangerHdfsService = options.Setting("RangerHdfsService", "cm_hdfs"),
             RangerSqlService = options.Setting("RangerSqlService", "cm_hive"),
+            RangerTagService = options.Setting("RangerTagService", "cm_tag"),
 
             AtlasBaseUrl = options.Setting("AtlasBaseUrl").TrimEnd('/'),
             AtlasTypes = SplitList(options.Setting("AtlasTypes", "hive_db;hive_table")),

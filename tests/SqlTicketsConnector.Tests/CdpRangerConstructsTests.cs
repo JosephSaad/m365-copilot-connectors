@@ -193,6 +193,65 @@ namespace SqlTicketsConnector.Tests
             Assert.Contains("no setting that disables this", message, StringComparison.Ordinal);
         }
 
+
+        [Fact]
+        public async Task A_tag_service_holding_only_grants_does_not_stop_the_run()
+        {
+            // Not reading a tag GRANT under-grants: it costs content rather than
+            // exposing it. Refusing on one would block a crawl over a policy
+            // that could only ever have made this connector too cautious.
+            await Client(new OnePageRanger(
+                "{\"id\":20,\"isEnabled\":true,\"policyType\":0," +
+                "\"policyItems\":[{\"groups\":[\"analysts\"]," +
+                "\"accesses\":[{\"type\":\"select\",\"isAllowed\":true}]}]}"))
+                .RefuseTagPoliciesAsync("cm_tag", CancellationToken.None);
+        }
+
+        [Fact]
+        public async Task A_tag_deny_stops_the_run()
+        {
+            // The QA cluster's policy 4: a deny on group public, invisible to a
+            // connector that reads resource services only.
+            InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                Client(new OnePageRanger(
+                    "{\"id\":4,\"isEnabled\":true,\"policyType\":0," +
+                    "\"denyPolicyItems\":[{\"groups\":[\"public\"]," +
+                    "\"accesses\":[{\"type\":\"select\",\"isAllowed\":true}]}]}"))
+                    .RefuseTagPoliciesAsync("cm_tag", CancellationToken.None));
+
+            Assert.Contains("deny or mask", error.Message, StringComparison.Ordinal);
+            Assert.Contains("4", error.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task A_tag_masking_policy_stops_the_run()
+        {
+            InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                Client(new OnePageRanger("{\"id\":21,\"isEnabled\":true,\"policyType\":1}"))
+                    .RefuseTagPoliciesAsync("cm_tag", CancellationToken.None));
+
+            Assert.Contains("deny or mask", error.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task A_disabled_tag_deny_does_not_stop_the_run()
+        {
+            await Client(new OnePageRanger(
+                "{\"id\":22,\"isEnabled\":false,\"policyType\":0," +
+                "\"denyPolicyItems\":[{\"groups\":[\"public\"]}]}"))
+                .RefuseTagPoliciesAsync("cm_tag", CancellationToken.None);
+        }
+
+        [Fact]
+        public async Task An_empty_tag_service_name_skips_the_check_entirely()
+        {
+            // Right for a cluster with no tag service; wrong for one that simply
+            // did not configure it, which is why the deployment guide names it.
+            await Client(new OnePageRanger("{\"id\":23,\"isEnabled\":true,\"policyType\":0," +
+                "\"denyPolicyItems\":[{\"groups\":[\"public\"]}]}"))
+                .RefuseTagPoliciesAsync(string.Empty, CancellationToken.None);
+        }
+
         private sealed class OnePageRanger : HttpMessageHandler
         {
             private readonly string body;
