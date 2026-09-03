@@ -23,9 +23,13 @@ byte and unmodified.
 | `PushCore.Sql` | The SQL Server half of the engine: `ISqlPushConnector`, a query and a row mapping become a source | Class library, referenced only by the SQL push tools |
 | `SqlGraphPush` | Direct `PUT /external/connections/{id}/items/{itemId}` — one flat table | Operator workstation or jump box with outbound HTTPS to Graph |
 | `SqlHierarchyPush` | The same, for a three level hierarchy: Customer → Engagement → TimeEntry | Same |
+| `PushCore.Db` | The same for **any other ADO.NET provider**: `IDbPushConnector`. References no database driver at all — the connector supplies its own `DbProviderFactory`, so a driver's advisories reach only the executable that opens that kind of connection | Class library, referenced by the warehouse push tools |
+| `OracleGraphPush` | An Oracle view, pushed direct. Reads incrementally from `LAST_MODIFIED`, and **refuses** a view carrying VPD, Label Security or Data Redaction | Host with outbound HTTPS to Graph and reach to the database |
+| `TeradataGraphPush` | The same for Teradata. **Refuses** a table carrying a row- or column-level security constraint, and fails closed when `DBC` cannot be read | Same |
+| `MongoGraphPush` | A MongoDB collection or GridFS bucket, pushed direct. Not relational, so it implements `IPushSource` itself. **Refuses** a view as a class and an encrypted field outright | Same |
 | `CdpGraphPush` | The same, for Cloudera CDP 7.1.9. **Three connectors in one executable**, each with its own connection and configuration file: HDFS documents (`cdphdfsdocs`), Hive tables (`cdphivecontracts`) and the Apache Atlas catalogue (`cdpatlascatalog`), with per-item ACLs and Ranger routing | Windows host with Kerberos to the cluster and outbound HTTPS to Graph |
 | `CdpConnector.Source` | HttpFS/WebHDFS, Hive over ODBC, the Atlas catalogue over SPNEGO, Ranger policies, ACL mapping, watermarks | Class library, referenced by `CdpGraphPush` |
-| `Connector.Extraction` | File bytes to indexable text: text formats and Open XML with the BCL, PDF behind a build flag | Class library, referenced by `CdpGraphPush` |
+| `Connector.Extraction` | File bytes to indexable text: text formats and Open XML with the BCL, PDF behind a build flag. Not CDP-specific, which is why it is not called `CdpConnector.Extraction` any more | Class library, referenced by `CdpGraphPush` and `MongoGraphPush` |
 
 Connector ID: `9e5e2b95-e7ab-4266-98c7-4f7868d377bf`
 Default port: `30303`

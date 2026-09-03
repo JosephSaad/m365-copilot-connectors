@@ -335,3 +335,28 @@ it. The symptom is a connector whose `UnchangedPercent` never rises above zero
 in `crawl.vwRunHistory` after the first run. On a healthy Tier 1 or Tier 2
 source that figure settles well above 90% within a few runs. If it does not, the
 item IDs are not stable and the corpus is being rewritten every night.
+
+---
+
+## The three warehouse sources, against these four requirements
+
+Oracle, MongoDB and Teradata were added after this contract was written, which
+makes them a fair test of it. Two meet it; one does not, and says so.
+
+| Source | Stable key | Modification time | Deletion | Enumerable |
+|---|:--:|:--:|:--:|:--:|
+| Oracle | ✅ `RECORD_ID` | ✅ `LAST_MODIFIED` — and **not** `ORA_ROWSCN`, which is block-level without `ROWDEPENDENCIES` | ✅ soft-delete flag | ✅ |
+| Teradata | ✅ `RECORD_ID` | ✅ `LAST_MODIFIED` | ✅ soft-delete flag | ✅ |
+| MongoDB | ✅ `_id` | ❌ **none by default** | ✅ `isDeleted` | ✅ |
+
+**MongoDB fails the second requirement, and the failure is instructive.** An
+ObjectId `_id` encodes a *creation* time, which looks like a modification time
+and is not one — a document edited a year after it was written still carries its
+original timestamp. So the connector reads in full every run rather than
+resuming from a marker that would silently skip every edit.
+
+Change streams are not the missing piece. A tailed oplog is a different engine
+from a resumable `(marker, id)` checkpoint: it has no position a later run can
+ask for, and it does not survive an interruption the way a checkpoint does. A
+collection that carries its own `updatedAt` meets the requirement; one that does
+not cannot be read incrementally at all, whatever else is available.
