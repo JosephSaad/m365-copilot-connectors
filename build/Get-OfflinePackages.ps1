@@ -110,19 +110,24 @@ $packages = @(
     @{ Id = 'Azure.Core'; Version = '1.54.0' }
     @{ Id = 'Azure.Identity'; Version = '1.21.0' }
     @{ Id = 'Azure.Security.KeyVault.Secrets'; Version = '4.11.0' }
+    @{ Id = 'DnsClient'; Version = '1.6.1' }
     @{ Id = 'Google.Protobuf'; Version = '3.18.0' }
     @{ Id = 'Grpc.Core'; Version = '2.40.0' }
     @{ Id = 'Grpc.Core.Api'; Version = '2.40.0' }
     @{ Id = 'Grpc.Tools'; Version = '2.40.0' }
+    @{ Id = 'IdentityModel'; Version = '5.2.0' }
+    @{ Id = 'IdentityModel.OidcClient'; Version = '5.0.0' }
     @{ Id = 'Microsoft.Bcl.AsyncInterfaces'; Version = '10.0.3' }
     @{ Id = 'Microsoft.CodeCoverage'; Version = '18.9.0' }
     @{ Id = 'Microsoft.Data.SqlClient'; Version = '5.2.2' }
     @{ Id = 'Microsoft.Data.SqlClient.SNI.runtime'; Version = '5.2.0' }
     @{ Id = 'Microsoft.Extensions.Configuration.Abstractions'; Version = '10.0.3' }
+    @{ Id = 'Microsoft.Extensions.DependencyInjection'; Version = '10.0.3' }
     @{ Id = 'Microsoft.Extensions.DependencyInjection.Abstractions'; Version = '10.0.3' }
     @{ Id = 'Microsoft.Extensions.Diagnostics.Abstractions'; Version = '10.0.3' }
     @{ Id = 'Microsoft.Extensions.FileProviders.Abstractions'; Version = '10.0.3' }
     @{ Id = 'Microsoft.Extensions.Hosting.Abstractions'; Version = '10.0.3' }
+    @{ Id = 'Microsoft.Extensions.Logging'; Version = '10.0.3' }
     @{ Id = 'Microsoft.Extensions.Logging.Abstractions'; Version = '10.0.3' }
     @{ Id = 'Microsoft.Extensions.Options'; Version = '10.0.3' }
     @{ Id = 'Microsoft.Extensions.Primitives'; Version = '10.0.3' }
@@ -148,19 +153,28 @@ $packages = @(
     @{ Id = 'Microsoft.SqlServer.Server'; Version = '1.0.0' }
     @{ Id = 'Microsoft.TestPlatform.ObjectModel'; Version = '18.9.0' }
     @{ Id = 'Microsoft.TestPlatform.TestHost'; Version = '18.9.0' }
+    @{ Id = 'MongoDB.Bson'; Version = '3.1.0' }
+    @{ Id = 'MongoDB.Driver'; Version = '3.1.0' }
+    @{ Id = 'Oracle.ManagedDataAccess.Core'; Version = '23.6.1' }
     @{ Id = 'Serilog'; Version = '4.4.0' }
     @{ Id = 'Serilog.Sinks.Console'; Version = '6.1.1' }
     @{ Id = 'Serilog.Sinks.EventLog'; Version = '4.0.0' }
     @{ Id = 'Serilog.Sinks.File'; Version = '7.0.0' }
+    @{ Id = 'SharpCompress'; Version = '0.48.0' }
+    @{ Id = 'Snappier'; Version = '1.3.1' }
     @{ Id = 'Std.UriTemplate'; Version = '2.0.8' }
     @{ Id = 'System.ClientModel'; Version = '1.10.0' }
     @{ Id = 'System.Configuration.ConfigurationManager'; Version = '8.0.0' }
     @{ Id = 'System.Data.Odbc'; Version = '9.0.0' }
     @{ Id = 'System.Diagnostics.EventLog'; Version = '8.0.0' }
+    @{ Id = 'System.Diagnostics.PerformanceCounter'; Version = '8.0.0' }
+    @{ Id = 'System.DirectoryServices.Protocols'; Version = '8.0.0' }
     @{ Id = 'System.IdentityModel.Tokens.Jwt'; Version = '8.15.0' }
     @{ Id = 'System.Memory.Data'; Version = '10.0.3' }
     @{ Id = 'System.Runtime.Caching'; Version = '8.0.0' }
+    @{ Id = 'System.Security.Cryptography.Pkcs'; Version = '8.0.0' }
     @{ Id = 'System.Security.Cryptography.ProtectedData'; Version = '8.0.0' }
+    @{ Id = 'Teradata.Client.Provider'; Version = '20.0.3' }
     @{ Id = 'xunit'; Version = '2.9.3' }
     @{ Id = 'xunit.abstractions'; Version = '2.0.3' }
     @{ Id = 'xunit.analyzers'; Version = '1.18.0' }
@@ -169,6 +183,7 @@ $packages = @(
     @{ Id = 'xunit.extensibility.core'; Version = '2.9.3' }
     @{ Id = 'xunit.extensibility.execution'; Version = '2.9.3' }
     @{ Id = 'xunit.runner.visualstudio'; Version = '4.0.0' }
+    @{ Id = 'ZstdSharp.Port'; Version = '0.7.3' }
     # END BASE LIST
 )
 
@@ -199,9 +214,18 @@ $packages = @(
 # rewrites the matching block, so the two cannot be updated into each other.
 $net9Only = @(
     # BEGIN NET9 LIST
+    @{ Id = 'Microsoft.NETCore.Platforms'; Version = '5.0.0' }
+    @{ Id = 'Microsoft.Win32.Registry'; Version = '5.0.0' }
+    @{ Id = 'System.Buffers'; Version = '4.5.1' }
     @{ Id = 'System.Diagnostics.DiagnosticSource'; Version = '10.0.3' }
+    @{ Id = 'System.Formats.Asn1'; Version = '8.0.1' }
     @{ Id = 'System.IO.Pipelines'; Version = '10.0.3' }
+    @{ Id = 'System.Memory'; Version = '4.5.5' }
     @{ Id = 'System.Memory'; Version = '4.5.3' }
+    @{ Id = 'System.Runtime.CompilerServices.Unsafe'; Version = '5.0.0' }
+    @{ Id = 'System.Security.AccessControl'; Version = '5.0.0' }
+    @{ Id = 'System.Security.Principal.Windows'; Version = '5.0.0' }
+    @{ Id = 'System.Text.Encoding.CodePages'; Version = '5.0.0' }
     @{ Id = 'System.Text.Encodings.Web'; Version = '10.0.3' }
     @{ Id = 'System.Text.Json'; Version = '10.0.3' }
     @{ Id = 'System.ValueTuple'; Version = '4.5.0' }
