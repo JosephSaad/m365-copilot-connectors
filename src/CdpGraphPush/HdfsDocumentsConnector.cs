@@ -7,12 +7,17 @@
 // retrying write, the redaction, the rule that a failed crawl cannot advance a
 // watermark - is PushCore's and is not restated here.
 //
-// The one thing worth reading twice is ItemsCarryTheirOwnAcl. A filesystem is
-// not like a table: two files in one directory can have different readers, so
-// the connection-wide Acl:GrantGroupObjectIds would be wrong for almost every
-// item. Returning true switches the engine to per-item grants and, with it,
-// switches on the rule that an item nobody could be resolved for is skipped
-// rather than written with a fallback grant.
+// The one thing worth reading twice is ItemsCarryTheirOwnAcl, and it REVERSED.
+// A filesystem is not like a table - two files in one directory can have
+// different readers - which is why this connector used to return true and grant
+// each file what the cluster granted it.
+//
+// Control ACL-1 replaced that with one AD group per connector. The derivation
+// still runs and still skips a file nobody can be resolved for; what it no
+// longer does is compose the grant. The consequence is that the SCOPE now
+// carries what the ACL used to: the configured group must be entitled to the
+// least-accessible file in the crawl, so a directory whose readers differ from
+// that group belongs outside HdfsRoots rather than inside it.
 // ---------------------------------------------------------------------------
 
 namespace CdpGraphPush;
@@ -47,7 +52,20 @@ public sealed class HdfsDocumentsConnector : IPushConnector
     public string DefaultDescription => "Documents held in HDFS on the Cloudera CDP cluster";
 
     /// <inheritdoc/>
-    public bool ItemsCarryTheirOwnAcl => true;
+    /// <summary>
+    /// False, under control ACL-1: every item is granted the connector's single
+    /// AD group, the entitlement for this source.
+    ///
+    /// This connector CAN derive a per-item ACL from the cluster, and that
+    /// derivation still runs - but it is used to decide whether an object may be
+    /// indexed at all, not to compose the grant. An object the cluster grants to
+    /// nobody is still skipped. What changed is that everything which passes
+    /// that gate carries one group rather than its own.
+    ///
+    /// The condition this creates: the AD group must be entitled to the
+    /// least-accessible item in the corpus. See docs/DESIGN-PRINCIPLES.md.
+    /// </summary>
+    public bool ItemsCarryTheirOwnAcl => false;
 
     /// <inheritdoc/>
     public Schema BuildSchema()

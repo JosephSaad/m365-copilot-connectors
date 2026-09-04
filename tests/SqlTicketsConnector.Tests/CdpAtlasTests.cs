@@ -76,7 +76,11 @@ namespace SqlTicketsConnector.Tests
             PushItem table = Assert.Single(items, i => (string)i.Properties["entityKind"] == "table");
 
             Assert.Equal("contracts.contract@cm", table.Properties["qualifiedName"]);
-            Assert.NotEmpty(table.Acl);
+            // No ACL of its own: under control ACL-1 the engine grants the
+            // connector's single AD group. What this test still proves is the
+            // decision above it - a row-filtered table's ROWS are refused while
+            // its catalogue entry is admitted.
+            Assert.Null(table.Acl);
 
             // And the data connector still refuses the same table, so the two
             // rules genuinely disagree on purpose rather than by accident.

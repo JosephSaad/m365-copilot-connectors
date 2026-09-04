@@ -440,17 +440,21 @@ namespace SqlTicketsConnector.Tests
         }
 
         [Fact]
-        public void A_file_connector_needs_no_connection_wide_acl_and_a_table_connector_still_validates()
+        public void Every_cdp_connector_now_requires_a_connection_wide_acl()
         {
-            // The point of ItemsCarryTheirOwnAcl: an HDFS configuration with an
-            // empty Acl section is correct, because every file carries its own
-            // grants, while the same emptiness for a shared-ACL connector is not.
-            Assert.True(new HdfsDocumentsConnector().ItemsCarryTheirOwnAcl);
+            // Control ACL-1 reversed this. An HDFS configuration with an empty
+            // Acl section used to be correct, because every file carried its own
+            // grants; now every item is granted the connector's single AD group,
+            // so an empty section is a configuration error like anywhere else.
+            Assert.False(new HdfsDocumentsConnector().ItemsCarryTheirOwnAcl);
+            Assert.False(new HiveContractsConnector().ItemsCarryTheirOwnAcl);
+            Assert.False(new AtlasCatalogueConnector().ItemsCarryTheirOwnAcl);
 
             PushOptions options = CdpOptions();
             options.Acl = new AclOptions();
 
-            Assert.False(options.Validate(requireSharedAcl: false).HasErrors);
+            // requireSharedAcl is !ItemsCarryTheirOwnAcl, so all three now take
+            // the true branch and an empty ACL fails startup.
             Assert.True(options.Validate(requireSharedAcl: true).HasErrors);
         }
 
@@ -676,7 +680,13 @@ namespace SqlTicketsConnector.Tests
                 Auth = TestData.ValidAuth(),
                 KeyVault = new KeyVaultOptions { Uri = string.Empty, SecretCacheTtlMinutes = 60 },
                 DataSource = new DataSourceOptions { MaxContentBytes = 3670016 },
-                Acl = new AclOptions(),
+                // Control ACL-1: CDP used to validate with an empty ACL because
+                // every item carried its own. One AD group per connector means an
+                // empty section is now a configuration error here too.
+                Acl = new AclOptions
+                {
+                    GrantGroupObjectIds = new List<string> { "11111111-1111-1111-1111-111111111111" },
+                },
                 Graph = new GraphSection
                 {
                     ConnectionId = "cdphdfsdocs",

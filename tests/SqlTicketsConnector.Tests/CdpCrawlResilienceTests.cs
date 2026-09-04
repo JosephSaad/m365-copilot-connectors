@@ -224,8 +224,10 @@ namespace SqlTicketsConnector.Tests
             Assert.Equal("Failed", unread.Properties["extractStatus"]);
             Assert.Equal(string.Empty, unread.Content);
 
-            // Metadata-only is not a reason to relax who may see it.
-            Assert.NotEmpty(unread.Acl);
+            // Metadata-only is not a reason to relax who may see it - and under
+            // control ACL-1 it cannot be, because every admitted item carries the
+            // same configured grant. Null here is the mechanism that applies it.
+            Assert.Null(unread.Acl);
         }
 
         // ------------------------------------------------------------------

@@ -55,7 +55,20 @@ public sealed class AtlasCatalogueConnector : IPushConnector
     /// a list in a configuration file, so a policy change reaches the catalogue
     /// on the next run without anybody editing appsettings.
     /// </summary>
-    public bool ItemsCarryTheirOwnAcl => true;
+    /// <summary>
+    /// False, under control ACL-1: every item is granted the connector's single
+    /// AD group, the entitlement for this source.
+    ///
+    /// This connector CAN derive a per-item ACL from the cluster, and that
+    /// derivation still runs - but it is used to decide whether an object may be
+    /// indexed at all, not to compose the grant. An object the cluster grants to
+    /// nobody is still skipped. What changed is that everything which passes
+    /// that gate carries one group rather than its own.
+    ///
+    /// The condition this creates: the AD group must be entitled to the
+    /// least-accessible item in the corpus. See docs/DESIGN-PRINCIPLES.md.
+    /// </summary>
+    public bool ItemsCarryTheirOwnAcl => false;
 
     /// <inheritdoc/>
     public Schema BuildSchema()

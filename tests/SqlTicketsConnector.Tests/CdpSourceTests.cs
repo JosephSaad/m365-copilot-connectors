@@ -167,7 +167,14 @@ namespace SqlTicketsConnector.Tests
         public async Task A_named_acl_entry_widens_who_may_read_a_file()
         {
             // The file's owning group is not mapped, but an extended ACL entry
-            // names one that is - so it is indexed, granted to that group only.
+            // names one that is - so the cluster grants SOMEBODY, and the file
+            // is indexed rather than skipped.
+            //
+            // Under control ACL-1 this no longer asserts WHO. The derivation
+            // still runs and still decides indexability; it no longer composes
+            // the grant, because every item carries the connector's single AD
+            // group. What survives here is the admission decision, which is the
+            // half of the derivation the one-group rule keeps.
             //
             // The mode is 640 because on a file with an extended ACL the middle
             // digit is the ACL MASK, and a named entry grants its own bits AND
@@ -185,9 +192,10 @@ namespace SqlTicketsConnector.Tests
 
             PushItem only = Assert.Single(await this.CrawlAsync(cluster));
 
-            PushAclEntry grant = Assert.Single(only.Acl);
-            Assert.Equal(TestData.GroupObjectId, grant.Value);
-            Assert.Equal(PushAclType.Group, grant.Type);
+            // Admitted, and carrying no ACL of its own: the engine applies the
+            // configured group. A null Acl is the mechanism, not an oversight -
+            // PushEngine.ResolveAcl branches on it.
+            Assert.Null(only.Acl);
         }
 
         [Fact]
@@ -206,9 +214,11 @@ namespace SqlTicketsConnector.Tests
             Assert.Equal("Failed", only.Properties["extractStatus"]);
             Assert.Equal(string.Empty, only.Content);
 
-            // And it still carries a real ACL - a metadata-only item is not a
-            // reason to relax who may see it.
-            Assert.NotEmpty(only.Acl);
+            // No ACL of its own, so the engine grants the connector's single AD
+            // group. A metadata-only item is not a reason to relax who may see
+            // it, and under ACL-1 it does not get the chance to: every admitted
+            // item carries exactly the same grant.
+            Assert.Null(only.Acl);
         }
 
         [Fact]

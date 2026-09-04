@@ -384,7 +384,13 @@ public sealed class AtlasPushSource : IPushSource
         {
             Id = ItemId(entity.Guid),
             ItemType = "catalogue",
-            Acl = grants,
+            // NOT SET, and the derivation above is still run on purpose.
+            // Control ACL-1: every item is granted the connector's single AD
+            // group, so leaving Acl null is what makes the engine apply it.
+            // What the Ranger and HDFS derivation still buys is the gate above -
+            // an object the cluster grants to nobody is skipped rather than
+            // handed the group - which is the verification half of the rule.
+            // Acl = grants,
             Content = Describe(entity, kind, columns),
 
             // Handed to the engine RAW, in Atlas's own vocabulary, and not

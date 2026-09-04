@@ -528,7 +528,11 @@ its indexed ACL would stay stale indefinitely. `Settings:FullRecrawlEveryRuns` (
 every Nth run ignore the marker, and is therefore the documented upper bound on ACL staleness — a
 number that belongs in the deployment's risk record rather than only in a settings file.
 
-If your source derives per-item grants, the rules are in
+Under control ACL-1 a connector does **not** derive per-item grants: every item
+carries the connector's single AD group. A source's own grants are still worth
+deriving to decide whether an object may be indexed at all — that is the
+admission gate the CDP connectors keep — but they do not compose the ACL. For
+the historical per-item path, the rules are in
 [`PushAclEntry`](../src/PushCore/PushAclEntry.cs) and they are short: **group principals only,
 never users, never everyone**, and **there is no deny**. Graph supports deny ACEs and they take
 precedence, which makes mirroring a source's deny rules look like the safe option — but a deny only

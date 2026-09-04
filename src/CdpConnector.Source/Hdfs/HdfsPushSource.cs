@@ -539,7 +539,13 @@ public sealed class HdfsPushSource : IPushSource
         {
             Id = ItemId(file.Path),
             ItemType = "file",
-            Acl = grants,
+            // NOT SET, and the derivation above is still run on purpose.
+            // Control ACL-1: every item is granted the connector's single AD
+            // group, so leaving Acl null is what makes the engine apply it.
+            // What the Ranger and HDFS derivation still buys is the gate above -
+            // an object the cluster grants to nobody is skipped rather than
+            // handed the group - which is the verification half of the rule.
+            // Acl = grants,
 
             // A file whose text could not be extracted is still indexed, by
             // name, path, owner and date, with a property saying why there is no

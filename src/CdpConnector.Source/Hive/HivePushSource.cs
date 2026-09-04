@@ -259,7 +259,13 @@ public sealed class HivePushSource : IPushSource
             // table-wide select is what admitted it, and a row filter - the only
             // thing that would make rows differ - has already disqualified the
             // table from being indexed at all.
-            item.Acl = this.grants;
+            // NOT SET, and the derivation above is still run on purpose.
+            // Control ACL-1: every item is granted the connector's single AD
+            // group, so leaving Acl null is what makes the engine apply it.
+            // What the Ranger and HDFS derivation still buys is the gate above -
+            // an object the cluster grants to nobody is skipped rather than
+            // handed the group - which is the verification half of the rule.
+            // item.Acl = this.grants;
 
             if (!string.IsNullOrWhiteSpace(this.settings.HiveWatermarkColumn))
             {
