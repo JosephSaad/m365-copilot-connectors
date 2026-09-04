@@ -1,8 +1,15 @@
-# The public Pages site serves three documents: the Copilot Router, the
-# genesis prompt that rebuilds it, and the release diff for the range the
-# connector is currently on. Everything else in docs/ is repository
-# documentation, readable as source on GitHub but deliberately not
-# published as a website.
+# The public Pages site serves four documents: the Copilot Router, the genesis
+# prompt that rebuilds it, the release diff for the range the connector is
+# currently on, and the connector onboarding questionnaire. Everything else in
+# docs/ is repository documentation, readable as source on GitHub but
+# deliberately not published as a website.
+#
+# THE ONBOARDING FORM IS PUBLIC, so it must stay free of customer identifiers.
+# It asks about a source's security posture, and the answers people type into it
+# stay in their own browser - but the QUESTIONS ship to anyone with the URL. A
+# domain name, a cluster name or a hostname in a hint or a tooltip is a leak the
+# moment it is committed. One went in and was caught before this file changed;
+# check for another before adding to it.
 name: pages
 on:
   push:
@@ -11,6 +18,7 @@ on:
       - docs/copilot-router.html
       - docs/GENESIS-PROMPT-COPILOT-ROUTER.md
       - docs/release-diff.html
+      - docs/connector-onboarding-form.html
       - .github/scripts/render-genesis.py
       - .github/workflows/pages.yml
   workflow_dispatch:
@@ -44,6 +52,8 @@ jobs:
           cp docs/copilot-router.html _site/index.html
           # Self-contained already - a full document, not a fragment.
           cp docs/release-diff.html _site/release-diff.html
+          # Same: one file, no assets, answers kept in the reader's own browser.
+          cp docs/connector-onboarding-form.html _site/connector-onboarding.html
           python .github/scripts/render-genesis.py \
             docs/GENESIS-PROMPT-COPILOT-ROUTER.md _site/genesis-prompt.html
       - uses: actions/upload-pages-artifact@v3

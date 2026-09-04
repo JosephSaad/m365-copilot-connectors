@@ -227,7 +227,7 @@ running.
 | C.10 | Security & IAM | HDFS **encryption zone**, and does the account need a KMS key ACL? | **BLOCKING** | KMS appears in the tag policy permission set |
 | C.11 | Security & IAM, Operations | Kerberos realm, keytab location, rotation owner, gMSA? | **OPERATIONAL** | aes256 is mandatory after the cipher change |
 | C.12 | Network | Ranger Admin URL and TLS port; is a firewall opening needed? | **OPERATIONAL** | Longest lead time on the CDP path |
-| C.13 | Data owner | Which cluster and data domain; is QA or UAT the pilot? | **BLOCKING** | ACZ has a footprint on more than one cluster |
+| C.13 | Data owner | Which cluster and data domain; is QA or UAT the pilot? | **BLOCKING** | A domain may span more than one cluster, so naming it alone leaves the environment ambiguous |
 
 ## Oracle
 
