@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-# Renders GENESIS-PROMPT-COPILOT-ROUTER.md as a styled HTML page for the
-# Pages site, in the Copilot Router's design family. Run by pages.yml at
-# deploy time so the page can never drift from the markdown source.
+# Renders a markdown document as a styled HTML page for the Pages site, in the
+# Copilot Router's design family. Run by pages.yml at deploy time so a page can
+# never drift from its markdown source.
+#
+#   render-genesis.py <source.md> <out.html> ["Page title"]
+#
+# THE PALETTE BELOW MUST MATCH docs/copilot-router.html. It did not for one
+# release: the router moved to the light navy-and-orange theme and this file
+# kept the dark teal one, so two pages on the same site disagreed about what the
+# site looks like. Restyle both in the same change or neither.
 import sys, markdown, pathlib, html as h
 
 src, out = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+title = sys.argv[3] if len(sys.argv) > 3 else "Copilot Router Genesis Prompt"
+
 md = src.read_text()
 body = markdown.markdown(md, extensions=["tables", "fenced_code"])
 
@@ -13,15 +22,15 @@ TEMPLATE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Copilot Router Genesis Prompt</title>
+<title>__TITLE__</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Spectral:wght@500;600&display=swap">
 <style>
   :root {
-    color-scheme: dark;
-    --ground: #0C1214; --surface: #141C1E; --alt: #1B2427;
-    --ink: #E4EBEA; --muted: #94A3A6; --faint: #6E7C80;
-    --rule: #253032; --rule-strong: #354245;
-    --accent: #58C4AF; --accent-soft: #16302E;
+    color-scheme: light;
+    --ground: #F4F7FA; --surface: #FFFFFF; --alt: #E8EEF5;
+    --ink: #1B2733; --muted: #55636F; --faint: #78868F;
+    --rule: #D4DCE4; --rule-strong: #AFBECB;
+    --accent: #0A3B68; --accent-soft: #E4EDF6; --warm: #EE7623;
     --risk: #E38175;
   }
   * { box-sizing: border-box; }
@@ -71,5 +80,5 @@ __BODY__
 
 # wrap tables so wide ones scroll instead of stretching the page
 body = body.replace("<table>", '<div class="scroller"><table>').replace("</table>", "</table></div>")
-out.write_text(TEMPLATE.replace("__BODY__", body))
+out.write_text(TEMPLATE.replace("__TITLE__", h.escape(title)).replace("__BODY__", body))
 print("wrote", out, out.stat().st_size, "bytes")

@@ -1,6 +1,7 @@
-# The public Pages site serves four documents: the Copilot Router, the genesis
-# prompt that rebuilds it, the release diff for the range the connector is
-# currently on, and the connector onboarding questionnaire. Everything else in
+# The public Pages site serves five documents: the design principles behind all
+# of it, the Copilot Router, the genesis prompt that rebuilds the router, the
+# release diff for the range the connector is currently on, and the connector
+# onboarding questionnaire. Everything else in
 # docs/ is repository documentation, readable as source on GitHub but
 # deliberately not published as a website.
 #
@@ -19,6 +20,7 @@ on:
       - docs/GENESIS-PROMPT-COPILOT-ROUTER.md
       - docs/release-diff.html
       - docs/connector-onboarding-form.html
+      - docs/DESIGN-PRINCIPLES.md
       - .github/scripts/render-genesis.py
       - .github/workflows/pages.yml
   workflow_dispatch:
@@ -56,6 +58,12 @@ jobs:
           cp docs/connector-onboarding-form.html _site/connector-onboarding.html
           python .github/scripts/render-genesis.py \
             docs/GENESIS-PROMPT-COPILOT-ROUTER.md _site/genesis-prompt.html
+          # The reasoning, published beside the tools it explains. It is the part
+          # meant to transfer to another customer, so it is the part least useful
+          # locked inside a repository clone.
+          python .github/scripts/render-genesis.py \
+            docs/DESIGN-PRINCIPLES.md _site/design-principles.html \
+            "Connector design principles"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
