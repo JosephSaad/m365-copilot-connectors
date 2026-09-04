@@ -15,6 +15,20 @@ src, out = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 title = sys.argv[3] if len(sys.argv) > 3 else "Copilot Router Genesis Prompt"
 
 md = src.read_text()
+
+# Strip YAML frontmatter. Without this it renders as a paragraph of "title: ...
+# description: ..." at the top of the page, which is what happened the first
+# time a document carrying frontmatter was published here. The title is taken
+# from it when the caller did not pass one, so the two cannot disagree.
+if md.startswith("---"):
+    end = md.find("\n---", 3)
+    if end != -1:
+        front, md = md[3:end], md[end + 4:].lstrip("\n")
+        if len(sys.argv) <= 3:
+            for line in front.splitlines():
+                if line.startswith("title:"):
+                    title = line.split(":", 1)[1].strip().strip('"\'')
+                    break
 body = markdown.markdown(md, extensions=["tables", "fenced_code"])
 
 TEMPLATE = """<!doctype html>
@@ -23,7 +37,7 @@ TEMPLATE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Spectral:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
   :root {
     color-scheme: light;
@@ -38,7 +52,10 @@ TEMPLATE = """<!doctype html>
     font-family: "IBM Plex Sans", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
     font-size: 16px; line-height: 1.65; -webkit-font-smoothing: antialiased; }
   .wrap { max-width: 760px; margin: 0 auto; padding: clamp(2rem,5vw,4rem) clamp(1rem,4vw,2rem) 5rem; }
-  h1, h2 { font-family: Spectral, Georgia, "Times New Roman", serif; font-weight: 600; line-height: 1.15; text-wrap: balance; }
+  h1, h2, h3 { font-family: "IBM Plex Sans", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+    font-weight: 600; color: var(--accent); line-height: 1.15; text-wrap: balance; }
+  h1::after { content: ""; display: block; width: 3.5rem; height: 3px;
+    background: var(--warm); margin-top: 0.8rem; }
   h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); letter-spacing: -0.015em; margin: 2.8rem 0 1rem;
        padding-top: 2.2rem; border-top: 2px solid var(--ink); }
   .wrap > h1:first-child { margin-top: 0; padding-top: 0; border-top: none; }
