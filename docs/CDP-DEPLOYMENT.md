@@ -395,6 +395,40 @@ are where to check it.
 
 ## Step 4 — Map the cluster's groups to Entra groups
 
+> ## The ACL rule: one AD group per connector
+>
+> **Every item a connector writes is granted to a single AD group — the
+> entitlement for that source — and to nothing else.** This holds even where the
+> source system supports per-item access control, and **CDP is the case that
+> matters**: its connectors can derive a per-item ACL from Ranger, and that
+> derivation is deliberately not used to grant.
+>
+> **The safety condition this creates.** Per-item ACLs made safety automatic; one
+> group makes it conditional, on a single rule:
+>
+> > *The AD group must be entitled to the least-accessible item in the corpus.*
+>
+> Any indexed object more restricted than the group is over-granted. Uniform
+> accessibility stops being something the connector derives and becomes something
+> the **scope** has to guarantee.
+>
+> **What the per-item derivation becomes.** Not dead code — the verifier. The
+> Ranger groups a CDP connector can derive are exactly what proves the rule
+> holds: for each object, assert the AD group's population is a subset of what
+> the source grants. Anything failing that is excluded from scope, or the group
+> is wrong.
+>
+> **Three consequences worth stating.** The source's groups no longer need to map
+> to Entra groups at all, which removes a blocker that could otherwise end an
+> Oracle or Teradata pilot. Permission changes at the source no longer have to
+> reach the index, so the ACL staleness bound largely goes away. And **revocation
+> moves from the source to AD** — removing someone's Ranger grant no longer
+> removes their access to indexed content; removing them from the group does.
+>
+> **The refusals matter more, not less.** Under a uniform ACL, an object whose
+> access is narrower than the group is precisely what must not be indexed, so
+> every guard becomes a primary defence rather than a backstop.
+
 An item's ACL is a list of **Entra group object IDs**. The cluster knows group
 *names*. `Settings:EntraGroupMap` is where somebody writes down what each name
 means in this tenant:
@@ -574,7 +608,10 @@ Then the tenant half, which is the same script the SQL tools use:
 Two of its checks do not apply to this connector and both are expected:
 
 - **`Acl:GrantGroupObjectIds` is empty** is reported as a failure. For these
-  connectors an empty list is correct — every item carries its own ACL. Read the
+  connectors an empty list is NO LONGER correct. Under the one-group rule the
+  CDP connectors set `Acl:GrantGroupObjectIds` to a single entitlement like every
+  other connector, and the Ranger derivation is used to verify it rather than to
+  grant. Read the
   rest of the output and ignore that line.
 - **`-SkipSql` is required.** There is no `DataSource:Server` in these files, so
   the SQL reachability check has nothing to probe.

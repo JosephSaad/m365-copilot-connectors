@@ -80,7 +80,7 @@ something other than the default.
 | `DefaultConnectionId` | none | The connection you own, and the neighbour guard below |
 | `DefaultConnectionName` | none | Connection display name when configuration omits one |
 | `DefaultDescription` | `""` | Connection description when configuration omits one |
-| `ItemsCarryTheirOwnAcl` | `false` | Connection-wide grants, or per-item grants |
+| `ItemsCarryTheirOwnAcl` | `false` | **Leave it false.** One AD group per connector is the standing rule — see below |
 | `BuildSchema()` | none | The schema registered on the connection |
 | `CreateSource(context)` | none | Opens the source and returns it |
 | `ApplyDefaults(options)` | adds nothing | The connector-specific half of what the file left out |
@@ -96,7 +96,9 @@ supplies `CreateSource`, `ApplyDefaults` and `Validate` for you:
 | `BuildQuery(options)` | The T-SQL returning one row per external item |
 | `MapRow(reader, options)` | The item for the current row, or `null` to skip it |
 
-`ItemsCarryTheirOwnAcl` is the one default worth a second look. `false` means every item gets the
+**`ItemsCarryTheirOwnAcl` now has a standing answer: leave it `false`.** Every item a connector writes is granted to a single AD group — the entitlement for that source — even where the source system supports per-item access control. A source's own grants are used to *verify* that the group is entitled to everything in scope, never to compose the ACL. The safety condition that replaces per-item derivation, and what it obliges, are in [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md).
+
+Historically `ItemsCarryTheirOwnAcl` is the one default worth a second look. `false` means every item gets the
 connection-wide ACL from `Acl:GrantGroupObjectIds`, which is then required in configuration —
 right for a table whose rows are all readable by the same people. `true` means the source derives
 grants per item, that setting is neither required nor read, and an item whose groups could not be

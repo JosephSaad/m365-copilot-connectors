@@ -96,17 +96,52 @@ Ask before anything else. Three of these five have stopped a source outright.
 
 ## Section 2 · Identity and the ACL
 
+> ## The ACL rule: one AD group per connector
+>
+> **Every item a connector writes is granted to a single AD group — the
+> entitlement for that source — and to nothing else.** This holds even where the
+> source system supports per-item access control, and **CDP is the case that
+> matters**: its connectors can derive a per-item ACL from Ranger, and that
+> derivation is deliberately not used to grant.
+>
+> **The safety condition this creates.** Per-item ACLs made safety automatic; one
+> group makes it conditional, on a single rule:
+>
+> > *The AD group must be entitled to the least-accessible item in the corpus.*
+>
+> Any indexed object more restricted than the group is over-granted. Uniform
+> accessibility stops being something the connector derives and becomes something
+> the **scope** has to guarantee.
+>
+> **What the per-item derivation becomes.** Not dead code — the verifier. The
+> Ranger groups a CDP connector can derive are exactly what proves the rule
+> holds: for each object, assert the AD group's population is a subset of what
+> the source grants. Anything failing that is excluded from scope, or the group
+> is wrong.
+>
+> **Three consequences worth stating.** The source's groups no longer need to map
+> to Entra groups at all, which removes a blocker that could otherwise end an
+> Oracle or Teradata pilot. Permission changes at the source no longer have to
+> reach the index, so the ACL staleness bound largely goes away. And **revocation
+> moves from the source to AD** — removing someone's Ranger grant no longer
+> removes their access to indexed content; removing them from the group does.
+>
+> **The refusals matter more, not less.** Under a uniform ACL, an object whose
+> access is narrower than the group is precisely what must not be indexed, so
+> every guard becomes a primary defence rather than a backstop.
+
 The heart of the onboarding. Almost every question here can end the project.
 
 | # | Ask | Question | Marker | Why |
 |------|---|---|---|
-| 2.1 | Security & IAM, Data owner | Who is allowed to see each item, and where is that recorded? | **BLOCKING** | Every connector needs one answer: a configured ACL for the whole corpus, or a per-item ACL derived from the source |
+| 2.1 | Security & IAM, Data owner | **Which single AD group (entitlement) holds everyone who may see this source's data?** | **BLOCKING** | One group per connector, for all of it. Not a list, and not a per-item derivation — see the rule above |
+| 2.1a | Data owner, Security & IAM | **Is every object in scope accessible to everyone in that group?** | **BLOCKING** | The safety condition. Any object more restricted than the group is over-granted the moment it is indexed. Where the source can be queried for its own grants, verify rather than assume |
 | 2.2 | Security & IAM | Are grants made to **groups**, or to named individuals? | **BLOCKING** | A Graph ACL carries Entra **group** object IDs. A grant to an individual may be *unrepresentable* rather than merely unimplemented |
-| 2.3 | Security & IAM | Do the source's groups map to **Entra groups**, and by what mechanism? | **BLOCKING** | Database-local roles, POSIX groups and LDAP groups are not Entra groups. Without a mapping the ACL cannot be written at all |
-| 2.4 | Tenant admin | Can you supply the **Entra group object IDs** — not names? | **OPERATIONAL** | Graph takes IDs. Names are resolved by somebody, and it is better to know who |
+| 2.3 | Security & IAM | Do the source's groups map to **Entra groups**, and by what mechanism? | **SIZING** | No longer blocking: the ACL needs one group id, not a mapping. Still wanted, because a mapping is what lets you *verify* 2.1a mechanically rather than by inspection |
+| 2.4 | Tenant admin | Can you supply the **Entra group object ID** — not a name? | **OPERATIONAL** | Graph takes IDs, and under the one-group rule there is exactly one to supply |
 | 2.5 | Security & IAM | Are there **exceptions** carved out of a grant — allow-exceptions, deny-exceptions? | **BLOCKING** | An exception a connector cannot read is read as absent. An unread *allow-exception* admits exactly the people the policy excludes |
 | 2.6 | Security & IAM | Do any grants carry a **validity period** or a **time condition**? | **BLOCKING** | A Graph permission has no clock. A time-varying grant cannot be mirrored, only re-crawled often enough to bound the drift |
-| 2.7 | Data owner, Security & IAM | How quickly must a permission change reach the index? | **BLOCKING** | Permission changes usually do not change content, so only a **full** crawl re-derives ACLs. That interval is the staleness bound, and somebody has to accept it in writing |
+| 2.7 | Data owner, Security & IAM | How quickly must a permission change reach the index? | **SIZING** | Largely answered by the one-group rule: the index ACL is static, so a permission change at the source does not need to reach it. What does matter is **revocation**, which now runs through AD rather than the source |
 
 ---
 

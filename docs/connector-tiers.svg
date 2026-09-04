@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 1120" width="1660" height="1120" role="img" aria-label="Five connectors and one chassis. SQL Server, Cloudera CDP, Oracle, Teradata and MongoDB are each read by their own connector, which refuses a source it cannot represent faithfully before its first read; SQL Server alone has no such guard. Tier 2 features are implemented per connector and are what adding a source costs. The Tier 1 chassis of PushCore, PushCore.State and Connector.Security is written once and inherited by all five. Everything writes through Microsoft Graph into Microsoft 365 Copilot, Microsoft Search and Copilot Studio agents.">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#55636F"/></marker></defs>
+<rect x="0" y="0" width="1660" height="1120" rx="0" fill="#F4F7FA" stroke="#F4F7FA" stroke-width="0"/>
+<text x="40" y="42" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="25" fill="#0A3B68" font-weight="600" text-anchor="start">Five connectors, one chassis</text>
+<rect x="40" y="54" width="56" height="3" fill="#EE7623"/>
+<text x="40" y="80" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#55636F" font-weight="400" text-anchor="start">Every source is read by its own connector and written by the same engine. What differs is the reader, and what it refuses to read.</text>
+<rect x="40" y="100" width="300" height="74" rx="4" fill="#0A3B68" stroke="#072C4E" stroke-width="1.2"/>
+<text x="54" y="126" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#FFFFFF" font-weight="600" text-anchor="start">SQL Server</text>
+<text x="54" y="146" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#B9CBDD" font-weight="400" text-anchor="start">Tickets · Hierarchy</text>
+<text x="54" y="164" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="9.5" fill="#8FA9C4" font-weight="400" text-anchor="start">SqlGraphPush · SqlHierarchyPush</text>
+<path d="M190.0,180 L190.0,200" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="360" y="100" width="300" height="74" rx="4" fill="#0A3B68" stroke="#072C4E" stroke-width="1.2"/>
+<text x="374" y="126" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#FFFFFF" font-weight="600" text-anchor="start">Cloudera CDP</text>
+<text x="374" y="146" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#B9CBDD" font-weight="400" text-anchor="start">Hive · HDFS · Atlas</text>
+<text x="374" y="164" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="9.5" fill="#8FA9C4" font-weight="400" text-anchor="start">CdpGraphPush</text>
+<path d="M510.0,180 L510.0,200" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="680" y="100" width="300" height="74" rx="4" fill="#0A3B68" stroke="#072C4E" stroke-width="1.2"/>
+<text x="694" y="126" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#FFFFFF" font-weight="600" text-anchor="start">Oracle</text>
+<text x="694" y="146" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#B9CBDD" font-weight="400" text-anchor="start">Records view</text>
+<text x="694" y="164" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="9.5" fill="#8FA9C4" font-weight="400" text-anchor="start">OracleGraphPush</text>
+<path d="M830.0,180 L830.0,200" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="1000" y="100" width="300" height="74" rx="4" fill="#0A3B68" stroke="#072C4E" stroke-width="1.2"/>
+<text x="1014" y="126" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#FFFFFF" font-weight="600" text-anchor="start">Teradata</text>
+<text x="1014" y="146" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#B9CBDD" font-weight="400" text-anchor="start">Records view</text>
+<text x="1014" y="164" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="9.5" fill="#8FA9C4" font-weight="400" text-anchor="start">TeradataGraphPush</text>
+<path d="M1150.0,180 L1150.0,200" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="1320" y="100" width="300" height="74" rx="4" fill="#0A3B68" stroke="#072C4E" stroke-width="1.2"/>
+<text x="1334" y="126" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#FFFFFF" font-weight="600" text-anchor="start">MongoDB</text>
+<text x="1334" y="146" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#B9CBDD" font-weight="400" text-anchor="start">Collection · GridFS</text>
+<text x="1334" y="164" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="9.5" fill="#8FA9C4" font-weight="400" text-anchor="start">MongoGraphPush</text>
+<path d="M1470.0,180 L1470.0,200" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="40" y="200" width="1580" height="118" rx="4" fill="#F4F7FA" stroke="#D4DCE4" stroke-width="1"/>
+<text x="54" y="220" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#0A3B68" font-weight="600" text-anchor="start">BEFORE THE FIRST READ</text>
+<text x="212.9" y="220" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#55636F" font-weight="400" text-anchor="start">each connector refuses a source it cannot represent faithfully</text>
+<rect x="48" y="230" width="284" height="76" rx="4" fill="#FBEEEC" stroke="#D4DCE4" stroke-width="1"/>
+<rect x="48" y="230" width="3.5" height="76" fill="#C0453A"/>
+<text x="62" y="250" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#C0453A" font-weight="600" text-anchor="start">No guard.</text>
+<text x="62" y="265" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#C0453A" font-weight="400" text-anchor="start">RLS and Dynamic Data Masking</text>
+<text x="62" y="280" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#C0453A" font-weight="400" text-anchor="start">are not detected</text>
+<path d="M190.0,318 L190.0,338" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="368" y="230" width="284" height="76" rx="4" fill="#FFFFFF" stroke="#D4DCE4" stroke-width="1"/>
+<rect x="368" y="230" width="3.5" height="76" fill="#4C9A51"/>
+<text x="382" y="250" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">Security zones (CDP-17)</text>
+<text x="382" y="265" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">Row filters, masks (CDP-1/2)</text>
+<text x="382" y="280" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">Unreadable constructs (CDP-18)</text>
+<text x="382" y="295" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">Tag deny or mask (CDP-19)</text>
+<path d="M510.0,318 L510.0,338" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="688" y="230" width="284" height="76" rx="4" fill="#FFFFFF" stroke="#D4DCE4" stroke-width="1"/>
+<rect x="688" y="230" width="3.5" height="76" fill="#4C9A51"/>
+<text x="702" y="250" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">VPD · Label Security</text>
+<text x="702" y="265" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">Real Application Security</text>
+<text x="702" y="280" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">Data Redaction</text>
+<path d="M830.0,318 L830.0,338" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="1008" y="230" width="284" height="76" rx="4" fill="#FFFFFF" stroke="#D4DCE4" stroke-width="1"/>
+<rect x="1008" y="230" width="3.5" height="76" fill="#4C9A51"/>
+<text x="1022" y="250" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">Row-level constraints</text>
+<text x="1022" y="265" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">Column-level constraints</text>
+<text x="1022" y="280" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">Unreadable DBC = stop</text>
+<path d="M1150.0,318 L1150.0,338" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="1328" y="230" width="284" height="76" rx="4" fill="#FFFFFF" stroke="#D4DCE4" stroke-width="1"/>
+<rect x="1328" y="230" width="3.5" height="76" fill="#4C9A51"/>
+<text x="1342" y="250" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">Views, as a class</text>
+<text x="1342" y="265" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">Encrypted fields</text>
+<text x="1342" y="280" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">(CSFLE · Queryable)</text>
+<path d="M1470.0,318 L1470.0,338" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="40" y="338" width="1580" height="176" rx="4" fill="#F4F7FA" stroke="#D4DCE4" stroke-width="1"/>
+<text x="54" y="358" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#0A3B68" font-weight="600" text-anchor="start">TIER 2</text>
+<text x="109.4" y="358" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#55636F" font-weight="400" text-anchor="start">implemented per connector — this is what adding a source costs</text>
+<text x="54" y="382" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#55636F" font-weight="400" text-anchor="start">Per-user guard</text>
+<text x="54" y="403" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#55636F" font-weight="400" text-anchor="start">Per-item ACL (verifier only)</text>
+<text x="54" y="424" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#55636F" font-weight="400" text-anchor="start">Incremental read</text>
+<text x="54" y="445" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#55636F" font-weight="400" text-anchor="start">Sensitivity labels</text>
+<text x="54" y="466" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#55636F" font-weight="400" text-anchor="start">Binary extraction</text>
+<text x="54" y="487" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#55636F" font-weight="400" text-anchor="start">Source reconciler</text>
+<text x="190.0" y="382" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#C0453A" font-weight="600" text-anchor="middle">✗</text>
+<text x="190.0" y="403" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#C0453A" font-weight="600" text-anchor="middle">✗</text>
+<text x="190.0" y="424" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="190.0" y="445" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#C0453A" font-weight="600" text-anchor="middle">✗</text>
+<text x="190.0" y="466" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#B4C0CB" font-weight="600" text-anchor="middle">·</text>
+<text x="190.0" y="487" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="510.0" y="382" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#C0801C" font-weight="600" text-anchor="middle">~</text>
+<text x="510.0" y="403" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="510.0" y="424" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="510.0" y="445" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#C0801C" font-weight="600" text-anchor="middle">~</text>
+<text x="510.0" y="466" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="510.0" y="487" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#C0453A" font-weight="600" text-anchor="middle">✗</text>
+<text x="830.0" y="382" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="830.0" y="403" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#C0453A" font-weight="600" text-anchor="middle">✗</text>
+<text x="830.0" y="424" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="830.0" y="445" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="830.0" y="466" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#B4C0CB" font-weight="600" text-anchor="middle">·</text>
+<text x="830.0" y="487" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="1150.0" y="382" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="1150.0" y="403" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#C0453A" font-weight="600" text-anchor="middle">✗</text>
+<text x="1150.0" y="424" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="1150.0" y="445" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="1150.0" y="466" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#B4C0CB" font-weight="600" text-anchor="middle">·</text>
+<text x="1150.0" y="487" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="1470.0" y="382" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="1470.0" y="403" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#C0453A" font-weight="600" text-anchor="middle">✗</text>
+<text x="1470.0" y="424" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#C0453A" font-weight="600" text-anchor="middle">✗</text>
+<text x="1470.0" y="445" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="1470.0" y="466" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="1470.0" y="487" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#4C9A51" font-weight="600" text-anchor="middle">✓</text>
+<text x="54" y="504" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#55636F" font-weight="400" text-anchor="start">Every connector also supplies a schema, a read, a stable item id and skip accounting — universal, not shown.</text>
+<path d="M190.0,514 L190.0,534" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<path d="M510.0,514 L510.0,534" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<path d="M830.0,514 L830.0,534" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<path d="M1150.0,514 L1150.0,534" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<path d="M1470.0,514 L1470.0,534" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="40" y="534" width="1580" height="76" rx="4" fill="#F4F7FA" stroke="#D4DCE4" stroke-width="1"/>
+<text x="54" y="554" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#0A3B68" font-weight="600" text-anchor="start">SOURCE FAMILY</text>
+<text x="157.7" y="554" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#55636F" font-weight="400" text-anchor="start">the shared reader shape, where one exists</text>
+<rect x="48" y="562" width="284" height="36" rx="4" fill="#E8EEF5" stroke="#0A3B68" stroke-width="1.2"/>
+<text x="190.0" y="585" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="12.5" fill="#0A3B68" font-weight="600" text-anchor="middle">PushCore.Sql</text>
+<rect x="368" y="562" width="284" height="36" rx="4" fill="#E8EEF5" stroke="#0A3B68" stroke-width="1.2"/>
+<text x="510.0" y="585" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="12.5" fill="#0A3B68" font-weight="600" text-anchor="middle">CdpConnector.Source</text>
+<rect x="688" y="562" width="604" height="36" rx="4" fill="#E8EEF5" stroke="#0A3B68" stroke-width="1.2"/>
+<text x="990.0" y="585" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="12.5" fill="#0A3B68" font-weight="600" text-anchor="middle">PushCore.Db</text>
+<rect x="1328" y="562" width="284" height="36" rx="4" fill="#E8EEF5" stroke="#0A3B68" stroke-width="1.2"/>
+<text x="1470.0" y="585" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="12.5" fill="#0A3B68" font-weight="600" text-anchor="middle">Path B — IPushSource</text>
+<path d="M830.0,610 L830.0,630" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="40" y="630" width="1580" height="214" rx="4" fill="#F4F7FA" stroke="#D4DCE4" stroke-width="1"/>
+<text x="54" y="650" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#0A3B68" font-weight="600" text-anchor="start">TIER 1</text>
+<text x="109.4" y="650" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#55636F" font-weight="400" text-anchor="start">the chassis — written once, inherited by all five, changed by none of them</text>
+<rect x="54.0" y="660" width="508.0" height="170" rx="4" fill="#FFFFFF" stroke="#0A3B68" stroke-width="1.4"/>
+<rect x="54.0" y="660" width="508.0" height="26" fill="#0A3B68"/>
+<text x="66.0" y="678" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="12.5" fill="#FFFFFF" font-weight="600" text-anchor="start">PushCore</text>
+<text x="66.0" y="702" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#55636F" font-weight="400" text-anchor="start">the engine every connector runs on</text>
+<text x="66.0" y="722.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Retry honouring Retry-After</text>
+<text x="66.0" y="737.2" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· $batch, 20 per request</text>
+<text x="66.0" y="752.4" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Concurrent writers</text>
+<text x="66.0" y="767.6" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Change detection: content and ACL hashed separately</text>
+<text x="66.0" y="782.8" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Delete detection, sweep and guard</text>
+<text x="66.0" y="798.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· (marker, id) checkpoint, frozen on refusal</text>
+<text x="66.0" y="813.2" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Duplicate detection</text>
+<text x="66.0" y="828.4" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Truncation with markers</text>
+<text x="66.0" y="843.6" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Logging redaction</text>
+<text x="66.0" y="858.8" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Dry run</text>
+<text x="66.0" y="874.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Documented exit codes</text>
+<rect x="576.0" y="660" width="508.0" height="170" rx="4" fill="#FFFFFF" stroke="#0A3B68" stroke-width="1.4"/>
+<rect x="576.0" y="660" width="508.0" height="26" fill="#0A3B68"/>
+<text x="588.0" y="678" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="12.5" fill="#FFFFFF" font-weight="600" text-anchor="start">PushCore.State</text>
+<text x="588.0" y="702" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#55636F" font-weight="400" text-anchor="start">durable crawl state</text>
+<text x="588.0" y="722.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Item inventory</text>
+<text x="588.0" y="737.2" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Run history</text>
+<text x="588.0" y="752.4" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Single-instance run lock</text>
+<text x="588.0" y="767.6" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Identity cache</text>
+<text x="588.0" y="782.8" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Retention</text>
+<rect x="1098.0" y="660" width="508.0" height="170" rx="4" fill="#FFFFFF" stroke="#0A3B68" stroke-width="1.4"/>
+<rect x="1098.0" y="660" width="508.0" height="26" fill="#0A3B68"/>
+<text x="1110.0" y="678" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="12.5" fill="#FFFFFF" font-weight="600" text-anchor="start">Connector.Security</text>
+<text x="1110.0" y="702" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#55636F" font-weight="400" text-anchor="start">shared secrets and trust</text>
+<text x="1110.0" y="722.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Key Vault · Credential Manager</text>
+<text x="1110.0" y="737.2" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Certificate resolution and rotation</text>
+<text x="1110.0" y="752.4" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Connection-string refusal</text>
+<text x="1110.0" y="767.6" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1B2733" font-weight="400" text-anchor="start">· Log scrubbing</text>
+<path d="M830.0,844 L830.0,864" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="40" y="868" width="1580" height="68" rx="4" fill="#0A3B68" stroke="#072C4E" stroke-width="1.2"/>
+<text x="60" y="896" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#FFFFFF" font-weight="600" text-anchor="start">Microsoft Graph</text>
+<text x="60" y="918" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="11" fill="#B9CBDD" font-weight="400" text-anchor="start">PUT /external/connections/{id}/items/{itemId}   ·   schema registered once   ·   ACL: ONE AD group per connector   ·   $batch   ·   throttling honoured</text>
+<path d="M830.0,936 L830.0,956" stroke="#55636F" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<rect x="40.0" y="956" width="513.3333333333334" height="46" rx="4" fill="#EAF2EA" stroke="#4C9A51" stroke-width="1.4"/>
+<text x="296.6666666666667" y="985" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#2F6B33" font-weight="600" text-anchor="middle">Microsoft 365 Copilot</text>
+<rect x="573.3333333333334" y="956" width="513.3333333333334" height="46" rx="4" fill="#EAF2EA" stroke="#4C9A51" stroke-width="1.4"/>
+<text x="830.0" y="985" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#2F6B33" font-weight="600" text-anchor="middle">Microsoft Search</text>
+<rect x="1106.6666666666667" y="956" width="513.3333333333334" height="46" rx="4" fill="#EAF2EA" stroke="#4C9A51" stroke-width="1.4"/>
+<text x="1363.3333333333335" y="985" font-family="IBM Plex Sans, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#2F6B33" font-weight="600" text-anchor="middle">Copilot Studio agents</text>
+<text x="40" y="1094" font-family="IBM Plex Mono, ui-monospace, Menlo, monospace" font-size="11" fill="#55636F" font-weight="400" text-anchor="start">✓ built    ✗ absent    ~ partial    · not applicable          Tier 2 is what adding a connector costs. Tier 1 is what it inherits free.</text>
+</svg>

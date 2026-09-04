@@ -115,12 +115,48 @@ and a consent per user) or modelling the data on a different plane entirely.
 
 ---
 
+> ## The ACL rule: one AD group per connector
+>
+> **Every item a connector writes is granted to a single AD group — the
+> entitlement for that source — and to nothing else.** This holds even where the
+> source system supports per-item access control, and **CDP is the case that
+> matters**: its connectors can derive a per-item ACL from Ranger, and that
+> derivation is deliberately not used to grant.
+>
+> **The safety condition this creates.** Per-item ACLs made safety automatic; one
+> group makes it conditional, on a single rule:
+>
+> > *The AD group must be entitled to the least-accessible item in the corpus.*
+>
+> Any indexed object more restricted than the group is over-granted. Uniform
+> accessibility stops being something the connector derives and becomes something
+> the **scope** has to guarantee.
+>
+> **What the per-item derivation becomes.** Not dead code — the verifier. The
+> Ranger groups a CDP connector can derive are exactly what proves the rule
+> holds: for each object, assert the AD group's population is a subset of what
+> the source grants. Anything failing that is excluded from scope, or the group
+> is wrong.
+>
+> **Three consequences worth stating.** The source's groups no longer need to map
+> to Entra groups at all, which removes a blocker that could otherwise end an
+> Oracle or Teradata pilot. Permission changes at the source no longer have to
+> reach the index, so the ACL staleness bound largely goes away. And **revocation
+> moves from the source to AD** — removing someone's Ranger grant no longer
+> removes their access to indexed content; removing them from the group does.
+>
+> **The refusals matter more, not less.** Under a uniform ACL, an object whose
+> access is narrower than the group is precisely what must not be indexed, so
+> every guard becomes a primary defence rather than a backstop.
+
+---
+
 ## What a source concept becomes
 
 | Source expresses | Becomes | Why |
 |---|---|---|
-| Group grant on an object | An Entra group on the item | The shape the target was built for |
-| Grant to a named individual | **Nothing** | Unrepresentable, not unimplemented |
+| Group grant on an object | **The connector's single AD group** | One entitlement per source. The source's own groups are used to *verify* that grant, never to compose it |
+| Grant to a named individual | **Nothing** | Unrepresentable — and under the one-group rule, not needed for the ACL. It still matters when verifying the group is entitled to everything in scope |
 | A deny | **A refusal to index** | Never mirrored. Obeying a deny by indexing-and-hoping is the failure this exists to prevent |
 | Row filter or column mask | **A refusal to index** | One copy cannot vary per reader |
 | Time-bounded or conditional grant | **A refusal, or a stated staleness bound** | The target has no clock |
