@@ -48,40 +48,22 @@ connection and every item in it.
 
 ## Why these questions and not others
 
-Three principles generate the whole list. Every question below is an instance of
-one of them, and a question that is an instance of none of them is probably not
-worth asking.
+Three principles generate the whole list, and a question that is an instance of
+none of them is probably not worth asking:
 
-**1. The copy must never out-grant the original.** A connector translates one
-system's access decision into Graph's. Under-granting costs content;
-over-granting puts data in front of someone the source refuses. The two are not
-equally bad, so the questions that detect over-granting come first.
+1. **The copy must never out-grant the original** — under-granting costs content,
+   over-granting is an incident, and they do not get equal treatment.
+2. **Know what the target cannot represent** — a Microsoft 365 permission is a
+   static list of group IDs written at crawl time, and each of those three words
+   is a hard limit.
+3. **Usefulness is a separate axis from correctness** — a safe index carrying
+   nothing readable fails as completely as one that leaks.
 
-**2. Know what the target cannot represent.** A Graph permission is a static
-snapshot of Entra group IDs written at crawl time. It cannot express a rule that
-varies by user at query time, a rule that changes on a date, or a grant to a
-named individual. Where the source has such a rule, no amount of connector work
-mirrors it — the honest options are refuse, or exclude from scope.
-
-**3. Usefulness is a separate axis from correctness.** A table indexed perfectly
-safely, whose content is ciphertext, tokens or a numeric measure, fails the pilot
-as completely as one indexed wrongly. Some questions below have no security
-consequence at all and still decide whether to proceed.
-
-
-**Who answers what.** No one person can answer this document. The **Ask** column
-names the stakeholder who owns each answer; where two are listed the first owns
-it and the second confirms it. The HTML form filters by role, which turns this
-into the subset for one conversation.
-
-| Role | Who that is |
-|---|---|
-| **Data owner** | The business owner or steward of the content |
-| **Source platform** | DBA or platform engineer for the source system |
-| **Security & IAM** | Access control, identity mapping, Entra groups |
-| **Tenant admin** | Microsoft 365 / Copilot tenant administration |
-| **Network** | Firewalls, proxies, certificates, hosts |
-| **Operations** | Scheduling, alerting, on-call, reconciliation |
+They are stated in full, with the reasoning and the cross-platform detail, in
+[DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md) — including why per-user enforcement
+cannot be indexed on any platform, and what each source concept becomes on the
+way into a Graph ACL. **Read that first if you are onboarding a source type this
+repository has not met.**
 
 ---
 

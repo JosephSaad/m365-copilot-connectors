@@ -42,6 +42,15 @@ modes) and [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).**
 change to the engine and no effect on the connectors already there:
 [`docs/ADDING-A-PUSH-CONNECTOR.md`](docs/ADDING-A-PUSH-CONNECTOR.md).
 
+**Before building a connector for a source this repository has not met**, read
+[`docs/DESIGN-PRINCIPLES.md`](docs/DESIGN-PRINCIPLES.md). It states the reasoning
+behind every routing and refusal decision here without reference to a customer or
+a source technology: what a Microsoft 365 permission can and cannot represent,
+why per-user enforcement cannot be indexed on any platform and what each platform
+calls it, and the direction-of-error rule that decides whether an unevaluated
+construct stops a run or is merely logged. It is the part meant to outlive the
+engagement that produced it.
+
 **Before building a connector at all**, check that it is the right shape of
 answer: [`docs/COPILOT-ROUTING.md`](docs/COPILOT-ROUTING.md) covers connector
 versus live tool call versus MCP versus a Foundry application, what each costs

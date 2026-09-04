@@ -18,6 +18,7 @@ documentation that ships with it.
 | | |
 |---|---|
 | [**Copilot Router**](copilot-router.html) | Nineteen questions that route one source to one delivery path — synced or federated connector, one of the three Power BI storage modes, a live call, or an application you host — with the cost and the warnings attached. Self-contained: no build step, no network calls |
+| [**Design principles**](DESIGN-PRINCIPLES.md) | The reasoning behind every routing and refusal decision here, stated without reference to a customer or a source — what a Microsoft 365 permission can and cannot represent, why per-user enforcement cannot be indexed on any platform, and how to apply both to a source nobody has met. **Read this first; the two rows below are instances of it** |
 | [**Routing: own it or call it**](COPILOT-ROUTING.md) | Why ownership decides the architecture before cost does, why residency then picks the storage mode, and the decision tree in full |
 | [**The five sources, routed**](ROUTING-DECISIONS.md) | The routing rule applied: two SQL sources and three CDP sources, one verdict each, the two premises that close half the gates — and the two scenarios that split rather than landing on one leaf |
 | [**Assumptions**](ASSUMPTIONS.md) | Every decision taken on the reader's behalf, and what would change if it were wrong |

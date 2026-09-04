@@ -14,6 +14,13 @@ This is a record of answers rather than an argument for them. The reasoning
 lives in the routing document; what is here is which leaf each source landed on,
 what that commits you to, and what would move it.
 
+**This page is engagement-specific and the premises below are one customer's.**
+The reusable part — why per-user enforcement cannot be indexed on any platform,
+what a Microsoft 365 permission can and cannot represent, and how to route a
+source nobody here has met — is [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md).
+Starting a new engagement means keeping that, keeping the router, and rewriting
+this page from its first line.
+
 Date: 2026-08-30.
 
 ---

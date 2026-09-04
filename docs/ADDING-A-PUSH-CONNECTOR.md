@@ -20,6 +20,24 @@ This document is the recipe and the reasoning. If you only want the recipe,
 
 ---
 
+## Before you write anything
+
+Read [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md). Two things there decide the
+shape of what you are about to build, and both are cheaper to settle now than to
+retrofit:
+
+- **What the source calls per-user enforcement, and which catalogue view exposes
+  it.** Every platform has row-level and value-level variants under different
+  names. A connector that indexes a per-user-enforced object publishes one
+  identity's view to every reader, and no choice of service account fixes it.
+- **The direction of every gap.** For each construct your reader will not
+  evaluate, establish whether ignoring it over-grants or under-grants. Refuse on
+  the first, log the second. There is no defensible middle, and deciding it
+  afterwards means deciding it during an incident.
+
+Write the refusal before the reader. A guard added later is a guard added after
+the first crawl has already run.
+
 ## What is shared and what is yours
 
 | | Where it lives | Who writes it |
