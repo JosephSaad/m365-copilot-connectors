@@ -18,6 +18,26 @@ enough to be cheap.
 
 **How to read the markers.**
 
+**Ten questions offer "Planned" as well as yes/no**, and the distinction matters:
+**Unknown** means nobody has checked, so go and check. **Planned** means somebody
+checked, it is not there today, and it is coming — which obliges a design decision
+now rather than a lookup. They are 0.2, 1.4, 2.5, 2.6, 3.1, 3.2, 3.3, 4.1, 4.2
+and 5.4.
+
+Six of those would **break a working connector**: row filters, masking, tag
+policies, exceptions and validity periods all make a guard refuse, so a green
+pilot becomes exit 4 on the day the change lands, with no code change on either
+side. `ROUTING-DECISIONS.md` already names this — *"Ranger masking arriving on a
+table that did not have it ... silently, unless somebody is watching"* — and this
+is where the watching starts.
+
+The other four **unblock** something, and 5.4 is the one that cannot wait: a
+registered schema is append-only, so a sensitivity property has to be registered
+before the connection reaches Ready or adding it later means deleting the
+connection and every item in it.
+
+**Planned without a date is only a softer "No".** Put the date in the notes.
+
 | Marker | Meaning |
 |---|---|
 | **BLOCKING** | A wrong answer makes the connector unsafe or pointless. Do not design without it |
